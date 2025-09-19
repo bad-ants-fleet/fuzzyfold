@@ -8,7 +8,7 @@ pub fn plot_occupancy_over_time(
     filename: &str,
     t_lin: f64,
     t_log: f64,
-) -> Result<(), Box<dyn std::error::Error>> {
+) {
     assert!(t_lin > 0.0 && t_log > t_lin, "Require 0 < t_lin < t_log");
 
     let title = format!("ff-simulate ({} simulations)", timeline.points[0].counter);
@@ -16,13 +16,13 @@ pub fn plot_occupancy_over_time(
     // Image size; tweak as you like
     //let root = BitMapBackend::new(filename, (1024, 480)).into_drawing_area();
     let root = SVGBackend::new(filename, (1024, 480)).into_drawing_area();
-    root.fill(&WHITE)?;
-    root.titled(&title, ("sans-serif", 28))?;
+    root.fill(&WHITE).unwrap();
+    root.titled(&title, ("sans-serif", 28)).unwrap();
     root.draw_text(
         "time",
         &("sans-serif", 18).into_font().into_text_style(&root),
         (512, 450),   // roughly centered at bottom
-    )?;
+    ).unwrap();
 
 
     // Split into two panels: 18% for linear (left), 82% for log (right)
@@ -36,7 +36,7 @@ pub fn plot_occupancy_over_time(
         .margin_right(0)
         .x_label_area_size(40)
         .y_label_area_size(50)
-        .build_cartesian_2d(0.0..t_lin, 0.0..1.0)?;
+        .build_cartesian_2d(0.0..t_lin, 0.0..1.0).unwrap();
     chart_left
         .configure_mesh()
         //.x_desc("time (s)")
@@ -49,13 +49,14 @@ pub fn plot_occupancy_over_time(
         .light_line_style(&RGBColor(220, 220, 220))
         .axis_desc_style(("sans-serif", 18))
         .label_style(("sans-serif", 18))
-        .draw()?;
+        .draw()
+        .unwrap();
 
     // draw separator at x = t_lin (right edge of this panel)
     chart_left.draw_series(std::iter::once(PathElement::new(
         vec![(t_lin, 0.0), (t_lin, 1.0)],
         &BLACK.mix(0.7),
-    )))?;
+    ))).unwrap();
 
     // ---- Right: log panel ----
     let mut chart_right = ChartBuilder::on(&right)
@@ -66,7 +67,7 @@ pub fn plot_occupancy_over_time(
         .margin_right(40)
         .x_label_area_size(40)
         .y_label_area_size(0) // hide y labels on right
-        .build_cartesian_2d((t_lin..t_log).log_scale(), 0.0..1.0)?;
+        .build_cartesian_2d((t_lin..t_log).log_scale(), 0.0..1.0).unwrap();
 
     chart_right
         .configure_mesh()
@@ -76,13 +77,13 @@ pub fn plot_occupancy_over_time(
         .y_labels(10) // hide y ticks on right
         .light_line_style(&RGBColor(220, 220, 220))
         .label_style(("sans-serif", 18))
-        .draw()?;
+        .draw().unwrap();
 
     // repeat separator at x = t_lin (left edge of this panel)
     chart_right.draw_series(std::iter::once(PathElement::new(
         vec![(t_lin, 0.0), (t_lin, 1.0)],
         &BLACK.mix(0.7),
-    )))?;
+    ))).unwrap();
 
 
     // Build data per structure
@@ -119,12 +120,12 @@ pub fn plot_occupancy_over_time(
         chart_left.draw_series(LineSeries::new(
                 series.iter().cloned().filter(|(t, _)| *t <= t_lin),
                 color.stroke_width(2),
-        ))?;
+        )).unwrap();
 
         chart_right.draw_series(LineSeries::new(
             series.iter().cloned().filter(|(t, _)| *t >= t_lin),
             color.stroke_width(2),
-        ))?
+        )).unwrap()
             .label(format!("{:20} {:>6.2}", name.trim(), energy.unwrap_or(0.0)))   // <-- label for legend
             .legend(move |(x, y)| {
                 PathElement::new(vec![(x, y), (x + 20, y)], color.stroke_width(2))
@@ -138,10 +139,9 @@ chart_right
     .background_style(&WHITE.mix(0.8))
     .position(SeriesLabelPosition::UpperRight)
         .label_font(("sans-serif", 16).into_font())   // <-- legend font size
-    .draw()?;
+    .draw().unwrap();
 
-    root.present()?; // write the PNG
-    Ok(())
+    root.present().unwrap(); // write the PNG
 }
 
 

@@ -324,7 +324,7 @@ impl<'a, M: EnergyModel, K: KineticModel> LoopStructureSSA<'a, M, K> {
                     self.log_flux = log_sub(self.log_flux, lrate).expect("utf, now that one should be fine.");
                 } else {
                     self.pair_flux = None;
-                    self.log_flux = self.loop_flux.unwrap();
+                    //NOTE: no log_flux update! Will be recomputed.
                 }
             } 
             let rxn = Reaction::new_del(self.ratemodel, i, j, delta);

@@ -95,6 +95,30 @@ pub enum Macrostate {
     Constraint(DotBracketVec),
 }
 
+impl Macrostate {
+    pub fn name(&self) -> &str {
+        match self {
+            Macrostate::Explicit(registry) => {
+                &registry.name()
+            }
+            Macrostate::Constraint(_) => {
+                todo!("");
+            }
+        }
+    }
+
+    pub fn energy(&self) -> Option<f64> {
+        match self {
+            Macrostate::Explicit(registry) => {
+                registry.energy()
+            }
+            Macrostate::Constraint(_) => {
+                todo!("");
+            }
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct StructureRegistry {
     name: String,

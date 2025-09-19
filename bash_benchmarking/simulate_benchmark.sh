@@ -11,7 +11,7 @@ fi
 
 # Programs to benchmark (space-separated)
 PROGRAMS=("Kinfold --fpt --met --time 10 --start" \
-          "ff-simulate --t8 10")
+          "ff-trajectory --t-end 10")
 
 # Output CSV
 RESULTS="simulate_benchmark_results.csv"
@@ -53,6 +53,7 @@ for prog in "${PROGRAMS[@]}"; do
 
             #runtime=$(/usr/bin/time -f "%e" bash -c "$prog <<< \$'${input}'" 2>&1 > /dev/null)
             total_time=$(awk -v a="$total_time" -v b="$runtime" 'BEGIN {printf "%.6f", a + b}')
+            #echo "$runtime"
         done < "$infile"
 
         echo "$prog,$infile,$count,$total_time" >> "$RESULTS"
