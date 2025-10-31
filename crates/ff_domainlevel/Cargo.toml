@@ -1,0 +1,21 @@
+[package]
+name = "ff_domainlevel"
+version = "0.1.1"
+description = "fuzzyfold's domain-level folding."
+documentation = "https://docs.rs/ff_domainlevel"
+keywords = ["dsd", "secondary-structure", "domain-level", "strand-displacement"]
+readme = "../../README.md"
+
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+categories.workspace = true
+
+[dependencies]
+ff_structure.workspace = true
+nohash-hasher.workspace = true
+ndarray.workspace = true
+
+itertools = "0.14.0"
+once_cell = "1.21.3"
+rustc-hash = "2.1.1"

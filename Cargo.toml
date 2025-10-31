@@ -1,6 +1,5 @@
 [workspace]
 members = ["crates/*"]
-exclude = ["crates/ff_plotting"]
 default-members = ["crates/fuzzyfold"]
 resolver = "3"
 
@@ -21,6 +20,7 @@ categories = [
 ff_energy    = { path = "./crates/ff_energy", version = "0.1.2" }
 ff_structure = { path = "./crates/ff_structure", version = "0.1.2" }
 ff_kinetics  = { path = "./crates/ff_kinetics", version = "0.1.2" }
+ff_domainlevel = { path = "./crates/ff_domainlevel", version = "0.1.1" }
 
 # shared crates
 ahash = "0.8.12"
