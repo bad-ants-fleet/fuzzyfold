@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
-use std::usize;
 use nohash_hasher::IntMap;
-use rustc_hash::{FxHashMap, FxHashSet};
+use ahash::{AHashMap, AHashSet};
 
 use ff_structure::{LoopInfo, LoopTable, PairTable};
 use ff_structure::NAIDX;
@@ -9,18 +8,18 @@ use crate::{PairList, Pair};
 
 #[derive(Debug, Clone)]
 pub struct PartialOrder {
-    pairs: FxHashSet<Pair>,
-    precedence: FxHashMap<Pair, FxHashSet<Pair>>,   // DAG: a -> b means a < b (b is a successor)
-    predecessors: FxHashMap<Pair, FxHashSet<Pair>>, // DAG: a -> b means b < a (a is a predecessor
+    pairs: AHashSet<Pair>,
+    precedence: AHashMap<Pair, AHashSet<Pair>>,   // DAG: a -> b means a < b (b is a successor)
+    predecessors: AHashMap<Pair, AHashSet<Pair>>, // DAG: a -> b means b < a (a is a predecessor
     pair_tables: IntMap<usize, PairTable>, // level -> pair_table
 }
 
 impl PartialOrder {
     pub fn new() -> Self {
         Self {
-            pairs: FxHashSet::default(),
-            precedence: FxHashMap::default(),
-            predecessors: FxHashMap::default(),
+            pairs: AHashSet::default(),
+            precedence: AHashMap::default(),
+            predecessors: AHashMap::default(),
             pair_tables: IntMap::default(),
         }
     }
@@ -48,15 +47,16 @@ impl PartialOrder {
             }
         };
 
-        let new_pairs = PairList::try_from(pair_table).expect("PairTable must be valid").pairs;
-        for &pair in &new_pairs {
+        let plist = PairList::from(pair_table);
+        for &pair in plist.pairs() {
             let _ = self.pairs.insert(pair);
         }
         
+        let new_pairs = plist.pairs();
         // Now make sure non of the pairs can change anything in the history of the path.
         for (&len, pt) in &self.pair_tables {
-            for &pair in &new_pairs {
-                if pair.1 as usize > len {
+            for &pair in new_pairs {
+                if pair.j() as usize > len {
                     continue
                 }
                 let mut copy = pt.clone();
@@ -103,9 +103,9 @@ impl PartialOrder {
     fn dependencies_form_dag(&self) -> bool {
         fn find_cycle_dfs(
             node: &Pair,
-            graph: &FxHashMap<Pair, FxHashSet<Pair>>,
-            visited: &mut FxHashSet<Pair>,
-            stack: &mut FxHashSet<Pair>,
+            graph: &AHashMap<Pair, AHashSet<Pair>>,
+            visited: &mut AHashSet<Pair>,
+            stack: &mut AHashSet<Pair>,
         ) -> bool {
             if stack.contains(node) {
                 return true; // cycle
@@ -129,8 +129,8 @@ impl PartialOrder {
             false
         }
 
-        let mut visited = FxHashSet::default();
-        let mut stack = FxHashSet::default();
+        let mut visited = AHashSet::default();
+        let mut stack = AHashSet::default();
 
         for node in self.pairs.iter() {
             if find_cycle_dfs(node, &self.precedence, &mut visited, &mut stack) {
@@ -175,24 +175,24 @@ impl PartialOrder {
         queue.is_empty()
     }
 
-    pub fn pair_hierarchy(&self) -> FxHashMap<(NAIDX, NAIDX), usize> {
+    pub fn pair_hierarchy(&self) -> AHashMap<(NAIDX, NAIDX), usize> {
         // Pairs with no predecessors are roots
-        let mut levels: FxHashMap<(NAIDX, NAIDX), usize> = FxHashMap::default();
+        let mut levels: AHashMap<(NAIDX, NAIDX), usize> = AHashMap::default();
         let mut queue: VecDeque<Pair> = self.pairs.iter()
             .filter(|e| !self.predecessors.contains_key(e))
             .copied()
             .collect();
 
         for &root in &queue {
-            levels.insert((root.0, root.1), 1);
+            levels.insert((root.i(), root.j()), 1);
         }
 
         let mut debug: usize = 0;
         while let Some(edge) = queue.pop_front() {
-            let level = levels[&(edge.0, edge.1)];
+            let level = levels[&(edge.i(), edge.j())];
             if let Some(children) = self.precedence.get(&edge) {
                 for &child in children {
-                    let key = (child.0, child.1);
+                    let key = (child.i(), child.j());
                     let child_level = levels.get(&key).copied().unwrap_or(0);
 
                     if level + 1 > child_level {
@@ -213,19 +213,19 @@ impl PartialOrder {
     pub fn all_total_orders(&self) -> Vec<Vec<Pair>> {
         let mut all = Vec::new();
         let mut current = Vec::new();
-        let mut in_deg: FxHashMap<Pair, usize> = FxHashMap::default();
+        let mut in_deg: AHashMap<Pair, usize> = AHashMap::default();
 
         for e in &self.pairs {
             in_deg.entry(*e).or_insert(0);
         }
 
-        for (_, targets) in &self.precedence {
+        for targets in self.precedence.values() {
             for tgt in targets {
                 *in_deg.entry(*tgt).or_insert(0) += 1;
             }
         }
 
-        let mut available: FxHashSet<Pair> = in_deg
+        let mut available: AHashSet<Pair> = in_deg
             .iter()
             .filter_map(|(&e, &deg)| if deg == 0 { Some(e) } else { None })
             .collect();
@@ -235,9 +235,9 @@ impl PartialOrder {
     }
 
     fn dfs(
-        graph: &FxHashMap<Pair, FxHashSet<Pair>>,
-        in_deg: &mut FxHashMap<Pair, usize>,
-        available: &mut FxHashSet<Pair>,
+        graph: &AHashMap<Pair, AHashSet<Pair>>,
+        in_deg: &mut AHashMap<Pair, usize>,
+        available: &mut AHashSet<Pair>,
         current: &mut Vec<Pair>,
         all: &mut Vec<Vec<Pair>>,
     ) {
@@ -289,24 +289,24 @@ fn extend_pair_table(prev: &PairTable) -> PairTable {
     pt
 }
 
-fn apply_pair_to_pt(pt: &mut PairTable, pair: Pair, pred: &FxHashMap<Pair, FxHashSet<Pair>>,
+fn apply_pair_to_pt(pt: &mut PairTable, pair: Pair, pred: &AHashMap<Pair, AHashSet<Pair>>,
 ) -> Result<Option<Pair>, String> {
     use LoopInfo::*;
 
-    let (i, j) = (pair.0 as usize - 1, pair.1 as usize- 1);
+    let (i, j) = (pair.i() as usize - 1, pair.j() as usize- 1);
     assert!(i<j);
 
     if Some(j as NAIDX) == pt[i] && Some(i as NAIDX) == pt[j] {
         return Ok(Some(pair));
     }
 
-    let lt = LoopTable::try_from(&*pt).expect("Must be a valid PairTable");
+    let lt = LoopTable::from(&*pt);
     match (lt[i], lt[j]) {
         (Unpaired { l: iloop }, Unpaired { l: jloop }) => {
             if iloop == jloop {
                 pt[i] = Some(j as NAIDX);
                 pt[j] = Some(i as NAIDX);
-                return Ok(None);
+                Ok(None)
             } else {
                 Err("Unpaired bases are in different loops.".to_string())
             }
@@ -314,14 +314,14 @@ fn apply_pair_to_pt(pt: &mut PairTable, pair: Pair, pred: &FxHashMap<Pair, FxHas
         (Unpaired { l: iloop }, Paired { i: inner_loop, o: outer_loop }) => {
             if iloop == inner_loop || iloop == outer_loop {
                 let pi = pt[j].unwrap() as usize;
-                let p_edge = if pi < j { Pair(pi as NAIDX+1, j as NAIDX+1) } else { Pair(j as NAIDX+1, pi as NAIDX+1) };
+                let p_edge = if pi < j { Pair::new(pi as NAIDX+1, j as NAIDX+1) } else { Pair::new(j as NAIDX+1, pi as NAIDX+1) };
                 if pred.get(&pair).map_or(false, |s| s.contains(&p_edge)) {
                     return Err(format!("Precedence violation: ({i}, {j}) < ({pi}, {j})."));
                 }
                 pt[pi] = None;
                 pt[i] = Some(j as NAIDX);
                 pt[j] = Some(i as NAIDX);
-                return Ok(Some(p_edge));
+                Ok(Some(p_edge))
             } else {
                 Err(format!("Loop mismatch ({i} unpaired, {j} paired)."))
             }
@@ -329,14 +329,14 @@ fn apply_pair_to_pt(pt: &mut PairTable, pair: Pair, pred: &FxHashMap<Pair, FxHas
         (Paired { i: inner_loop, o: outer_loop }, Unpaired { l: jloop }) => {
             if jloop == inner_loop || jloop == outer_loop {
                 let pj = pt[i].unwrap() as usize;
-                let p_edge = if pj < i { Pair(pj as NAIDX+1, i as NAIDX+1) } else { Pair(i as NAIDX+1, pj as NAIDX+1) };
+                let p_edge = if pj < i { Pair::new(pj as NAIDX+1, i as NAIDX+1) } else { Pair::new(i as NAIDX+1, pj as NAIDX+1) };
                 if pred.get(&pair).map_or(false, |s| s.contains(&p_edge)) {
                     return Err(format!("Precedence violation: ({i}, {j}) < ({i}, {pj})."));
                 }
                 pt[pj] = None;
                 pt[i] = Some(j as NAIDX);
                 pt[j] = Some(i as NAIDX);
-                return Ok(Some(p_edge));
+                Ok(Some(p_edge))
             } else {
                 Err(format!("Loop mismatch ({i} paired, {j} unpaired)."))
             }
@@ -372,10 +372,10 @@ mod tests {
 
         println!("{:?}", po.precedence);
         println!("{:?}", po.predecessors);
-        assert!(po.precedence.get(&Pair(1,2)).is_none());
-        assert!(po.predecessors.get(&Pair(1,2)).is_none());
-        assert!(po.precedence.get(&Pair(3,4)).is_none());
-        assert!(po.predecessors.get(&Pair(3,4)).is_none());
+        assert!(!po.precedence.contains_key(&Pair::new(1,2)));
+        assert!(!po.predecessors.contains_key(&Pair::new(1,2)));
+        assert!(!po.precedence.contains_key(&Pair::new(3,4)));
+        assert!(!po.predecessors.contains_key(&Pair::new(3,4)));
 
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
@@ -393,8 +393,8 @@ mod tests {
 
         println!("{:?}", po.precedence);
         println!("{:?}", po.predecessors);
-        assert!(po.precedence.get(&Pair(1, 2)).unwrap().contains(&Pair(2, 3)));
-        assert!(po.predecessors.get(&Pair(2, 3)).unwrap().contains(&Pair(1, 2)));
+        assert!(po.precedence.get(&Pair::new(1, 2)).unwrap().contains(&Pair::new(2, 3)));
+        assert!(po.predecessors.get(&Pair::new(2, 3)).unwrap().contains(&Pair::new(1, 2)));
 
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
@@ -412,8 +412,8 @@ mod tests {
 
         println!("{:?}", po.precedence);
         println!("{:?}", po.predecessors);
-        assert!(po.precedence.get(&Pair(1, 2)).unwrap().contains(&Pair(1, 3)));
-        assert!(po.predecessors.get(&Pair(1, 3)).unwrap().contains(&Pair(1, 2)));
+        assert!(po.precedence.get(&Pair::new(1, 2)).unwrap().contains(&Pair::new(1, 3)));
+        assert!(po.predecessors.get(&Pair::new(1, 3)).unwrap().contains(&Pair::new(1, 2)));
 
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
@@ -431,8 +431,8 @@ mod tests {
         assert!(!r); // no more allowed to apply a move that would have been possible earlier?
         println!("{:?}", po.precedence);
         println!("{:?}", po.predecessors);
-        assert!(po.precedence.get(&Pair(1,3)).unwrap().contains(&Pair(1,2)));
-        assert!(po.predecessors.get(&Pair(1,2)).unwrap().contains(&Pair(1,3)));
+        assert!(po.precedence.get(&Pair::new(1,3)).unwrap().contains(&Pair::new(1,2)));
+        assert!(po.predecessors.get(&Pair::new(1,2)).unwrap().contains(&Pair::new(1,3)));
     }
 
     #[test]
@@ -465,9 +465,9 @@ mod tests {
         assert_eq!(ph.get(&(3, 4)), Some(&1));
         assert_eq!(ph.get(&(1, 5)), Some(&2));
 
-        let e1 = Pair(1,2);
-        let e2 = Pair(3,4);
-        let e3 = Pair(1,5);
+        let e1 = Pair::new(1,2);
+        let e2 = Pair::new(3,4);
+        let e3 = Pair::new(1,5);
 
         let orders = po.all_total_orders();
         assert_eq!(orders.len(), 3);
@@ -495,10 +495,10 @@ mod tests {
         assert_eq!(ph.get(&(1, 5)), Some(&4));
         assert_eq!(ph.get(&(2, 3)), Some(&2));
 
-        let e1 = Pair(1,2);
-        let e2 = Pair(3,4);
-        let e3 = Pair(1,5);
-        let e4 = Pair(2,3);
+        let e1 = Pair::new(1,2);
+        let e2 = Pair::new(3,4);
+        let e3 = Pair::new(1,5);
+        let e4 = Pair::new(2,3);
 
         // Confirm transitive dependencies are being tracked
         let p = &po.precedence;

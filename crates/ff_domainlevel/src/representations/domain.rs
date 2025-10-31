@@ -1,26 +1,26 @@
-/// domain.rs (the Domain and DomainRegistry)
-///
-/// The Domain (name, length) is a typical abstract representation for the specification of nucleic
-/// acid complementarity. Because domains may occur in multiple sequences, and in many (enumerated)
-/// complexes, the DomainRegistry serves as a central overview on all domains in system. It holds a
-/// strong reference on each Domain, such that sequences, complexes, etc. can share the same Heap
-/// allocation with runtime reference counting. It also holds the logic of which domains are
-/// complementary -- which may be extended on demand.
-///
-/// For now, we do not support thread safety of the DomainRegistry. Even in multithreaded setups, 
-/// it may well be faster to initialize separate DomainRegistries in different threads. Generally,
-/// the DomainRegistry will be comparatively cheap to initiate, but then does typically not change,
-/// it provides a bit faster access to complementarity checks and memory-efficient storage of
-/// sequences.
-///
-/// Note: An attempt to use weak references to complementary domains from within the Domain has
-/// turned out very complicated / impossible without RefCell. I think it is not worth it, probably
-/// a bad design choice anyway. Let the DomainRegistry handle it.
-///
+//! domain.rs (the Domain and DomainRegistry)
+//!
+//! The Domain (name, length) is a typical abstract representation for the specification of nucleic
+//! acid complementarity. Because domains may occur in multiple sequences, and in many (enumerated)
+//! complexes, the DomainRegistry serves as a central overview on all domains in system. It holds a
+//! strong reference on each Domain, such that sequences, complexes, etc. can share the same Heap
+//! allocation with runtime reference counting. It also holds the logic of which domains are
+//! complementary -- which may be extended on demand.
+//!
+//! For now, we do not support thread safety of the DomainRegistry. Even in multithreaded setups, 
+//! it may well be faster to initialize separate DomainRegistries in different threads. Generally,
+//! the DomainRegistry will be comparatively cheap to initiate, but then does typically not change,
+//! it provides a bit faster access to complementarity checks and memory-efficient storage of
+//! sequences.
+//!
+//! Note: An attempt to use weak references to complementary domains from within the Domain has
+//! turned out very complicated / impossible without RefCell. I think it is not worth it, probably
+//! a bad design choice anyway. Let the DomainRegistry handle it.
+//!
 
 use std::fmt;
 use std::rc::Rc;
-use rustc_hash::FxHashMap;
+use ahash::AHashMap;
 
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub struct Domain {
@@ -40,15 +40,15 @@ pub type DomainRefVec = Vec<DomainRef>;
 
 #[derive(Default)]
 pub struct DomainRegistry {
-    domains: FxHashMap<String, DomainRef>,
-    complements: FxHashMap<DomainRef, DomainRef>, // symmetric
+    domains: AHashMap<String, DomainRef>,
+    complements: AHashMap<DomainRef, DomainRef>, // symmetric
 }
 
 impl DomainRegistry {
     pub fn new() -> Self {
         Self {
-            domains: FxHashMap::default(),        
-            complements: FxHashMap::default(),
+            domains: AHashMap::default(),        
+            complements: AHashMap::default(),
         }
     }
 

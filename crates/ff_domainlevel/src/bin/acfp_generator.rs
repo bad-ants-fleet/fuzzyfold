@@ -1,9 +1,9 @@
 use itertools::Itertools;
-use structure::DotBracketVec;
-use domainlevel::Acfp;
-use domainlevel::DomainRegistry;
-use domainlevel::SegmentSequence;
-use domainlevel::{enum_structs, generate_structs};
+use ff_structure::DotBracketVec;
+use ff_domainlevel::design::Acfp;
+use ff_domainlevel::DomainRegistry;
+use ff_domainlevel::design::SegmentSequence;
+use ff_domainlevel::design::{enum_structs, generate_structs};
 
 fn display_acfp(acfp: &[DotBracketVec]) -> String {
     acfp.iter()

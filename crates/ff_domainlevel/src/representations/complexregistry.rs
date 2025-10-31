@@ -1,12 +1,10 @@
-
 use std::fmt;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use once_cell::sync::Lazy;
-
-use crate::complex::Complex;
 use ff_structure::StructureError;
+use crate::Complex;
 
 #[derive(Debug)]
 pub enum ComplexRegistryError {
@@ -76,7 +74,7 @@ impl ComplexRegistry {
                                 return Err(ComplexRegistryError::NameAlreadyInUse(new_name.to_string()));
                             }
                             existing.set_name(new_name)
-                                .map_err(|e| ComplexRegistryError::Internal(e))?;
+                                .map_err(ComplexRegistryError::Internal)?;
                             reg.by_name.insert(new_name.to_string(), kernel.clone());
                         }
                         _ => {}
@@ -119,7 +117,7 @@ impl ComplexRegistry {
                 continue;
             }
             complex.set_name(&candidate)
-                .map_err(|e| ComplexRegistryError::Internal(e))?;
+                .map_err(ComplexRegistryError::Internal)?;
             reg.by_name.insert(candidate.clone(), complex.kernel().to_string());
             return Ok(candidate);
         }

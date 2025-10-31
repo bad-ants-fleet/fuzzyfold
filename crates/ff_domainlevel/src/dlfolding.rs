@@ -1,8 +1,9 @@
-use ff_structure::NAIDX;
+use ahash::AHashSet;
+use ahash::AHashMap;
 use ndarray::Array2;
-use rustc_hash::FxHashSet;
-use rustc_hash::FxHashMap;
-use crate::domain::{DomainRefVec, DomainRegistry};
+use ff_structure::NAIDX;
+
+use crate::{DomainRefVec, DomainRegistry};
 
 pub fn nussinov(p: &Array2<usize>) -> Array2<usize> {
     let (n, m) = p.dim();
@@ -81,7 +82,7 @@ pub fn traceback_structures(
     p: &Array2<usize>,
 ) -> Vec<Vec<Option<NAIDX>>> {
  
-    let mut memo = FxHashMap::default();
+    let mut memo = AHashMap::default();
     let as_pairs = traceback_all(i, j, dp, p, &mut memo);
 
     as_pairs.into_iter()
@@ -101,17 +102,17 @@ pub fn traceback_all(
     j: usize,
     dp: &Array2<usize>,
     p: &Array2<usize>,
-    memo: &mut FxHashMap<(usize, usize), FxHashSet<Vec<(usize, usize)>>>,
-) -> FxHashSet<Vec<(usize, usize)>> {
+    memo: &mut AHashMap<(usize, usize), AHashSet<Vec<(usize, usize)>>>,
+) -> AHashSet<Vec<(usize, usize)>> {
     if i >= j {
-        return FxHashSet::from([vec![]].into_iter().collect());
+        return AHashSet::from([vec![]]);
     }
 
     if let Some(cached) = memo.get(&(i, j)) {
         return cached.clone();
     }
 
-    let mut results = FxHashSet::default();
+    let mut results = AHashSet::default();
     let dp_ij = dp[(i,j)];
 
     // Case 1: i unpaired
@@ -214,7 +215,7 @@ mod tests {
         assert_eq!(p[(0, 2)], 1); // ensure complement
         assert_eq!(p[(2, 0)], 1); // ensure complement
         let dp = nussinov(&p);
-        let mut memo = FxHashMap::default();
+        let mut memo = AHashMap::default();
         let structs: Vec<Vec<(usize, usize)>> = traceback_all(0, sequence.len() - 1, &dp, &p, &mut memo).into_iter().collect();
         assert_eq!(dp[(0, 2)], 1);
         assert_eq!(structs.len(), 1);
@@ -228,7 +229,7 @@ mod tests {
         let sequence = drv("a a* a a*", &registry);
         let p = build_pair_scores(&sequence, &registry);
         let dp = nussinov(&p);
-        let mut memo = FxHashMap::default();
+        let mut memo = AHashMap::default();
         let all_structs: Vec<Vec<(usize, usize)>> = traceback_all(0, sequence.len() - 1, &dp, &p, &mut memo).into_iter().collect();
         println!("{:?}", all_structs);
         assert_eq!(dp[(0, 3)], 2);
@@ -248,7 +249,7 @@ mod tests {
         let sequence = drv("a a* a a* a a* a a*", &registry);
         let p = build_pair_scores(&sequence, &registry);
         let dp = nussinov(&p);
-        let all_structs: Vec<Vec<(usize, usize)>> = traceback_all(0, sequence.len() - 1, &dp, &p, &mut FxHashMap::default()).into_iter().collect();
+        let all_structs: Vec<Vec<(usize, usize)>> = traceback_all(0, sequence.len() - 1, &dp, &p, &mut AHashMap::default()).into_iter().collect();
         println!("{:?}", all_structs);
         assert_eq!(all_structs.len(), 14);
         let all_structs = traceback_structures(0, sequence.len() - 1, &dp, &p);

@@ -1,25 +1,31 @@
-mod domain;
-mod strand;
-mod complex;
-mod complexregistry;
-mod reactions;
+//! The ff_domainlevel crate.
+//!
+//! Provides basic domain-level representations of nucleic acids:
+//!  - Domains
+//!  - Strands
+//!  - Complexes
+//!  - Reactions
+//!
+//! Provides some domain-level folding utilities.
+//!  - base-pair maximization (Nussinov).
+//!  - domain-level reaction enumeration.
+//!  - PairList representatin (1-based).
+//!
 
-mod segments;
+/// Design module, mostly ACFP stuff.
+pub mod design;
 
-mod acfps;
-mod enumerate;
+/// Rules module, used by enumeration.
+pub mod rules;
+
+mod representations;
+mod enumeration;
+mod dlfolding;
 mod pair_list;
 
-mod rules;
-mod checks;
-
-pub use complex::*;
-pub use complexregistry::*;
-pub use reactions::*;
-pub use enumerate::*;
-pub use acfps::*;
-pub use segments::*;
-pub use domain::*;
+pub use representations::*;
+pub use enumeration::*;
+pub use dlfolding::*;
 pub use pair_list::*;
 
 

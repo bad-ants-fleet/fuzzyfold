@@ -1,6 +1,6 @@
-use domainlevel::Acfp;
-use domainlevel::DomainRegistry;
-use domainlevel::SegmentSequence;
+use ff_domainlevel::design::Acfp;
+use ff_domainlevel::DomainRegistry;
+use ff_domainlevel::design::SegmentSequence;
 
 fn main() {
     let mut registry = DomainRegistry::new();

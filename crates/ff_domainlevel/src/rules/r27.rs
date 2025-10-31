@@ -1,8 +1,10 @@
+use ff_structure::DotBracket;
 
-use crate::complexregistry::{ComplexRef, ComplexRegistry, ComplexRegistryError};
+use crate::ComplexRef;
+use crate::ComplexRegistry;
+use crate::ComplexRegistryError;
+use crate::get_kernel;
 use crate::rules::RewriteRule;
-use crate::complex::get_kernel;
-use structure::DotBracket;
 
 pub struct R27;
 
@@ -37,7 +39,7 @@ impl RewriteRule for R27 {
             new_struc[j] = DotBracket::Open;
             new_struc[k] = DotBracket::Close;
             new_struc[l] = DotBracket::Close;
-            let kernel = get_kernel(&seq, &new_struc);
+            let kernel = get_kernel(seq, &new_struc);
             ComplexRegistry::get_or_create(&kernel, None)
         }
 
@@ -45,11 +47,11 @@ impl RewriteRule for R27 {
             (0..seq.len()-3)
             .filter(move |&i| struc[i] == DotBracket::Open)
             .flat_map(move |i| {
-                let j = table[i].expect(""); // 0-based match
+                let j = table[i].expect("") as usize; // 0-based match
                 (j + 1..seq.len()-1)
                     .filter(move |&k| struc[k] == DotBracket::Open)
                     .filter_map(move |k| {
-                        let l = table[k].expect(""); // 0-based match
+                        let l = table[k].expect("") as usize; // 0-based match
                         match apply_match(complex, i, j, k, l) {
                             Ok(product) => {
                                 let rewrite = format!(
@@ -76,7 +78,7 @@ mod tests {
         let i1 = ComplexRegistry::get_or_create("r27 a( b ) a( )", Some("R27_I1")).expect("must be valid.");
         let o1 = ComplexRegistry::get_or_create("r27 a( b a*( ) )", Some("R27_O1")).expect("must be valid.");
 
-        let my_clxs: Vec<_> = vec![o1].iter().map(|c| c.kernel().to_string()).collect();
+        let my_clxs: Vec<_> = [o1].iter().map(|c| c.kernel().to_string()).collect();
         let my_rwrs = vec!["2a( 4) 5a( 6) -> 2a( 4a*( 5) 6)"];
 
         let (clxs, rwrs): (Vec<_>, Vec<_>) = R27.apply(&i1)

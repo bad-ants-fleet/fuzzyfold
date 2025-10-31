@@ -1,9 +1,11 @@
-
-use crate::complexregistry::{ComplexRef, ComplexRegistry, ComplexRegistryError};
-use crate::rules::RewriteRule;
-use crate::domain::is_complement;
-use crate::complex::get_kernel;
 use ff_structure::DotBracket;
+
+use crate::ComplexRef;
+use crate::ComplexRegistry;
+use crate::ComplexRegistryError;
+use crate::is_complement;
+use crate::get_kernel;
+use crate::rules::RewriteRule;
 
 pub struct R11;
 
@@ -36,7 +38,7 @@ impl RewriteRule for R11 {
                 let mut new_struc = complex.structure().to_vec();
                 new_struc[i] = DotBracket::Open;
                 new_struc[j] = DotBracket::Close;
-                let kernel = get_kernel(&seq, &new_struc);
+                let kernel = get_kernel(seq, &new_struc);
                 ComplexRegistry::get_or_create(&kernel, None)
         }
 
@@ -80,7 +82,7 @@ mod tests {
         let o3 = ComplexRegistry::get_or_create("r11 a b a*( ) a*", Some("TO3")).expect("must be valid.");
         let o4 = ComplexRegistry::get_or_create("r11 a b a* a( )", Some("TO4")).expect("must be valid.");
 
-        let my_clxs: Vec<_> = vec![o1, o2, o3, o4].iter().map(|c| c.kernel().to_string()).collect();
+        let my_clxs: Vec<_> = [o1, o2, o3, o4].iter().map(|c| c.kernel().to_string()).collect();
         let my_rwrs = vec!["2a 4a* -> 2a( 4)", "2a 6a* -> 2a( 6)", "4a* 5a -> 4a*( 5)", "5a 6a* -> 5a( 6)"];
 
         let (clxs, rwrs): (Vec<_>, Vec<_>) = R11.apply(&i1).map(|(cplx, rewrite)| (cplx.kernel().to_string(), rewrite)).unzip();

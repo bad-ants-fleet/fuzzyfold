@@ -1,6 +1,6 @@
 
-use crate::complexregistry::ComplexRef;
-use crate::reactions::Reaction;
+use crate::ComplexRef;
+use crate::Reaction;
 
 /// Trait for implementing a single rewrite rule.
 pub trait RewriteRule: Send + Sync {

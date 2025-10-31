@@ -1,7 +1,7 @@
 use std::collections::{HashSet, VecDeque};
 
-use crate::complexregistry::ComplexRef;
-use crate::reactions::Reaction;
+use crate::ComplexRef;
+use crate::Reaction;
 use crate::rules::RewriteRule;
 use crate::rules::*;
 

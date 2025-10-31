@@ -1,5 +1,5 @@
 use std::fmt;
-use crate::complexregistry::ComplexRef;
+use crate::ComplexRef;
 
 
 #[derive(Clone)]
@@ -79,7 +79,7 @@ impl fmt::Debug for Reaction {
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use crate::complexregistry::ComplexRegistry;
+    use crate::ComplexRegistry;
 
     #[test]
     fn test_basic_reaction_display() {

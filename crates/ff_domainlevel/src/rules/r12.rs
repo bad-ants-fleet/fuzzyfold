@@ -1,9 +1,11 @@
-
-use crate::complexregistry::{ComplexRef, ComplexRegistry, ComplexRegistryError};
-use crate::rules::RewriteRule;
-use crate::domain::is_complement;
-use crate::complex::get_kernel;
 use ff_structure::DotBracket;
+
+use crate::ComplexRef;
+use crate::ComplexRegistry;
+use crate::ComplexRegistryError;
+use crate::is_complement;
+use crate::get_kernel;
+use crate::rules::RewriteRule;
 
 pub struct R12;
 
@@ -36,7 +38,7 @@ impl RewriteRule for R12 {
                 let mut new_struc = complex.structure().to_vec();
                 new_struc[i] = DotBracket::Unpaired;
                 new_struc[j] = DotBracket::Unpaired;
-                let kernel = get_kernel(&seq, &new_struc);
+                let kernel = get_kernel(seq, &new_struc);
                 ComplexRegistry::get_or_create(&kernel, None)
         }
 
@@ -44,7 +46,7 @@ impl RewriteRule for R12 {
             (0..seq.len()-1)
             .filter(move |&i| struc[i] == DotBracket::Open)
             .filter_map(move |i| {
-                let j = table[i].expect("");
+                let j = table[i].expect("") as usize;
                 assert!(j > i, "in r12: j < i ({} < {})", j, i);
                 assert!(seq.len() > j, "in r12: j > len ({} > {})", j, seq.len());
                 assert_eq!(struc[j], DotBracket::Close, "({:?} > {:?})", struc[j], DotBracket::Close);
@@ -75,7 +77,7 @@ mod tests {
         let o1 = ComplexRegistry::get_or_create("r12 a b a* a( )", Some("R12_O2")).expect("must be valid.");
         let o2 = ComplexRegistry::get_or_create("r12 a( b ) a a*", Some("R12_O1")).expect("must be valid.");
 
-        let my_clxs: Vec<_> = vec![o1, o2].iter().map(|c| c.kernel().to_string()).collect();
+        let my_clxs: Vec<_> = [o1, o2].iter().map(|c| c.kernel().to_string()).collect();
         let my_rwrs = vec!["2a( 4) -> 2a 4a*", "5a( 6) -> 5a 6a*"];
 
         let (clxs, rwrs): (Vec<_>, Vec<_>) = R12.apply(&i1)

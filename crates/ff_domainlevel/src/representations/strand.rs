@@ -1,9 +1,9 @@
 
-///
-///NOTE: Thinking about StrandRef like implemented for Domain vs DomainRef
-///
+//!
+//!NOTE: Thinking about StrandRef like implemented for Domain vs DomainRef
+//!
 
-use rustc_hash::FxHashMap;
+use ahash::AHashMap;
 
 use crate::DomainRefVec;
 
@@ -14,8 +14,8 @@ pub struct Strand {
 }
 
 pub struct StrandRegistry {
-    strands: FxHashMap<String, DomainRefVec>,
-    names: FxHashMap<DomainRefVec, String>,
+    strands: AHashMap<String, DomainRefVec>,
+    names: AHashMap<DomainRefVec, String>,
     counter: usize,
 }
 
@@ -23,8 +23,8 @@ pub struct StrandRegistry {
 impl StrandRegistry {
     pub fn new() -> Self {
         Self {
-            strands: FxHashMap::default(),        
-            names: FxHashMap::default(),
+            strands: AHashMap::default(),        
+            names: AHashMap::default(),
             counter: 0,
         }
     }

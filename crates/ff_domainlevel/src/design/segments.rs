@@ -6,132 +6,14 @@
 //!
 
 use std::collections::VecDeque;
-use std::usize;
-use rustc_hash::FxHashMap;
+use ahash::AHashMap;
 use nohash_hasher::{IntSet, IntMap};
 
-use ff_structure::{DotBracket, DotBracketVec, PairTable, StructureError, NAIDX};
+use ff_structure::{DotBracket, DotBracketVec, PairTable, NAIDX};
 
-use crate::domain::{DomainRef, DomainRefVec, DomainRegistry};
-use crate::acfps::Acfp;
-use crate::checks::dlfolding::{build_pair_scores, nussinov, traceback_structures};
-
-#[derive(Debug)]
-pub struct SegmentSequence {
-    segments: Vec<Segment>,
-}
-
-impl SegmentSequence {
-    /// To translate the DomainSequence from an ACFP, we also use a DomainRegistry,
-    /// that can be used to specify Domain-lengths upfront. 
-    pub fn design_from_acfp(acfp: &Acfp, registry: &mut DomainRegistry) -> Result<Self, String> {
-        let pairh = acfp.pair_hierarchy().ok_or("Missing pair hierarchy")?;
-        let ccomp = acfp.connected_components();
-        let segments = design_segments(&ccomp, &pairh, registry)
-            .into_iter()
-            .map(|s| s.unwrap())
-            .collect();
-
-        Ok(SegmentSequence { segments })
-    }
-
-    pub fn get_domain_transcription_complexes(&self, registry: &DomainRegistry) -> Vec<DotBracketVec> {
-        let sequence = &self.get_domain_sequence();
-        let p = build_pair_scores(sequence, &registry);
-        let dp = nussinov(&p);
-        
-        let mut result: Vec<DotBracketVec> = vec![];
-        for l in 0..sequence.len() {
-            let all_structs = traceback_structures(0, l, &dp, &p);
-            for st in all_structs {
-                result.push(DotBracketVec::try_from(&PairTable(st)).unwrap());
-            }
-        }
-        result
-    }
-
-    pub fn get_segment_transciption_complexes(&self, registry: &DomainRegistry) -> Vec<DotBracketVec> {
-        let sequence = &self.get_domain_sequence();
-        let p = build_pair_scores(sequence, &registry);
-        let dp = nussinov(&p);
-
-        let mut lt = 0;
-        let mut result: Vec<DotBracketVec> = vec![];
-        for s in self.segments.iter() {
-            lt += s.len();
-            let all_structs = traceback_structures(0, lt-1, &dp, &p);
-            for st in all_structs {
-                result.push(DotBracketVec::try_from(&PairTable(st)).unwrap());
-            }
-        }
-        result
-    }
-
-    pub fn get_adibatic_acfp(&self, registry: &DomainRegistry) -> Vec<DotBracketVec> {
-        let sequence = &self.get_domain_sequence();
-        let logic_indices = &self.get_logic_indices();
-        let p = build_pair_scores(sequence, registry);
-        let dp = nussinov(&p);
-
-        let mut result: Vec<DotBracketVec> = vec![];
-        let mut lt = 0;
-        for s in self.segments.iter() {
-            lt += s.len();
-            let all_structs = traceback_structures(0, lt - 1, &dp, &p);
-
-            for st in all_structs {
-                let dbv = extract_logic_dbv(&st, logic_indices);
-                result.push(dbv);
-            }
-        }
-        result
-    }
-
-    pub fn implements_acfp(&self, 
-        acfp: &[DotBracketVec],
-        registry: &DomainRegistry,
-    ) -> bool {
-        let sequence = &self.get_domain_sequence();
-        let logic_indices = &self.get_logic_indices();
-        let p = build_pair_scores(sequence, registry);
-        let dp = nussinov(&p);
-
-        let mut lt = 0;
-        for s in self.segments.iter() {
-            lt += s.len();
-            let all_structs = traceback_structures(0, lt - 1, &dp, &p);
-
-            if all_structs.len() > 1 {
-                return false
-            }
-
-            let dbv = extract_logic_dbv(&all_structs[0], logic_indices);
-            if dbv != acfp[dbv.len()-1] {
-                return false
-            }
-        }
-        true
-    }
-
-    pub fn get_domain_sequence(&self) -> DomainRefVec {
-        self.segments
-            .iter()
-            .flat_map(|seg| seg.full_sequence())
-            .collect()
-    }
-        
-    fn get_logic_indices(&self) -> IntSet<usize> {
-        // The indices corresponding to logic domains after
-        // calling get_domain_sequence()
-        self.segments.iter()
-            .enumerate()
-            .flat_map(|(si, seg)| {
-                let offset: usize = self.segments[..si].iter().map(|s| s.len()).sum();
-                std::iter::once(offset + seg.left_support.len()) // index of logic domain in full sequence
-            })
-        .collect()
-    }
-}
+use crate::{DomainRef, DomainRefVec, DomainRegistry};
+use crate::design::Acfp;
+use crate::{build_pair_scores, nussinov, traceback_structures};
 
 #[derive(Clone, Debug)]
 pub struct Segment {
@@ -158,6 +40,10 @@ impl Segment {
     
     pub fn len(&self) -> usize {
         self.full_sequence().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.full_sequence().is_empty()
     }
 }
 
@@ -238,19 +124,136 @@ impl DomainBookkeeper {
                 } else {
                     seg.right_support.push(registry.intern(&new, self.support_length));
                 }
+            } else if seg.left_support.len() > seg.right_support.len() {
+                seg.right_support.push(registry.intern(&new, self.support_length));
             } else {
-                if seg.left_support.len() > seg.right_support.len() {
-                    seg.right_support.push(registry.intern(&new, self.support_length));
-                } else {
-                    seg.left_support.insert(0, registry.intern(&new, self.support_length));
-                }
+                seg.left_support.insert(0, registry.intern(&new, self.support_length));
             }
         }
     }
 
 }
 
-fn extract_logic_dbv(structure: &Vec<Option<NAIDX>>, indices: &IntSet<usize>) -> DotBracketVec {
+
+
+#[derive(Debug)]
+pub struct SegmentSequence {
+    segments: Vec<Segment>,
+}
+
+impl SegmentSequence {
+    /// To translate the DomainSequence from an ACFP, we also use a DomainRegistry,
+    /// that can be used to specify Domain-lengths upfront. 
+    pub fn design_from_acfp(acfp: &Acfp, registry: &mut DomainRegistry) -> Result<Self, String> {
+        let pairh = acfp.pair_hierarchy().ok_or("Missing pair hierarchy")?;
+        let ccomp = acfp.connected_components();
+        let segments = design_segments(&ccomp, &pairh, registry)
+            .into_iter()
+            .map(|s| s.unwrap())
+            .collect();
+
+        Ok(SegmentSequence { segments })
+    }
+
+    pub fn get_domain_transcription_complexes(&self, registry: &DomainRegistry) -> Vec<DotBracketVec> {
+        let sequence = &self.get_domain_sequence();
+        let p = build_pair_scores(sequence, registry);
+        let dp = nussinov(&p);
+        
+        let mut result: Vec<DotBracketVec> = vec![];
+        for l in 0..sequence.len() {
+            let all_structs = traceback_structures(0, l, &dp, &p);
+            for st in all_structs {
+                result.push(DotBracketVec::from(&PairTable(st)));
+            }
+        }
+        result
+    }
+
+    pub fn get_segment_transciption_complexes(&self, registry: &DomainRegistry) -> Vec<DotBracketVec> {
+        let sequence = &self.get_domain_sequence();
+        let p = build_pair_scores(sequence, registry);
+        let dp = nussinov(&p);
+
+        let mut lt = 0;
+        let mut result: Vec<DotBracketVec> = vec![];
+        for s in self.segments.iter() {
+            lt += s.len();
+            let all_structs = traceback_structures(0, lt-1, &dp, &p);
+            for st in all_structs {
+                result.push(DotBracketVec::from(&PairTable(st)));
+            }
+        }
+        result
+    }
+
+    pub fn get_adibatic_acfp(&self, registry: &DomainRegistry) -> Vec<DotBracketVec> {
+        let sequence = &self.get_domain_sequence();
+        let logic_indices = &self.get_logic_indices();
+        let p = build_pair_scores(sequence, registry);
+        let dp = nussinov(&p);
+
+        let mut result: Vec<DotBracketVec> = vec![];
+        let mut lt = 0;
+        for s in self.segments.iter() {
+            lt += s.len();
+            let all_structs = traceback_structures(0, lt - 1, &dp, &p);
+
+            for st in all_structs {
+                let dbv = extract_logic_dbv(&st, logic_indices);
+                result.push(dbv);
+            }
+        }
+        result
+    }
+
+    pub fn implements_acfp(&self, 
+        acfp: &[DotBracketVec],
+        registry: &DomainRegistry,
+    ) -> bool {
+        let sequence = &self.get_domain_sequence();
+        let logic_indices = &self.get_logic_indices();
+        let p = build_pair_scores(sequence, registry);
+        let dp = nussinov(&p);
+
+        let mut lt = 0;
+        for s in self.segments.iter() {
+            lt += s.len();
+            let all_structs = traceback_structures(0, lt - 1, &dp, &p);
+
+            if all_structs.len() > 1 {
+                return false
+            }
+
+            let dbv = extract_logic_dbv(&all_structs[0], logic_indices);
+            if dbv != acfp[dbv.len()-1] {
+                return false
+            }
+        }
+        true
+    }
+
+    pub fn get_domain_sequence(&self) -> DomainRefVec {
+        self.segments
+            .iter()
+            .flat_map(|seg| seg.full_sequence())
+            .collect()
+    }
+        
+    fn get_logic_indices(&self) -> IntSet<usize> {
+        // The indices corresponding to logic domains after
+        // calling get_domain_sequence()
+        self.segments.iter()
+            .enumerate()
+            .flat_map(|(si, seg)| {
+                let offset: usize = self.segments[..si].iter().map(|s| s.len()).sum();
+                std::iter::once(offset + seg.left_support.len()) // index of logic domain in full sequence
+            })
+        .collect()
+    }
+}
+
+fn extract_logic_dbv(structure: &[Option<NAIDX>], indices: &IntSet<usize>) -> DotBracketVec {
     let mut dbv = vec![];
 
     for (i, &j_opt) in structure.iter().enumerate() {
@@ -279,7 +282,7 @@ fn extract_logic_dbv(structure: &Vec<Option<NAIDX>>, indices: &IntSet<usize>) ->
 
 fn design_segments(
     components: &[Vec<usize>],
-    pair_hierarchy: &FxHashMap<(usize, usize), usize>,
+    pair_hierarchy: &AHashMap<(NAIDX, NAIDX), usize>,
     registry: &mut DomainRegistry, 
 ) -> Vec<Option<Segment>> {
     let max_index = components.iter().flatten().copied().max().unwrap_or(0);
@@ -299,7 +302,7 @@ fn design_segments(
     // Turn pairs into a queue for deferral
     let mut queue: VecDeque<((usize, usize), usize)> = pair_hierarchy
         .iter()
-        .map(|(&(i, j), &w)| ((i, j), w))
+        .map(|(&(i, j), &w)| ((i as usize, j as usize), w))
         .collect();
 
     while let Some(((i, j), w)) = queue.pop_front() {
@@ -326,11 +329,11 @@ fn design_segments(
                 bookkeeper.extend_supports(&mut seg_i, w, registry);
                 let seg_j = Segment {
                     left_support: seg_i.right_support.iter().take(w).rev()
-                        .map(|d| registry.get_complement(&d))
+                        .map(|d| registry.get_complement(d))
                         .collect(),
                     logic: registry.get_complement(&seg_i.logic),
                     right_support: seg_i.left_support.iter().rev().take(w)
-                        .map(|d| registry.get_complement(&d))
+                        .map(|d| registry.get_complement(d))
                         .collect(),
                     timer: registry.intern(&format!("T{}", j), j),
                 };
@@ -342,11 +345,11 @@ fn design_segments(
                 bookkeeper.extend_supports(&mut seg_j, w, registry);
                 let seg_i = Segment {
                     left_support: seg_j.right_support.iter().take(w).rev()
-                        .map(|d| registry.get_complement(&d))
+                        .map(|d| registry.get_complement(d))
                         .collect(),
                     logic: registry.get_complement(&seg_j.logic),
                     right_support: seg_j.left_support.iter().rev().take(w)
-                        .map(|d| registry.get_complement(&d))
+                        .map(|d| registry.get_complement(d))
                         .collect(),
                     timer: registry.intern(&format!("T{}", i), i),
                 };
@@ -364,11 +367,11 @@ fn design_segments(
                     if seg_i.left_support.len() + seg_i.right_support.len() < w {
                         seg_i = Segment {
                             left_support: seg_j.right_support.iter().take(w).rev()
-                                .map(|d| registry.get_complement(&d))
+                                .map(|d| registry.get_complement(d))
                                 .collect(),
                             logic: registry.get_complement(&seg_j.logic),
                             right_support: seg_j.left_support.iter().rev().take(w)
-                                .map(|d| registry.get_complement(&d))
+                                .map(|d| registry.get_complement(d))
                                 .collect(),
                             timer: registry.intern(&format!("T{}", i), i),
                         };
@@ -380,11 +383,11 @@ fn design_segments(
                     if seg_j.left_support.len() + seg_j.right_support.len() < w {
                         seg_j = Segment {
                             left_support: seg_i.right_support.iter().take(w).rev()
-                                .map(|d| registry.get_complement(&d))
+                                .map(|d| registry.get_complement(d))
                                 .collect(),
                             logic: registry.get_complement(&seg_i.logic),
                             right_support: seg_i.left_support.iter().rev().take(w)
-                                .map(|d| registry.get_complement(&d))
+                                .map(|d| registry.get_complement(d))
                                 .collect(),
                             timer: registry.intern(&format!("T{}", j), j),
                         };
@@ -400,7 +403,7 @@ fn design_segments(
     let mut result = seq[1..].to_vec();
 
     for (i, seg) in seq[1..].iter().enumerate() {
-        if let Some(_) = seg {
+        if seg.is_some() {
             continue;
         } else {
             let new_seg = bookkeeper.new_logic_single(i+1, registry);
@@ -420,7 +423,7 @@ mod tests {
     #[test]
     fn test_design_segments_balancing_and_expansion() {
         // Define the pair hierarchy
-        let pair_hierarchy: FxHashMap<(usize, usize), usize> = vec![
+        let pair_hierarchy: AHashMap<(NAIDX, NAIDX), usize> = vec![
             ((1, 2), 1),
             ((3, 4), 2),
             ((2, 3), 3),

@@ -35,7 +35,7 @@ impl Complex {
         }
     }
 
-    pub fn from_kernel(raw_kernel: &String, name: Option<&str>) -> Result<Self, StructureError> {
+    pub fn from_kernel(raw_kernel: &str, name: Option<&str>) -> Result<Self, StructureError> {
         let kernel = Self::cannonize_kernel(raw_kernel);
         let (sequence, structure) = parse_kernel(&kernel)?;
         let pair_table = PairTable::try_from(&structure).expect("This must be a valid kernel structure.");
@@ -128,9 +128,7 @@ fn parse_kernel(kernel: &str) -> Result<(Vec<String>, DotBracketVec), StructureE
             sequence.push(seq.to_string());
             structure.push(DotBracket::Open);
             stack.push(sequence.len() - 1);
-        } else if token.ends_with(')') {
-            return Err(StructureError::InvalidToken(token.to_string(),  "kernel".to_string(), idx));
-        } else if token.contains('(') || token.contains(')') {
+        } else if token.ends_with(')') || token.contains('(') || token.contains(')') {
             return Err(StructureError::InvalidToken(token.to_string(),  "kernel".to_string(), idx));
         } else {
             sequence.push(token.to_string());
@@ -164,7 +162,7 @@ mod tests {
 
     #[test]
     fn test_from_kernel_unpaired() {
-        let c = Complex::from_kernel(&"a b c".to_string(), None).unwrap();
+        let c = Complex::from_kernel("a b c", None).unwrap();
         assert_eq!(c.kernel(), "a b c");
         assert_eq!(c.name(), None);
         assert_eq!(c.sequence(), &vec!["a", "b", "c"]);
@@ -176,7 +174,7 @@ mod tests {
 
     #[test]
     fn test_from_kernel_with_structure() {
-        let c = Complex::from_kernel(&"a( b )".to_string(), None).unwrap();
+        let c = Complex::from_kernel("a( b )", None).unwrap();
         assert_eq!(c.kernel(), "a( b )");
         assert_eq!(c.name(), None);
         assert_eq!(c.sequence(), &vec!["a", "b", "a*"]);
@@ -188,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_complex_set_name() {
-        let c = Complex::from_kernel(&"a b b".to_string(), None).unwrap();
+        let c = Complex::from_kernel("a b b", None).unwrap();
         assert_eq!(format!("{}", c), "a b b");
         let _ = c.set_name("testname");
         assert_eq!(c.name(), Some("testname".to_owned()));

@@ -1,25 +1,28 @@
+//! Abstract cotranscriptional folding pathways.
+
 
 use std::fmt;
 use std::error;
 use std::collections::HashMap;
-use ff_structure::NAIDX;
 use ndarray::Array2;
-use rustc_hash::{FxHashMap, FxHashSet};
+use ahash::AHashMap;
+use ahash::AHashSet;
 
-use ff_structure::{
-    DotBracket,
-    DotBracketVec, 
-    PairTable, 
-};
-use crate::{Pair, PairList};
-use crate::checks::{
+use ff_structure::NAIDX;
+use ff_structure::DotBracket;
+use ff_structure::DotBracketVec;
+use ff_structure::PairTable;
+
+use crate::Pair;
+use crate::PairList;
+
+use crate::design::{
     PartialOrder, 
-    UnionFind,
-    nussinov, 
-    traceback_structures,
-};
+    UnionFind};
+use crate::nussinov;
+use crate::traceback_structures;
 use crate::DomainRegistry;
-use crate::SegmentSequence;
+use crate::design::SegmentSequence;
 
 #[derive(Debug, Clone)]
 pub struct Acfp {
@@ -27,7 +30,7 @@ pub struct Acfp {
     // The following fields are commonly computed / cached properties 
     // that remain valid if the path gets extended.
     pt_path: Vec<PairTable>,
-    all_pairs: FxHashSet<Pair>, // by convention: i < j
+    all_pairs: AHashSet<Pair>, // by convention: i < j
     partial_order: Option<PartialOrder>,
     length: usize,
 }
@@ -41,18 +44,19 @@ impl Acfp {
         &self.pt_path
     }
 
-    pub fn all_pairs(&self) -> &FxHashSet<Pair> {
+    pub fn all_pairs(&self) -> &AHashSet<Pair> {
         &self.all_pairs
     }
 
-    pub fn pair_hierarchy(&self) -> Option<FxHashMap<(NAIDX, NAIDX), usize>> {
+    pub fn pair_hierarchy(&self) -> Option<AHashMap<(NAIDX, NAIDX), usize>> {
         self.partial_order.as_ref().map(|po| po.pair_hierarchy())
     }
 
     pub fn extend_by_one(&mut self, new_db: DotBracketVec) {
         assert_eq!(new_db.len(), self.length + 1);
         let new_pt = PairTable::try_from(&new_db).unwrap();
-        for pair in PairList::try_from(&new_pt).unwrap().pairs {
+        let plist = PairList::from(&new_pt);
+        for &pair in plist.pairs() {
             self.all_pairs.insert(pair);
         }
         
@@ -90,7 +94,7 @@ impl Acfp {
             if nss.len() > 1 {
                 return false
             } 
-            let dbs = DotBracketVec::try_from(&PairTable(nss[0].clone())).unwrap();
+            let dbs = DotBracketVec::from(&PairTable(nss[0].clone()));
             if dbs != *ss {
                 return false;
             }
@@ -104,12 +108,12 @@ impl Acfp {
     
     pub fn is_cycle_free(&self) -> bool {
         let mut uf = UnionFind::new(self.length + 1);
-        self.all_pairs.iter().all(|&p| uf.union(p.0 as usize, p.1 as usize))
+        self.all_pairs.iter().all(|&p| uf.union(p.i() as usize, p.j() as usize))
     }
  
     pub fn connected_components(&self) -> Vec<Vec<usize>> {
         let mut uf = UnionFind::new(self.length + 1);
-        self.all_pairs.iter().all(|&p| uf.union(p.0 as usize, p.1 as usize));
+        self.all_pairs.iter().all(|&p| uf.union(p.i() as usize, p.j() as usize));
         uf.connected_components()
     }
 
@@ -117,8 +121,11 @@ impl Acfp {
         let Some(_) = self.pair_hierarchy() else {
             return false;
         };
-        let segseq = SegmentSequence::design_from_acfp(&self, registry).unwrap();
-        segseq.implements_acfp(&self.path(), &registry)
+        let segseq = SegmentSequence::design_from_acfp(self, registry).unwrap();
+        println!("{:?}", 
+            &segseq.get_domain_sequence().iter()
+            .map(|d| format!("{}", d)).collect::<Vec<_>>().join(" "));
+        segseq.implements_acfp(self.path(), registry)
     }
 
     pub fn is_valid(&self, registry: &mut DomainRegistry) -> bool {
@@ -157,18 +164,17 @@ impl TryFrom<&str> for Acfp {
             .map(|db| PairTable::try_from(db).unwrap())
             .collect();
 
-        let all_pairs: FxHashSet<Pair> = pt_path
+        let all_pairs: AHashSet<Pair> = pt_path
             .iter()
             .flat_map(|pt| {
-                let pl = PairList::try_from(pt).unwrap();
-                pl.pairs.into_iter()
+                PairList::from(pt).pairs().clone()
             })
             .collect();
 
         let mut po = PartialOrder::new();
         let mut partial_order = Some(po.clone());
         for npt in &pt_path {
-            if !po.extend_by_pairtable(&npt) {
+            if !po.extend_by_pairtable(npt) {
                 partial_order = None;
                 break;
             }

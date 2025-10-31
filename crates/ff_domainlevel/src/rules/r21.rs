@@ -1,9 +1,11 @@
-
-use crate::complexregistry::{ComplexRef, ComplexRegistry, ComplexRegistryError};
-use crate::rules::RewriteRule;
-use crate::domain::is_complement;
-use crate::complex::get_kernel;
 use ff_structure::DotBracket;
+
+use crate::ComplexRef;
+use crate::ComplexRegistry;
+use crate::ComplexRegistryError;
+use crate::is_complement;
+use crate::get_kernel;
+use crate::rules::RewriteRule;
 
 pub struct R21;
 
@@ -37,7 +39,7 @@ impl RewriteRule for R21 {
             new_struc[i] = DotBracket::Unpaired;
             new_struc[j] = DotBracket::Open;
             new_struc[k] = DotBracket::Close;
-            let kernel = get_kernel(&seq, &new_struc);
+            let kernel = get_kernel(seq, &new_struc);
             ComplexRegistry::get_or_create(&kernel, None)
         }
 
@@ -45,7 +47,7 @@ impl RewriteRule for R21 {
             (0..seq.len()-2)
             .filter(move |&i| struc[i] == DotBracket::Open)
             .flat_map(move |i| {
-                let j = table[i].expect("");
+                let j = table[i].expect("") as usize;
                 // Outer sequence anchor: same X after the closing
                 (j+1..seq.len())
                     .filter(move |&k| {
@@ -79,7 +81,7 @@ mod tests {
         let i1 = ComplexRegistry::get_or_create("r21 a( b ) a a*", Some("R21_I1")).expect("must be valid.");
         let o1 = ComplexRegistry::get_or_create("r21 a b a*( ) a*", Some("R21_O1")).expect("must be valid.");
 
-        let my_clxs: Vec<_> = vec![o1].iter().map(|c| c.kernel().to_string()).collect();
+        let my_clxs: Vec<_> = [o1].iter().map(|c| c.kernel().to_string()).collect();
         let my_rwrs = vec!["2a( 4) 5a -> 2a 4a*( 5)"];
 
         let (clxs, rwrs): (Vec<_>, Vec<_>) = R21.apply(&i1)
