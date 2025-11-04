@@ -4,7 +4,7 @@ use ahash::{AHashMap, AHashSet};
 
 use ff_structure::{LoopInfo, LoopTable, PairTable};
 use ff_structure::NAIDX;
-use crate::{PairList, Pair};
+use crate::{Pair, PairSet};
 
 #[derive(Debug, Clone)]
 pub struct PartialOrder {
@@ -47,16 +47,15 @@ impl PartialOrder {
             }
         };
 
-        let plist = PairList::from(pair_table);
-        for &pair in plist.pairs() {
+        let plist = PairSet::from(pair_table);
+        for pair in plist.iter() {
             let _ = self.pairs.insert(pair);
         }
         
-        let new_pairs = plist.pairs();
         // Now make sure non of the pairs can change anything in the history of the path.
         for (&len, pt) in &self.pair_tables {
-            for &pair in new_pairs {
-                if pair.j() as usize > len {
+            for pair in plist.iter() {
+                if pair.j() as usize >= len {
                     continue
                 }
                 let mut copy = pt.clone();
@@ -83,6 +82,7 @@ impl PartialOrder {
  
         // Build initial pt with length n+1
         let mut current_pt = extend_pair_table(prev_pt);
+        let new_pairs: Vec<Pair> = plist.iter().collect();
         if !self.resolve_conflicts(&new_pairs, &mut current_pt) {
             return false;
         }
@@ -293,7 +293,7 @@ fn apply_pair_to_pt(pt: &mut PairTable, pair: Pair, pred: &AHashMap<Pair, AHashS
 ) -> Result<Option<Pair>, String> {
     use LoopInfo::*;
 
-    let (i, j) = (pair.i() as usize - 1, pair.j() as usize- 1);
+    let (i, j) = (pair.i() as usize, pair.j() as usize);
     assert!(i<j);
 
     if Some(j as NAIDX) == pt[i] && Some(i as NAIDX) == pt[j] {
@@ -314,7 +314,7 @@ fn apply_pair_to_pt(pt: &mut PairTable, pair: Pair, pred: &AHashMap<Pair, AHashS
         (Unpaired { l: iloop }, Paired { i: inner_loop, o: outer_loop }) => {
             if iloop == inner_loop || iloop == outer_loop {
                 let pi = pt[j].unwrap() as usize;
-                let p_edge = if pi < j { Pair::new(pi as NAIDX+1, j as NAIDX+1) } else { Pair::new(j as NAIDX+1, pi as NAIDX+1) };
+                let p_edge = if pi < j { Pair::new(pi as NAIDX, j as NAIDX) } else { Pair::new(j as NAIDX, pi as NAIDX) };
                 if pred.get(&pair).map_or(false, |s| s.contains(&p_edge)) {
                     return Err(format!("Precedence violation: ({i}, {j}) < ({pi}, {j})."));
                 }
@@ -329,7 +329,7 @@ fn apply_pair_to_pt(pt: &mut PairTable, pair: Pair, pred: &AHashMap<Pair, AHashS
         (Paired { i: inner_loop, o: outer_loop }, Unpaired { l: jloop }) => {
             if jloop == inner_loop || jloop == outer_loop {
                 let pj = pt[i].unwrap() as usize;
-                let p_edge = if pj < i { Pair::new(pj as NAIDX+1, i as NAIDX+1) } else { Pair::new(i as NAIDX+1, pj as NAIDX+1) };
+                let p_edge = if pj < i { Pair::new(pj as NAIDX, i as NAIDX) } else { Pair::new(i as NAIDX, pj as NAIDX) };
                 if pred.get(&pair).map_or(false, |s| s.contains(&p_edge)) {
                     return Err(format!("Precedence violation: ({i}, {j}) < ({i}, {pj})."));
                 }
@@ -372,15 +372,15 @@ mod tests {
 
         println!("{:?}", po.precedence);
         println!("{:?}", po.predecessors);
-        assert!(!po.precedence.contains_key(&Pair::new(1,2)));
-        assert!(!po.predecessors.contains_key(&Pair::new(1,2)));
-        assert!(!po.precedence.contains_key(&Pair::new(3,4)));
-        assert!(!po.predecessors.contains_key(&Pair::new(3,4)));
+        assert!(!po.precedence.contains_key(&Pair::new(0,1)));
+        assert!(!po.predecessors.contains_key(&Pair::new(0,1)));
+        assert!(!po.precedence.contains_key(&Pair::new(2,3)));
+        assert!(!po.predecessors.contains_key(&Pair::new(2,3)));
 
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
-        assert_eq!(ph.get(&(1, 2)), Some(&1));
-        assert_eq!(ph.get(&(3, 4)), Some(&1));
+        assert_eq!(ph.get(&(0, 1)), Some(&1));
+        assert_eq!(ph.get(&(2, 3)), Some(&1));
     }
 
     #[test]
@@ -393,13 +393,13 @@ mod tests {
 
         println!("{:?}", po.precedence);
         println!("{:?}", po.predecessors);
-        assert!(po.precedence.get(&Pair::new(1, 2)).unwrap().contains(&Pair::new(2, 3)));
-        assert!(po.predecessors.get(&Pair::new(2, 3)).unwrap().contains(&Pair::new(1, 2)));
+        assert!(po.precedence.get(&Pair::new(0, 1)).unwrap().contains(&Pair::new(1, 2)));
+        assert!(po.predecessors.get(&Pair::new(1, 2)).unwrap().contains(&Pair::new(0, 1)));
 
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
-        assert_eq!(ph.get(&(1,2)), Some(&1));
-        assert_eq!(ph.get(&(2,3)), Some(&2));
+        assert_eq!(ph.get(&(0,1)), Some(&1));
+        assert_eq!(ph.get(&(1,2)), Some(&2));
     }
 
     #[test]
@@ -409,16 +409,18 @@ mod tests {
         let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
         let r = po.extend_by_pairtable(&PairTable::try_from("(.)").unwrap());
         assert!(r);
+        let p1 = Pair::new(0, 1);
+        let p2 = Pair::new(0, 2);
 
         println!("{:?}", po.precedence);
         println!("{:?}", po.predecessors);
-        assert!(po.precedence.get(&Pair::new(1, 2)).unwrap().contains(&Pair::new(1, 3)));
-        assert!(po.predecessors.get(&Pair::new(1, 3)).unwrap().contains(&Pair::new(1, 2)));
+        assert!(po.precedence.get(&p1).unwrap().contains(&p2));
+        assert!(po.predecessors.get(&p2).unwrap().contains(&p1));
 
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
-        assert_eq!(ph.get(&(1,2)), Some(&1));
-        assert_eq!(ph.get(&(1,3)), Some(&2));
+        assert_eq!(ph.get(&(0,1)), Some(&1));
+        assert_eq!(ph.get(&(0,2)), Some(&2));
     }
 
     #[test]
@@ -429,10 +431,12 @@ mod tests {
         let _ = po.extend_by_pairtable(&PairTable::try_from("().").unwrap());
         let r = po.extend_by_pairtable(&PairTable::try_from("(.).").unwrap());
         assert!(!r); // no more allowed to apply a move that would have been possible earlier?
+        let p1 = Pair::new(0, 1);
+        let p2 = Pair::new(0, 2);
         println!("{:?}", po.precedence);
         println!("{:?}", po.predecessors);
-        assert!(po.precedence.get(&Pair::new(1,3)).unwrap().contains(&Pair::new(1,2)));
-        assert!(po.predecessors.get(&Pair::new(1,2)).unwrap().contains(&Pair::new(1,3)));
+        assert!(po.precedence.get(&p2).unwrap().contains(&p1));
+        assert!(po.predecessors.get(&p1).unwrap().contains(&p2));
     }
 
     #[test]
@@ -461,13 +465,13 @@ mod tests {
         assert!(r);
 
         let ph = po.pair_hierarchy();
-        assert_eq!(ph.get(&(1, 2)), Some(&1));
-        assert_eq!(ph.get(&(3, 4)), Some(&1));
-        assert_eq!(ph.get(&(1, 5)), Some(&2));
+        assert_eq!(ph.get(&(0, 1)), Some(&1));
+        assert_eq!(ph.get(&(2, 3)), Some(&1));
+        assert_eq!(ph.get(&(0, 4)), Some(&2));
 
-        let e1 = Pair::new(1,2);
-        let e2 = Pair::new(3,4);
-        let e3 = Pair::new(1,5);
+        let e1 = Pair::new(0,1);
+        let e2 = Pair::new(2,3);
+        let e3 = Pair::new(0,4);
 
         let orders = po.all_total_orders();
         assert_eq!(orders.len(), 3);
@@ -490,15 +494,15 @@ mod tests {
 
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
-        assert_eq!(ph.get(&(1, 2)), Some(&3));
-        assert_eq!(ph.get(&(3, 4)), Some(&1));
-        assert_eq!(ph.get(&(1, 5)), Some(&4));
-        assert_eq!(ph.get(&(2, 3)), Some(&2));
+        assert_eq!(ph.get(&(0, 1)), Some(&3));
+        assert_eq!(ph.get(&(2, 3)), Some(&1));
+        assert_eq!(ph.get(&(0, 4)), Some(&4));
+        assert_eq!(ph.get(&(1, 2)), Some(&2));
 
-        let e1 = Pair::new(1,2);
-        let e2 = Pair::new(3,4);
-        let e3 = Pair::new(1,5);
-        let e4 = Pair::new(2,3);
+        let e1 = Pair::new(0,1);
+        let e2 = Pair::new(2,3);
+        let e3 = Pair::new(0,4);
+        let e4 = Pair::new(1,2);
 
         // Confirm transitive dependencies are being tracked
         let p = &po.precedence;
@@ -529,11 +533,11 @@ mod tests {
 
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
-        assert_eq!(ph.get(&(1,2)), Some(&1));
-        assert_eq!(ph.get(&(1,3)), Some(&2));
-        assert_eq!(ph.get(&(1,6)), Some(&3));
-        assert_eq!(ph.get(&(4,5)), Some(&1));
-        assert_eq!(ph.get(&(2,5)), Some(&2));
+        assert_eq!(ph.get(&(0,1)), Some(&1));
+        assert_eq!(ph.get(&(0,2)), Some(&2));
+        assert_eq!(ph.get(&(0,5)), Some(&3));
+        assert_eq!(ph.get(&(3,4)), Some(&1));
+        assert_eq!(ph.get(&(1,4)), Some(&2));
     }
 
     #[test]
@@ -550,11 +554,11 @@ mod tests {
 
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
-        assert_eq!(ph.get(&(2,3)), Some(&1));
-        assert_eq!(ph.get(&(3,4)), Some(&2));
-        assert_eq!(ph.get(&(1,5)), Some(&2));
-        assert_eq!(ph.get(&(1,6)), Some(&3));
-        assert_eq!(ph.get(&(2,5)), Some(&1));
+        assert_eq!(ph.get(&(1,2)), Some(&1));
+        assert_eq!(ph.get(&(2,3)), Some(&2));
+        assert_eq!(ph.get(&(0,4)), Some(&2));
+        assert_eq!(ph.get(&(0,5)), Some(&3));
+        assert_eq!(ph.get(&(1,4)), Some(&1));
     }
 
     #[test]
@@ -572,11 +576,11 @@ mod tests {
         println!("{:?}", po.precedence);
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
-        assert_eq!(ph.get(&(1,2)), Some(&1));
-        assert_eq!(ph.get(&(1,3)), Some(&2));
-        assert_eq!(ph.get(&(3,4)), Some(&3));
-        assert_eq!(ph.get(&(4,5)), Some(&1));
-        assert_eq!(ph.get(&(3,6)), Some(&4));
+        assert_eq!(ph.get(&(0,1)), Some(&1));
+        assert_eq!(ph.get(&(0,2)), Some(&2));
+        assert_eq!(ph.get(&(2,3)), Some(&3));
+        assert_eq!(ph.get(&(3,4)), Some(&1));
+        assert_eq!(ph.get(&(2,5)), Some(&4));
     }
 
 }

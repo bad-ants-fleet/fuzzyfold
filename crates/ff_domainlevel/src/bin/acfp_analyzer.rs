@@ -26,9 +26,9 @@ fn main() {
     for db in &segseq.get_segment_transciption_complexes(&registry) {
         println!("{:<2} {}", db.len(), db);
     }
-    for db in &segseq.get_adibatic_acfp(&registry) {
-        println!("{:<2} {}", db.len(), db);
-    }
+    //for db in &segseq.get_adibatic_acfp(&registry) {
+     //   println!("{:<2} {}", db.len(), db);
+    //}
 
     assert!(segseq.implements_acfp(acfp.path(), &registry));
 }

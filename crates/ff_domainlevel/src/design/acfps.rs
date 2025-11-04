@@ -13,14 +13,13 @@ use ff_structure::DotBracket;
 use ff_structure::DotBracketVec;
 use ff_structure::PairTable;
 
+use crate::NussinovDP;
 use crate::Pair;
-use crate::PairList;
+use crate::PairSet;
 
 use crate::design::{
     PartialOrder, 
     UnionFind};
-use crate::nussinov;
-use crate::traceback_structures;
 use crate::DomainRegistry;
 use crate::design::SegmentSequence;
 
@@ -55,8 +54,8 @@ impl Acfp {
     pub fn extend_by_one(&mut self, new_db: DotBracketVec) {
         assert_eq!(new_db.len(), self.length + 1);
         let new_pt = PairTable::try_from(&new_db).unwrap();
-        let plist = PairList::from(&new_pt);
-        for &pair in plist.pairs() {
+        let plist = PairSet::from(&new_pt);
+        for pair in plist.iter() {
             self.all_pairs.insert(pair);
         }
         
@@ -84,18 +83,17 @@ impl Acfp {
         for (e, c) in ph {
             // We are putting 10 extra, to reward the fact 
             // that a pair is formed.
-            p[(e.0 as usize-1, e.1 as usize-1)] += 100 + c;
-            p[(e.1 as usize-1, e.0 as usize-1)] += 100 + c;
+            p[(e.0 as usize, e.1 as usize)] += 100 + c;
+            p[(e.1 as usize, e.0 as usize)] += 100 + c;
         }
+        let ndp = NussinovDP::from(p);
 
-        let dpm = nussinov(&p);
         for ss in self.db_path.iter() {
-            let nss = traceback_structures(0, ss.len() - 1, &dpm, &p);
+            let nss = ndp.all_mfe_structs(Some(ss.len()));
             if nss.len() > 1 {
                 return false
             } 
-            let dbs = DotBracketVec::from(&PairTable(nss[0].clone()));
-            if dbs != *ss {
+            if &nss[0] != ss {
                 return false;
             }
         }
@@ -112,7 +110,7 @@ impl Acfp {
     }
  
     pub fn connected_components(&self) -> Vec<Vec<usize>> {
-        let mut uf = UnionFind::new(self.length + 1);
+        let mut uf = UnionFind::new(self.length);
         self.all_pairs.iter().all(|&p| uf.union(p.i() as usize, p.j() as usize));
         uf.connected_components()
     }
@@ -122,9 +120,6 @@ impl Acfp {
             return false;
         };
         let segseq = SegmentSequence::design_from_acfp(self, registry).unwrap();
-        println!("{:?}", 
-            &segseq.get_domain_sequence().iter()
-            .map(|d| format!("{}", d)).collect::<Vec<_>>().join(" "));
         segseq.implements_acfp(self.path(), registry)
     }
 
@@ -167,7 +162,7 @@ impl TryFrom<&str> for Acfp {
         let all_pairs: AHashSet<Pair> = pt_path
             .iter()
             .flat_map(|pt| {
-                PairList::from(pt).pairs().clone()
+                PairSet::from(pt).iter().collect::<Vec<Pair>>()
             })
             .collect();
 
@@ -300,10 +295,10 @@ mod tests {
         assert!(!acfp.is_valid(&mut DomainRegistry::new()));
 
         let ph = acfp.pair_hierarchy().unwrap();
+        assert_eq!(ph.get(&(0,1)), Some(&1));
+        assert_eq!(ph.get(&(0,2)), Some(&2));
+        assert_eq!(ph.get(&(0,3)), Some(&3));
         assert_eq!(ph.get(&(1,2)), Some(&1));
-        assert_eq!(ph.get(&(1,3)), Some(&2));
-        assert_eq!(ph.get(&(1,4)), Some(&3));
-        assert_eq!(ph.get(&(2,3)), Some(&1));
     }
 
     #[test]
