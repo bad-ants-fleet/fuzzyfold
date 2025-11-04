@@ -1,9 +1,4 @@
-//! PairTable construction.
-//!
-//! The current convention is that errors can be raised at PairTable 
-//! construction, but then they are safe. Convertions out of pair tables
-//! may use the from trait, not try_from.
-//!
+//! PairTable construction and helper traits.
 
 use std::ops::{Deref, DerefMut};
 use std::convert::TryFrom;
@@ -11,8 +6,10 @@ use crate::NAIDX;
 use crate::StructureError;
 use crate::{DotBracket, DotBracketVec};
 
+/// As of v0.1.3 the PairTabel field is private. A pair-table should
+/// be constructed by From or TryFrom traits, but then be save to use.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PairTable(pub Vec<Option<NAIDX>>);
+pub struct PairTable(Vec<Option<NAIDX>>);
 
 impl PairTable {
     /// Check if the substructure from `i..j` is well-formed:
@@ -34,7 +31,6 @@ impl PairTable {
 
 impl Deref for PairTable {
     type Target = [Option<NAIDX>];
-
     fn deref(&self) -> &Self::Target {
         &self.0
     }

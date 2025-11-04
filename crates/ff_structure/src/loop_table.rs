@@ -25,12 +25,10 @@ impl From<&PairTable> for LoopTable {
     fn from(pt: &PairTable) -> Self {
         let n = pt.len();
         let mut table = vec![LoopInfo::Unpaired { l: 0 }; n];
-                                                         //
         let mut loop_index: NAIDX = 0;
         let mut mloop: NAIDX = 0;
 
         let mut stack: Vec<(usize, NAIDX)> = Vec::new(); // (closing_idx, loop_id)
-
         for i in 0..n {
             match pt[i] {
                 None => {
@@ -47,9 +45,6 @@ impl From<&PairTable> for LoopTable {
                     let (_, inner_loop) = stack.pop().expect("Expected well formed PairTable, missig opening pair index!");
                     loop_index = stack.last().map(|&(_, l)| l).unwrap_or(0);
                     table[i] = LoopInfo::Paired { o: loop_index, i: inner_loop };
-                }
-                Some(j) if (j as usize) == i => {
-                    unreachable!("Self-pairing is undefined in PairTable construction.");
                 }
                 _ => unreachable!(),
             }
@@ -111,18 +106,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn test_loop_table_self_pairing_panics() {
-        let pt = PairTable(vec![Some(0)]);
-        let _ = LoopTable::from(&pt);
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_loop_table_unmatched_open_detected_in_loop_table() {
-        // manually constructed bad PairTable with unmatched open
-        let pt = PairTable(vec![Some(5), Some(4), None, None, Some(1), None]);
-        let _ = LoopTable::from(&pt);
+        let pt = PairTable::try_from(".").unwrap();
+        let lt = LoopTable::from(&pt);
+        assert_eq!(lt.len(), 1);
+        assert!(matches!(lt[0], LoopInfo::Unpaired { .. }));
     }
 
     #[test]
