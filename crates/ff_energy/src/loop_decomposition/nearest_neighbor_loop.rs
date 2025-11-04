@@ -1,8 +1,15 @@
+//! The nearest neighbor loop representations. 
+//!
+//! NOTE: We may update this to use ff_structure::Pair in the future,
+//! so that we get (NAIDX, NAIDX) -> P1KEY conversions out of the box.
+//!
+
 use std::fmt;
 use std::ops::Range;
 use colored::*;
 
 use ff_structure::NAIDX;
+use ff_structure::P1KEY;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NearestNeighborLoop {
@@ -72,11 +79,11 @@ impl NearestNeighborLoop {
         }
     }
 
-    /// Return all base pairs (closing, inner, and/or branches) as packed u32 keys.
+    /// Return all base pairs (closing, inner, and/or branches) as packed P1KEY.
     /// Exterior loops use 0 as a sentinel closing key.
-    pub fn loop_key(&self) -> Vec<u32> {
-        fn pack(i: NAIDX, j: NAIDX) -> u32 {
-            ((i as u32) << 16) | (j as u32)
+    pub fn loop_key(&self) -> Vec<P1KEY> {
+        fn pack(i: NAIDX, j: NAIDX) -> P1KEY {
+            ((i as P1KEY) << NAIDX::BITS) | (j as P1KEY)
         }
 
         match self {
@@ -97,7 +104,7 @@ impl NearestNeighborLoop {
             }
             NearestNeighborLoop::Exterior { branches } => {
                 let mut keys = Vec::with_capacity(1 + branches.len());
-                keys.push(0u32); // fake closing key
+                keys.push(0 as P1KEY); // fake closing key
                 keys.extend(branches.iter().map(|&(i, j)| pack(i, j)));
                 keys
             }
