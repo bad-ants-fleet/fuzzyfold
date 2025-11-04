@@ -1,6 +1,7 @@
 use std::fmt;
 use rand::Rng;
 use nohash_hasher::IntMap;
+use ff_structure::NAIDX;
 use ff_energy::EnergyModel;
 
 use crate::reaction::Reaction;
@@ -43,7 +44,7 @@ pub struct LoopStructureSSA<'a, M: EnergyModel, K: RateModel> {
     loop_flux: Option<f64>,
     per_loop_flux: IntMap<usize, f64>,
     per_loop_rxns: IntMap<usize, Vec<Reaction>>,
-    pair_rxns: IntMap<u16, Reaction>
+    pair_rxns: IntMap<NAIDX, Reaction>
 }
 
 impl<'a, M, K> fmt::Debug for LoopStructureSSA<'a, M, K>
@@ -85,7 +86,7 @@ impl<'a, M: EnergyModel, K: RateModel> From<(LoopStructure<'a, M>, &'a K)>
             per_loop_rxns.insert(*lli, lrxns);
         }
 
-        let mut pair_rxns: IntMap<u16, Reaction> = IntMap::default();
+        let mut pair_rxns: IntMap<NAIDX, Reaction> = IntMap::default();
         let mut pair_logs = Vec::new();
         for (i, j, delta) in loopstructure.get_del_neighbors() {
             let rxn = Reaction::new_del(ratemodel, i, j, delta);
@@ -148,7 +149,7 @@ impl<'a, M: EnergyModel, K: RateModel> LoopStructureSSA<'a, M, K> {
         //    self.log_flux, self.loop_flux, self.pair_flux);
     }
    
-    pub fn remove_loop_reaction(&mut self, i: u16) {
+    pub fn remove_loop_reaction(&mut self, i: NAIDX) {
         let lli = self.loopstructure.loop_lookup().get(&i).unwrap();
         let rxns = self.per_loop_rxns.remove(lli).expect("Reaction must exist.");
         if rxns.is_empty() {
@@ -166,7 +167,7 @@ impl<'a, M: EnergyModel, K: RateModel> LoopStructureSSA<'a, M, K> {
         }
     }
 
-    pub fn remove_pair_reaction(&mut self, i: u16) {
+    pub fn remove_pair_reaction(&mut self, i: NAIDX) {
         let old_rxn = self.pair_rxns.remove(&i).expect("The reaction to be removed.");
         let lrate = old_rxn.log_rate();
 
@@ -184,7 +185,7 @@ impl<'a, M: EnergyModel, K: RateModel> LoopStructureSSA<'a, M, K> {
 
     pub fn insert_loop_reactions(&mut self, 
         lli: usize, 
-        add_neighbors: Vec<(u16, u16, i32)>
+        add_neighbors: Vec<(NAIDX, NAIDX, i32)>
     ) {
         let mut logs = Vec::with_capacity(add_neighbors.len());
         let mut lrxns = Vec::with_capacity(add_neighbors.len());
@@ -206,7 +207,7 @@ impl<'a, M: EnergyModel, K: RateModel> LoopStructureSSA<'a, M, K> {
         self.per_loop_rxns.insert(lli, lrxns);
     }
 
-    pub fn update_pair_reactions(&mut self, change: Vec<(u16, u16, i32)>) {
+    pub fn update_pair_reactions(&mut self, change: Vec<(NAIDX, NAIDX, i32)>) {
         for (i, j, delta) in change {
             // then it is an update, otherwise insert!
             if let Some(old) = self.pair_rxns.remove(&i) {

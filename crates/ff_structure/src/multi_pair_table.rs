@@ -1,11 +1,12 @@
 use std::convert::TryFrom;
+use std::ops::{Deref, DerefMut};
 use crate::NAIDX;
 use crate::StructureError;
 use crate::DotBracket;
 use crate::DotBracketVec;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MultiPairTable(pub Vec<Vec<Option<(NAIDX, NAIDX)>>>);
+pub struct MultiPairTable(Vec<Vec<Option<(NAIDX, NAIDX)>>>);
 
 impl MultiPairTable {
     /// Total number of nucleotides across all strands
@@ -29,15 +30,18 @@ impl MultiPairTable {
         &self.0[loc.0][loc.1]
     }
 
-    /// Returns an iterator over all locations and their pair partners
-    pub fn iter(&self) -> impl Iterator<Item = ((usize, usize), &Option<(NAIDX, NAIDX)>)> {
-        self.0.iter().enumerate().flat_map(|(si, strand)| {
-            strand.iter().enumerate().map(move |(ni, pair)| ((si, ni), pair))
-        })
-    }
+}
 
-    pub fn is_well_formed(&self, _loc1: (usize, usize), _loc2: (usize, usize)) -> bool {
-        todo!("not implemented");
+impl Deref for MultiPairTable {
+    type Target = [Vec<Option<(NAIDX, NAIDX)>>];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for MultiPairTable {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

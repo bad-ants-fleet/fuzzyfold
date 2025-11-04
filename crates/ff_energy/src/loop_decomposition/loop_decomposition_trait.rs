@@ -11,10 +11,6 @@ pub trait LoopDecomposition {
         self.for_each_loop(|l| out.push(l.clone()));
         out
     }
-
-    fn loop_enclosed_by(&self, closing: Option<(NAIDX, NAIDX)>) -> NearestNeighborLoop;
-
-    fn get_enclosing_pair(&self, i: NAIDX, j: NAIDX) -> Option<(NAIDX, NAIDX)>;
 }
 
 impl LoopDecomposition for PairTable {
@@ -47,39 +43,6 @@ impl LoopDecomposition for PairTable {
         recurse(self, None, &mut f);
     }
 
-    fn loop_enclosed_by(&self, closing: Option<(NAIDX, NAIDX)>
-    ) -> NearestNeighborLoop {
-        let mut branches = Vec::new();
-
-        let (mut p, j) = if let Some((i, j)) = closing {
-            (i as usize + 1, j as usize) 
-        } else { 
-            (0, self.len())
-        };
-
-        while p < j {
-            if let Some(q) = self[p] {
-                debug_assert!(q > p as NAIDX);
-                branches.push((p as NAIDX, q));
-                p = q as usize + 1;
-            } else {
-                p += 1;
-            }
-        }
-        NearestNeighborLoop::classify(closing, branches)
-    }
-
-    fn get_enclosing_pair(&self, i: NAIDX, j: NAIDX) -> Option<(NAIDX, NAIDX)> { 
-        let uj = j as usize;
-        for q in uj..self.len() {
-            if let Some(p) = self[q] {
-                if p < i {
-                    return Some((p, q as NAIDX));
-                }
-            }
-        }
-        None
-    }
 }
 
 #[cfg(test)]

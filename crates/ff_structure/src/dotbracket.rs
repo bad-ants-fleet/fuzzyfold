@@ -40,6 +40,9 @@ impl From<DotBracket> for char {
     }
 }
 
+/// DotBracketVec is a compact representation of secondary structure. Note that
+/// the field is public, to allow unsafe modifications. Thus, DotBracketVecs can
+/// be malformed and should be converted using the TryFrom trait.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DotBracketVec(pub Vec<DotBracket>);
 
@@ -98,7 +101,7 @@ impl From<&MultiPairTable> for DotBracketVec {
     fn from(pt: &MultiPairTable) -> Self {
         let mut result: Vec<DotBracket> = Vec::with_capacity(pt.len() + pt.num_strands());
 
-        for (si, strand) in pt.0.iter().enumerate() {
+        for (si, strand) in pt.iter().enumerate() {
             for (di, &pair) in strand.iter().enumerate() {
                 match pair {
                     None => result.push(DotBracket::Unpaired),
