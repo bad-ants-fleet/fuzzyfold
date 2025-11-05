@@ -28,7 +28,7 @@ impl PairTable {
         true
     }
 
-    pub fn append_base(&mut self) {
+    pub fn extend_once(&mut self) {
         self.0.push(None);
     }
 }
@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn test_append_base() {
         let mut pt = PairTable::try_from("(())").unwrap();
-        pt.append_base();
+        pt.extend_once();
         let dbv = DotBracketVec::from(&pt);
         assert_eq!(format!("{}", dbv), "(()).");
     }

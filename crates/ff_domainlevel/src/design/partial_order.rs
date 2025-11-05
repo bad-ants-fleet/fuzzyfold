@@ -1,21 +1,30 @@
+//! Determine the partial order of pair insertions.
+//!
+//! PartialOrder: Parses an ACFP line by line (PairTable by PairTable) to
+//! build the hierarchy of pair strengths. For each new PairTable, the pairs
+//! are tested. We need to make sure that 
+//!  1) the new pairs cannot affect any structures in the history of the path.
+//!  2) the new pairs can transform the previous structure to the new one.
+//!
+//!
+//!
+
 use std::collections::VecDeque;
 use nohash_hasher::IntSet;
 use nohash_hasher::IntMap;
 
-use ff_structure::LoopInfo;
-use ff_structure::LoopTable;
 use ff_structure::PairTable;
-use ff_structure::NAIDX;
 use ff_structure::P1KEY;
 use ff_structure::Pair;
 use ff_structure::PairSet;
+use crate::design::apply_move::ApplyMove;
 
 #[derive(Debug, Clone, Default)]
 pub struct PartialOrder {
     all_pairs: IntSet<P1KEY>,
     pair_tables: IntMap<usize, PairTable>,      // level -> pair_table
-    greater_than: IntMap<P1KEY, IntSet<P1KEY>>, // DAG: a -> b means a < b (b is a successor)
-    smaller_than: IntMap<P1KEY, IntSet<P1KEY>>, // DAG: a -> b means b < a (a is a predecessor
+    smaller_than: IntMap<P1KEY, IntSet<P1KEY>>, // DAG: a -> b means a < b (b is a successor)
+    greater_than: IntMap<P1KEY, IntSet<P1KEY>>, // DAG: a -> b means b < a (a is a predecessor
 }
 
 impl PartialOrder {
@@ -34,8 +43,10 @@ impl PartialOrder {
             Some(pt) => pt,
             None => {
                 if self.pair_tables.is_empty() {
-                    //NOTE:: no assignment??
                     self.pair_tables.insert(length, pair_table.clone());
+                    for &pkey in PairSet::from(pair_table).iter_keys() {
+                        self.all_pairs.insert(pkey);
+                    }
                     return true;
                 } else {
                     eprintln!("Warning: missing previous pair table of length {}", length - 1);
@@ -48,22 +59,22 @@ impl PartialOrder {
         for &pkey in pset.iter_keys() {
             self.all_pairs.insert(pkey);
         }
+        let new_pairs: Vec<Pair> = pset.iter().collect();
         
         // Make sure none of the pairs can change anything in the history of the path.
         for (&len, pt) in &self.pair_tables {
-            for pair in pset.iter() {
+            for &pair in &new_pairs {
                 if pair.j() as usize >= len {
                     continue
                 }
-                let mut copy = pt.clone();
-                match apply_pair_to_pt(&mut copy, pair, &self.greater_than) {
+                match pt.try_move(pair) {
                     Ok(Some(old)) => {
                         if old == pair {
                             continue;
                         }
                         // pair < old! Otherwise it would mess up earlier tables!
-                        self.greater_than.entry(pair.key()).or_default().insert(old.key()); 
-                        self.smaller_than.entry(old.key()).or_default().insert(pair.key());
+                        self.smaller_than.entry(pair.key()).or_default().insert(old.key()); 
+                        self.greater_than.entry(old.key()).or_default().insert(pair.key());
                     }
                     Ok(None) => {
                         // if a pair would just insert like that earlier, then 
@@ -79,17 +90,13 @@ impl PartialOrder {
  
         // Build initial pt with length n+1
         let mut current_pt = prev_pt.clone();
-        current_pt.append_base();
-        let new_pairs: Vec<Pair> = pset.iter().collect();
-        if !self.resolve_conflicts(&new_pairs, &mut current_pt) {
+        current_pt.extend_once();
+        if !self.apply_all_pairs(&mut current_pt, &new_pairs) {
             return false;
         }
-
         if &current_pt != pair_table {
-            //eprintln!("Warning: final pair table does not match input");
             return false;
         }
-
         if !self.dependencies_form_dag() {
             return false;
         }
@@ -111,10 +118,8 @@ impl PartialOrder {
             if visited.contains(node) {
                 return false; // already explored
             }
-
             visited.insert(*node);
             stack.insert(*node);
-
             if let Some(children) = graph.get(node) {
                 for child in children {
                     if find_cycle_dfs(child, graph, visited, stack) {
@@ -122,23 +127,21 @@ impl PartialOrder {
                     }
                 }
             }
-
             stack.remove(node);
             false
         }
 
         let mut visited = IntSet::default();
         let mut stack = IntSet::default();
-
         for pkey in self.all_pairs.iter() {
-            if find_cycle_dfs(pkey, &self.greater_than, &mut visited, &mut stack) {
+            if find_cycle_dfs(pkey, &self.smaller_than, &mut visited, &mut stack) {
                 return false;
             }
         }
         true
     }
 
-    fn resolve_conflicts(&mut self, pairs: &[Pair], pt: &mut PairTable,
+    fn apply_all_pairs(&mut self, pt: &mut PairTable, pairs: &[Pair], 
     ) -> bool {
         let mut queue: VecDeque<Pair> = pairs.iter().copied().rev().collect();
         let mut progress = true;
@@ -149,18 +152,26 @@ impl PartialOrder {
 
             while let Some(pair) = queue.pop_front() {
                 // If it applies, it must be save to apply!
-                match apply_pair_to_pt(pt, pair, &self.greater_than) {
+                match pt.try_move(pair) {
                     Ok(Some(old)) => {
-                        progress = true;
                         if old == pair {
+                            progress = true;
+                            continue;
+                        }
+                        if self.smaller_than.get(&pair.key()).is_some_and(|s| s.contains(&old.key())) {
+                            // The pair cannot form as it is known to be weaker than old!
+                            skipped.push_back(pair);
                             continue;
                         }
                         // old < pair! We are now save to apply the move.
-                        self.greater_than.entry(old.key()).or_default().insert(pair.key());
-                        self.smaller_than.entry(pair.key()).or_default().insert(old.key());
+                        progress = true;
+                        self.smaller_than.entry(old.key()).or_default().insert(pair.key());
+                        self.greater_than.entry(pair.key()).or_default().insert(old.key());
+                        pt.apply_move(Some(old), pair);
                     }
                     Ok(None) => {
                         progress = true;
+                        pt.apply_move(None, pair);
                     }
                     Err(_) => {
                         skipped.push_back(pair);
@@ -177,7 +188,7 @@ impl PartialOrder {
         // Pairs with no predecessors are roots
         let mut levels: IntMap<P1KEY, usize> = IntMap::default();
         let mut queue: VecDeque<P1KEY> = self.all_pairs.iter()
-            .filter(|e| !self.smaller_than.contains_key(e))
+            .filter(|e| !self.greater_than.contains_key(e))
             .copied()
             .collect();
 
@@ -188,7 +199,7 @@ impl PartialOrder {
         let mut debug: usize = 0;
         while let Some(pkey) = queue.pop_front() {
             let level = levels[&pkey];
-            if let Some(children) = self.greater_than.get(&pkey) {
+            if let Some(children) = self.smaller_than.get(&pkey) {
                 for &child in children {
                     let child_level = levels.get(&child).copied().unwrap_or(0);
 
@@ -216,7 +227,7 @@ impl PartialOrder {
             in_deg.entry(pkey).or_insert(0);
         }
 
-        for targets in self.greater_than.values() {
+        for targets in self.smaller_than.values() {
             for &tgt in targets {
                 *in_deg.entry(tgt).or_insert(0) += 1;
             }
@@ -227,7 +238,7 @@ impl PartialOrder {
             .filter_map(|(&e, &deg)| if deg == 0 { Some(e) } else { None })
             .collect();
 
-        Self::dfs(&self.greater_than, &mut in_deg, &mut available, &mut current, &mut all);
+        Self::dfs(&self.smaller_than, &mut in_deg, &mut available, &mut current, &mut all);
         all
     }
 
@@ -280,84 +291,6 @@ impl PartialOrder {
     }
 }
 
-fn extend_pair_table(prev: &PairTable) -> PairTable {
-    let mut pt = prev.clone();
-    pt.append_base();
-    pt
-}
-
-fn apply_pair_to_pt(
-    pt: &mut PairTable, 
-    pair: Pair, 
-    pred: &IntMap<P1KEY, IntSet<P1KEY>>,
-) -> Result<Option<Pair>, String> {
-    use LoopInfo::*;
-
-    let (i, j) = (pair.i() as usize, pair.j() as usize);
-    assert!(i<j);
-
-    if Some(j as NAIDX) == pt[i] && Some(i as NAIDX) == pt[j] {
-        return Ok(Some(pair));
-    }
-
-    let lt = LoopTable::from(&*pt);
-    match (lt[i], lt[j]) {
-        (Unpaired { l: iloop }, Unpaired { l: jloop }) => {
-            if iloop == jloop {
-                pt[i] = Some(j as NAIDX);
-                pt[j] = Some(i as NAIDX);
-                Ok(None)
-            } else {
-                Err("Unpaired bases are in different loops.".to_string())
-            }
-        }
-        (Unpaired { l: iloop }, Paired { i: inner_loop, o: outer_loop }) => {
-            if iloop == inner_loop || iloop == outer_loop {
-                let pi = pt[j].unwrap() as usize;
-                let p_edge = if pi < j { Pair::new(pi as NAIDX, j as NAIDX) 
-                                } else { Pair::new(j as NAIDX, pi as NAIDX) };
-                if pred.get(&pair.key()).map_or(false, |s| s.contains(&p_edge.key())) {
-                    return Err(format!("Precedence violation: ({i}, {j}) < ({pi}, {j})."));
-                }
-                pt[pi] = None;
-                pt[i] = Some(j as NAIDX);
-                pt[j] = Some(i as NAIDX);
-                Ok(Some(p_edge))
-            } else {
-                Err(format!("Loop mismatch ({i} unpaired, {j} paired)."))
-            }
-        }
-        (Paired { i: inner_loop, o: outer_loop }, Unpaired { l: jloop }) => {
-            if jloop == inner_loop || jloop == outer_loop {
-                let pj = pt[i].unwrap() as usize;
-                let p_edge = if pj < i { Pair::new(pj as NAIDX, i as NAIDX) } else { Pair::new(i as NAIDX, pj as NAIDX) };
-                if pred.get(&pair.key()).map_or(false, |s| s.contains(&p_edge.key())) {
-                    return Err(format!("Precedence violation: ({i}, {j}) < ({i}, {pj})."));
-                }
-                pt[pj] = None;
-                pt[i] = Some(j as NAIDX);
-                pt[j] = Some(i as NAIDX);
-                Ok(Some(p_edge))
-            } else {
-                Err(format!("Loop mismatch ({i} paired, {j} unpaired)."))
-            }
-        }
-        (Paired { i: i_inner, o: i_outer }, Paired { i: j_inner, o: j_outer }) => {
-            assert!(i_inner != j_inner);
-            if i_outer == j_outer {
-                return Err(format!("Both bases paired, but could work. {} {}", i, j));
-            } else if i_outer == j_inner {
-                return Err(format!("Both bases paired, but could work. {} {}", i, j));
-            } else if j_outer == i_inner {
-                return Err(format!("Both bases paired, but could work. {} {}", i, j));
-            } else {
-                return Err(format!("Both bases paired and loop mismatch! {:?}", pair));
-            }
-        }
-        //_  => Err("Cannot form pair: both bases already paired.".to_string())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -371,12 +304,12 @@ mod tests {
         let r = po.extend_by_pairtable(&PairTable::try_from("()()").unwrap());
         assert!(r);
 
-        println!("{:?}", po.greater_than);
         println!("{:?}", po.smaller_than);
-        assert!(!po.greater_than.contains_key(&Pair::new(0,1).key()));
+        println!("{:?}", po.greater_than);
         assert!(!po.smaller_than.contains_key(&Pair::new(0,1).key()));
-        assert!(!po.greater_than.contains_key(&Pair::new(2,3).key()));
+        assert!(!po.greater_than.contains_key(&Pair::new(0,1).key()));
         assert!(!po.smaller_than.contains_key(&Pair::new(2,3).key()));
+        assert!(!po.greater_than.contains_key(&Pair::new(2,3).key()));
 
         let ph = po.pair_hierarchy();
         println!("{:?}", ph);
@@ -384,205 +317,222 @@ mod tests {
         assert_eq!(ph.get(&Pair::new(2, 3).key()), Some(&1));
     }
 
-    //#[test]
-    //fn test_base_precedence_01() {
-    //    let mut po = PartialOrder::new();
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
-    //    let r = po.extend_by_pairtable(&PairTable::try_from(".()").unwrap());
-    //    assert!(r);
+    #[test]
+    fn test_base_precedence_01() {
+        let mut po = PartialOrder::default();
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
+        let r = po.extend_by_pairtable(&PairTable::try_from(".()").unwrap());
+        assert!(r);
 
-    //    println!("{:?}", po.precedence);
-    //    println!("{:?}", po.predecessors);
-    //    assert!(po.precedence.get(&Pair::new(0, 1)).unwrap().contains(&Pair::new(1, 2)));
-    //    assert!(po.predecessors.get(&Pair::new(1, 2)).unwrap().contains(&Pair::new(0, 1)));
+        println!("{:?}", po.smaller_than);
+        println!("{:?}", po.greater_than);
+        assert!(po.smaller_than.get(&Pair::new(0, 1).key()).unwrap().contains(&Pair::new(1, 2).key()));
+        assert!(po.greater_than.get(&Pair::new(1, 2).key()).unwrap().contains(&Pair::new(0, 1).key()));
 
-    //    let ph = po.pair_hierarchy();
-    //    println!("{:?}", ph);
-    //    assert_eq!(ph.get(&(0,1)), Some(&1));
-    //    assert_eq!(ph.get(&(1,2)), Some(&2));
-    //}
+        let ph = po.pair_hierarchy();
+        println!("{:?}", ph);
+        assert_eq!(ph.get(&Pair::new(0,1).key()), Some(&1));
+        assert_eq!(ph.get(&Pair::new(1,2).key()), Some(&2));
+    }
 
-    //#[test]
-    //fn test_base_precedence_02() {
-    //    let mut po = PartialOrder::new();
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
-    //    let r = po.extend_by_pairtable(&PairTable::try_from("(.)").unwrap());
-    //    assert!(r);
-    //    let p1 = Pair::new(0, 1);
-    //    let p2 = Pair::new(0, 2);
+    #[test]
+    fn test_base_precedence_02() {
+        let mut po = PartialOrder::default();
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
+        let r = po.extend_by_pairtable(&PairTable::try_from("(.)").unwrap());
+        assert!(r);
+        let p1 = Pair::new(0, 1).key();
+        let p2 = Pair::new(0, 2).key();
 
-    //    println!("{:?}", po.precedence);
-    //    println!("{:?}", po.predecessors);
-    //    assert!(po.precedence.get(&p1).unwrap().contains(&p2));
-    //    assert!(po.predecessors.get(&p2).unwrap().contains(&p1));
+        println!("{:?}", po.smaller_than);
+        println!("{:?}", po.greater_than);
+        assert!(po.smaller_than.get(&p1).unwrap().contains(&p2));
+        assert!(po.greater_than.get(&p2).unwrap().contains(&p1));
 
-    //    let ph = po.pair_hierarchy();
-    //    println!("{:?}", ph);
-    //    assert_eq!(ph.get(&(0,1)), Some(&1));
-    //    assert_eq!(ph.get(&(0,2)), Some(&2));
-    //}
+        let ph = po.pair_hierarchy();
+        println!("{:?}", ph);
+        assert_eq!(ph.get(&p1), Some(&1));
+        assert_eq!(ph.get(&p2), Some(&2));
+    }
 
-    //#[test]
-    //fn test_invalid_order_01() {
-    //    let mut po = PartialOrder::new();
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("().").unwrap());
-    //    let r = po.extend_by_pairtable(&PairTable::try_from("(.).").unwrap());
-    //    assert!(!r); // no more allowed to apply a move that would have been possible earlier?
-    //    let p1 = Pair::new(0, 1);
-    //    let p2 = Pair::new(0, 2);
-    //    println!("{:?}", po.precedence);
-    //    println!("{:?}", po.predecessors);
-    //    assert!(po.precedence.get(&p2).unwrap().contains(&p1));
-    //    assert!(po.predecessors.get(&p1).unwrap().contains(&p2));
-    //}
+    #[test]
+    fn test_invalid_order_01() {
+        let mut po = PartialOrder::default();
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("().").unwrap());
+        let r = po.extend_by_pairtable(&PairTable::try_from("(.).").unwrap());
+        assert!(!r); // no more allowed to apply a move that would have been possible earlier?
+        let p1 = Pair::new(0, 1).key();
+        let p2 = Pair::new(0, 2).key();
+        println!("{:?}", po.smaller_than);
+        println!("{:?}", po.greater_than);
+        assert!(po.smaller_than.get(&p2).unwrap().contains(&p1));
+        assert!(po.greater_than.get(&p1).unwrap().contains(&p2));
+    }
 
-    //#[test]
-    //fn test_invalid_circular_propagation() {
-    //    // ., (), .(), ()(), (()).
-    //    let mut po = PartialOrder::new();
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".()").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()()").unwrap());
-    //    let r = po.extend_by_pairtable(&PairTable::try_from("(()).").unwrap());
-    //    assert!(!r); // would require 4-way migration.
-    //}
+    #[test]
+    fn test_invalid_circular_propagation() {
+        // ., (), .(), ()(), (()).
+        let mut po = PartialOrder::default();
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".()").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()()").unwrap());
+        let r = po.extend_by_pairtable(&PairTable::try_from("(()).").unwrap());
+        assert!(!r); // would require 4-way migration.
+    }
 
-    //#[test]
-    //fn test_multiple_orders() {
-    //    // ., (), ()., ()(), (...)
-    //    let mut po = PartialOrder::new();
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("().").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()()").unwrap());
-    //    let r = po.extend_by_pairtable(&PairTable::try_from("(...)").unwrap());
-    //    assert!(!r); // abusing this test a bit.
-    //    let r = po.extend_by_pairtable(&PairTable::try_from("(.())").unwrap());
-    //    assert!(r);
+    #[test]
+    fn test_multiple_orders() {
+        // ., (), ()., ()(), (...)
+        let mut po = PartialOrder::default();
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("().").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()()").unwrap());
+        let r = po.extend_by_pairtable(&PairTable::try_from("(...)").unwrap());
+        assert!(!r); // abusing this test a bit.
+        let r = po.extend_by_pairtable(&PairTable::try_from("(.())").unwrap());
+        assert!(r);
 
-    //    let ph = po.pair_hierarchy();
-    //    assert_eq!(ph.get(&(0, 1)), Some(&1));
-    //    assert_eq!(ph.get(&(2, 3)), Some(&1));
-    //    assert_eq!(ph.get(&(0, 4)), Some(&2));
+        let p1 = Pair::new(0, 1).key();
+        let p2 = Pair::new(2, 3).key();
+        let p3 = Pair::new(0, 4).key();
 
-    //    let e1 = Pair::new(0,1);
-    //    let e2 = Pair::new(2,3);
-    //    let e3 = Pair::new(0,4);
+        let ph = po.pair_hierarchy();
+        assert_eq!(ph.get(&p1), Some(&1));
+        assert_eq!(ph.get(&p2), Some(&1));
+        assert_eq!(ph.get(&p3), Some(&2));
 
-    //    let orders = po.all_total_orders();
-    //    assert_eq!(orders.len(), 3);
-    //    assert!(orders.contains(&vec![e2, e1, e3]));
-    //    assert!(orders.contains(&vec![e1, e3, e2]));
-    //    assert!(orders.contains(&vec![e1, e2, e3]));
-    //    assert!(!orders.contains(&vec![e2, e3, e1]));
-    //}
+        let orders = po.all_total_orders();
+        assert_eq!(orders.len(), 3);
+        assert!(orders.contains(&vec![p2, p1, p3]));
+        assert!(orders.contains(&vec![p1, p3, p2]));
+        assert!(orders.contains(&vec![p1, p2, p3]));
+        assert!(!orders.contains(&vec![p2, p3, p1]));
+    }
 
-    //#[test]
-    //fn test_precedence_propagation_01() {
-    //    // ., (), ()., ()(), (().)
-    //    let mut po = PartialOrder::new();
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("().").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()()").unwrap());
-    //    let r = po.extend_by_pairtable(&PairTable::try_from("(().)").unwrap());
-    //    assert!(r);
+    #[test]
+    fn test_precedence_propagation_01() {
+        // ., (), ()., ()(), (().)
+        let mut po = PartialOrder::default();
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("().").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()()").unwrap());
+        let r = po.extend_by_pairtable(&PairTable::try_from("(().)").unwrap());
+        assert!(r);
 
-    //    let ph = po.pair_hierarchy();
-    //    println!("{:?}", ph);
-    //    assert_eq!(ph.get(&(0, 1)), Some(&3));
-    //    assert_eq!(ph.get(&(2, 3)), Some(&1));
-    //    assert_eq!(ph.get(&(0, 4)), Some(&4));
-    //    assert_eq!(ph.get(&(1, 2)), Some(&2));
+        let p1 = Pair::new(0, 1).key();
+        let p2 = Pair::new(2, 3).key();
+        let p3 = Pair::new(0, 4).key();
+        let p4 = Pair::new(1, 2).key();
 
-    //    let e1 = Pair::new(0,1);
-    //    let e2 = Pair::new(2,3);
-    //    let e3 = Pair::new(0,4);
-    //    let e4 = Pair::new(1,2);
+        let ph = po.pair_hierarchy();
+        println!("{:?}", ph);
+        assert_eq!(ph.get(&p1), Some(&3));
+        assert_eq!(ph.get(&p2), Some(&1));
+        assert_eq!(ph.get(&p3), Some(&4));
+        assert_eq!(ph.get(&p4), Some(&2));
 
-    //    // Confirm transitive dependencies are being tracked
-    //    let p = &po.precedence;
-    //    assert!(p.get(&e1).unwrap().contains(&e3));
-    //    assert!(p.get(&e2).unwrap().contains(&e4));
-    //    assert!(p.get(&e4).unwrap().contains(&e1));
-    //    let q = &po.predecessors;
-    //    assert!(q.get(&e3).unwrap().contains(&e1));
-    //    assert!(q.get(&e4).unwrap().contains(&e2));
-    //    assert!(q.get(&e1).unwrap().contains(&e4));
+        // Confirm transitive dependencies are being tracked
+        let p = &po.smaller_than;
+        assert!(p.get(&p1).unwrap().contains(&p3));
+        assert!(p.get(&p2).unwrap().contains(&p4));
+        assert!(p.get(&p4).unwrap().contains(&p1));
+        let q = &po.greater_than;
+        assert!(q.get(&p3).unwrap().contains(&p1));
+        assert!(q.get(&p4).unwrap().contains(&p2));
+        assert!(q.get(&p1).unwrap().contains(&p4));
 
-    //    let orders = po.all_total_orders();
-    //    assert_eq!(orders.len(), 1);
-    //    assert_eq!(orders[0], vec![e2, e4, e1, e3]);
-    //}
+        let orders = po.all_total_orders();
+        assert_eq!(orders.len(), 1);
+        assert_eq!(orders[0], [p2, p4, p1, p3]);
+    }
 
-    //#[test]
-    //fn test_precedence_propagation_02() {
-    //    // . () (.) (.). (.)() ((..))
-    //    let mut po = PartialOrder::new();
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("(.)").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("(.).").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("(.)()").unwrap());
-    //    let r = po.extend_by_pairtable(&PairTable::try_from("((..))").unwrap());
-    //    assert!(r);
+    #[test]
+    fn test_precedence_propagation_02() {
+        // . () (.) (.). (.)() ((..))
+        let mut po = PartialOrder::default();
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("(.)").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("(.).").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("(.)()").unwrap());
+        let r = po.extend_by_pairtable(&PairTable::try_from("((..))").unwrap());
+        assert!(r);
 
-    //    let ph = po.pair_hierarchy();
-    //    println!("{:?}", ph);
-    //    assert_eq!(ph.get(&(0,1)), Some(&1));
-    //    assert_eq!(ph.get(&(0,2)), Some(&2));
-    //    assert_eq!(ph.get(&(0,5)), Some(&3));
-    //    assert_eq!(ph.get(&(3,4)), Some(&1));
-    //    assert_eq!(ph.get(&(1,4)), Some(&2));
-    //}
+        let p1 = Pair::new(0, 1).key();
+        let p2 = Pair::new(0, 2).key();
+        let p3 = Pair::new(0, 5).key();
+        let p4 = Pair::new(3, 4).key();
+        let p5 = Pair::new(1, 4).key();
 
-    //#[test]
-    //fn test_precedence_propagation_04() {
-    //    // . .. .() ..() (.()) ((()))
-    //    let mut po = PartialOrder::new();
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("..").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".()").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("..()").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("(.())").unwrap());
-    //    let r = po.extend_by_pairtable(&PairTable::try_from("((()))").unwrap());
-    //    assert!(r);
+        let ph = po.pair_hierarchy();
+        println!("{:?}", ph);
+        assert_eq!(ph.get(&p1), Some(&1));
+        assert_eq!(ph.get(&p2), Some(&2));
+        assert_eq!(ph.get(&p3), Some(&3));
+        assert_eq!(ph.get(&p4), Some(&1));
+        assert_eq!(ph.get(&p5), Some(&2));
+    }
 
-    //    let ph = po.pair_hierarchy();
-    //    println!("{:?}", ph);
-    //    assert_eq!(ph.get(&(1,2)), Some(&1));
-    //    assert_eq!(ph.get(&(2,3)), Some(&2));
-    //    assert_eq!(ph.get(&(0,4)), Some(&2));
-    //    assert_eq!(ph.get(&(0,5)), Some(&3));
-    //    assert_eq!(ph.get(&(1,4)), Some(&1));
-    //}
+    #[test]
+    fn test_precedence_propagation_04() {
+        // . .. .() ..() (.()) ((()))
+        let mut po = PartialOrder::default();
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("..").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".()").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("..()").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("(.())").unwrap());
+        let r = po.extend_by_pairtable(&PairTable::try_from("((()))").unwrap());
+        assert!(r);
 
-    //#[test]
-    //fn test_precedence_propagation_05() {
-    //    // . () (.) ()() ()(). ()(())
-    //    let mut po = PartialOrder::new();
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("(.)").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()()").unwrap());
-    //    let _ = po.extend_by_pairtable(&PairTable::try_from("()().").unwrap());
-    //    let r = po.extend_by_pairtable(&PairTable::try_from("()(())").unwrap());
-    //    assert!(r);
+        let p1 = Pair::new(1, 2).key();
+        let p2 = Pair::new(2, 3).key();
+        let p3 = Pair::new(0, 4).key();
+        let p4 = Pair::new(0, 5).key();
+        let p5 = Pair::new(1, 4).key();
 
-    //    println!("{:?}", po.precedence);
-    //    let ph = po.pair_hierarchy();
-    //    println!("{:?}", ph);
-    //    assert_eq!(ph.get(&(0,1)), Some(&1));
-    //    assert_eq!(ph.get(&(0,2)), Some(&2));
-    //    assert_eq!(ph.get(&(2,3)), Some(&3));
-    //    assert_eq!(ph.get(&(3,4)), Some(&1));
-    //    assert_eq!(ph.get(&(2,5)), Some(&4));
-    //}
+        let ph = po.pair_hierarchy();
+        println!("{:?}", ph);
+        assert_eq!(ph.get(&p1), Some(&1));
+        assert_eq!(ph.get(&p2), Some(&2));
+        assert_eq!(ph.get(&p3), Some(&2));
+        assert_eq!(ph.get(&p4), Some(&3));
+        assert_eq!(ph.get(&p5), Some(&1));
+    }
+
+    #[test]
+    fn test_precedence_propagation_05() {
+        // . () (.) ()() ()(). ()(())
+        let mut po = PartialOrder::default();
+        let _ = po.extend_by_pairtable(&PairTable::try_from(".").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("(.)").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()()").unwrap());
+        let _ = po.extend_by_pairtable(&PairTable::try_from("()().").unwrap());
+        let r = po.extend_by_pairtable(&PairTable::try_from("()(())").unwrap());
+        assert!(r);
+
+        let p1 = Pair::new(0, 1).key();
+        let p2 = Pair::new(0, 2).key();
+        let p3 = Pair::new(2, 3).key();
+        let p4 = Pair::new(3, 4).key();
+        let p5 = Pair::new(2, 5).key();
+
+        let ph = po.pair_hierarchy();
+        println!("{:?}", ph);
+        assert_eq!(ph.get(&p1), Some(&1));
+        assert_eq!(ph.get(&p2), Some(&2));
+        assert_eq!(ph.get(&p3), Some(&3));
+        assert_eq!(ph.get(&p4), Some(&1));
+        assert_eq!(ph.get(&p5), Some(&4));
+    }
 
 }
 

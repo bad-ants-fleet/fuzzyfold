@@ -13,9 +13,18 @@ categories.workspace = true
 
 [dependencies]
 ahash.workspace = true
+criterion.workspace = true
 ff_structure.workspace = true
 nohash-hasher.workspace = true
 ndarray.workspace = true
 
 itertools = "0.14.0"
 once_cell = "1.21.3"
+
+[[bench]]
+name = "dlfolding"
+harness = false
+
+[badges]
+maintenance = { status = "actively-developed" }
+
