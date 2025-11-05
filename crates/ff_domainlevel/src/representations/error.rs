@@ -1,4 +1,3 @@
-use std::fmt;
 
 /// Error type for domain-level Nussinov dynamic programming operations.
 #[derive(Debug, Clone)]

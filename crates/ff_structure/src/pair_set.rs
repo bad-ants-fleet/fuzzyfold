@@ -26,6 +26,13 @@ pub struct Pair {
     j: NAIDX,
 }
 
+impl fmt::Display for Pair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {})", self.i, self.j)?;
+        Ok(())
+    }
+}
+
 impl Pair {
     /// Create a new pair (i, j). Panics in debug if i >= j.
     pub fn new(i: NAIDX, j: NAIDX) -> Self {
@@ -96,6 +103,11 @@ impl PairSet {
     }
 
     /// Iterator over all pairs in arbitrary order.
+    pub fn iter_keys(&self) -> impl Iterator<Item = &P1KEY> + '_ {
+        self.pairs.iter()
+    }
+
+    /// Iterator over all pairs in arbitrary order.
     pub fn iter(&self) -> impl Iterator<Item = Pair> + '_ {
         self.pairs.iter().map(|&k| Pair::from_key(k))
     }
@@ -139,7 +151,7 @@ impl fmt::Display for PairSet {
                 write!(f, ",")?;
             }
             // Only here we show 1-based values for readability.
-            write!(f, "({},{})", pair.i(), pair.j())?;
+            write!(f, "{}", pair)?;
             first = false;
         }
         Ok(())

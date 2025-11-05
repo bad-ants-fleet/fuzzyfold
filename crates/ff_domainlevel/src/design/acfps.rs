@@ -5,18 +5,17 @@ use std::fmt;
 use std::error;
 use std::collections::HashMap;
 use ndarray::Array2;
-use ahash::AHashMap;
-use ahash::AHashSet;
+use nohash_hasher::IntMap;
+use nohash_hasher::IntSet;
 
-use ff_structure::NAIDX;
+use ff_structure::P1KEY;
 use ff_structure::DotBracket;
 use ff_structure::DotBracketVec;
 use ff_structure::PairTable;
+use ff_structure::Pair;
+use ff_structure::PairSet;
 
 use crate::NussinovDP;
-use crate::Pair;
-use crate::PairSet;
-
 use crate::design::{
     PartialOrder, 
     UnionFind};
@@ -29,7 +28,7 @@ pub struct Acfp {
     // The following fields are commonly computed / cached properties 
     // that remain valid if the path gets extended.
     pt_path: Vec<PairTable>,
-    all_pairs: AHashSet<Pair>, // by convention: i < j
+    all_pairs: IntSet<P1KEY>, // by convention: i < j
     partial_order: Option<PartialOrder>,
     length: usize,
 }
@@ -43,20 +42,20 @@ impl Acfp {
         &self.pt_path
     }
 
-    pub fn all_pairs(&self) -> &AHashSet<Pair> {
+    pub fn all_pairs(&self) -> &IntSet<P1KEY> {
         &self.all_pairs
     }
 
-    pub fn pair_hierarchy(&self) -> Option<AHashMap<(NAIDX, NAIDX), usize>> {
+    pub fn pair_hierarchy(&self) -> Option<IntMap<P1KEY, usize>> {
         self.partial_order.as_ref().map(|po| po.pair_hierarchy())
     }
 
     pub fn extend_by_one(&mut self, new_db: DotBracketVec) {
         assert_eq!(new_db.len(), self.length + 1);
         let new_pt = PairTable::try_from(&new_db).unwrap();
-        let plist = PairSet::from(&new_pt);
-        for pair in plist.iter() {
-            self.all_pairs.insert(pair);
+        let pset = PairSet::from(&new_pt);
+        for &pkey in pset.iter_keys() {
+            self.all_pairs.insert(pkey);
         }
         
         if let Some(ref mut po) = self.partial_order {
@@ -80,11 +79,12 @@ impl Acfp {
         //complementarity, which may lead to unsaturated structures.
         let n = self.length;
         let mut p = Array2::from_elem((n, n), 0);
-        for (e, c) in ph {
+        for (pkey, c) in ph {
+            let e = Pair::from_key(pkey);
             // We are putting 10 extra, to reward the fact 
             // that a pair is formed.
-            p[(e.0 as usize, e.1 as usize)] += 100 + c;
-            p[(e.1 as usize, e.0 as usize)] += 100 + c;
+            p[(e.i() as usize, e.j() as usize)] += 10 + c;
+            p[(e.j() as usize, e.i() as usize)] += 10 + c;
         }
         let ndp = NussinovDP::from(p);
 
@@ -100,18 +100,24 @@ impl Acfp {
         true
     }
 
-    pub fn all_total_orders(&self) -> Option<Vec<Vec<Pair>>> {
+    pub fn all_total_orders(&self) -> Option<Vec<Vec<P1KEY>>> {
         self.partial_order.as_ref().map(|po| po.all_total_orders())
     }
     
     pub fn is_cycle_free(&self) -> bool {
         let mut uf = UnionFind::new(self.length + 1);
-        self.all_pairs.iter().all(|&p| uf.union(p.i() as usize, p.j() as usize))
+        self.all_pairs.iter().all(|&k| {
+            let p = Pair::from_key(k);
+            uf.union(p.i() as usize, p.j() as usize)
+        })
     }
  
     pub fn connected_components(&self) -> Vec<Vec<usize>> {
         let mut uf = UnionFind::new(self.length);
-        self.all_pairs.iter().all(|&p| uf.union(p.i() as usize, p.j() as usize));
+        self.all_pairs.iter().all(|&k| {
+            let p = Pair::from_key(k);
+            uf.union(p.i() as usize, p.j() as usize)
+        });
         uf.connected_components()
     }
 
@@ -159,14 +165,14 @@ impl TryFrom<&str> for Acfp {
             .map(|db| PairTable::try_from(db).unwrap())
             .collect();
 
-        let all_pairs: AHashSet<Pair> = pt_path
+        let all_pairs: IntSet<P1KEY> = pt_path
             .iter()
             .flat_map(|pt| {
-                PairSet::from(pt).iter().collect::<Vec<Pair>>()
+                PairSet::from(pt).iter_keys().cloned().collect::<Vec<P1KEY>>()
             })
             .collect();
 
-        let mut po = PartialOrder::new();
+        let mut po = PartialOrder::default();
         let mut partial_order = Some(po.clone());
         for npt in &pt_path {
             if !po.extend_by_pairtable(npt) {
@@ -295,10 +301,10 @@ mod tests {
         assert!(!acfp.is_valid(&mut DomainRegistry::new()));
 
         let ph = acfp.pair_hierarchy().unwrap();
-        assert_eq!(ph.get(&(0,1)), Some(&1));
-        assert_eq!(ph.get(&(0,2)), Some(&2));
-        assert_eq!(ph.get(&(0,3)), Some(&3));
-        assert_eq!(ph.get(&(1,2)), Some(&1));
+        assert_eq!(ph.get(&Pair::new(0,1).key()), Some(&1));
+        assert_eq!(ph.get(&Pair::new(0,2).key()), Some(&2));
+        assert_eq!(ph.get(&Pair::new(0,3).key()), Some(&3));
+        assert_eq!(ph.get(&Pair::new(1,2).key()), Some(&1));
     }
 
     #[test]

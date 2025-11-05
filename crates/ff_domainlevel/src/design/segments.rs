@@ -6,10 +6,9 @@
 //!
 
 use std::collections::VecDeque;
-use ahash::AHashMap;
 use nohash_hasher::{IntSet, IntMap};
 
-use ff_structure::{DotBracket, DotBracketVec, PairTable, NAIDX};
+use ff_structure::{DotBracket, DotBracketVec, Pair, PairTable, NAIDX, P1KEY};
 
 use crate::{DomainRef, DomainRefVec, DomainRegistry};
 use crate::design::Acfp;
@@ -273,7 +272,7 @@ fn extract_logic_dbv(structure: &[Option<NAIDX>], indices: &IntSet<usize>) -> Do
 
 fn design_segments(
     components: &[Vec<usize>],
-    pair_hierarchy: &AHashMap<(NAIDX, NAIDX), usize>,
+    pair_hierarchy: &IntMap<P1KEY, usize>,
     registry: &mut DomainRegistry, 
 ) -> Vec<Option<Segment>> {
     let max_index = components.iter().flatten().copied().max().unwrap_or(0);
@@ -293,7 +292,10 @@ fn design_segments(
     // Turn pairs into a queue for deferral
     let mut queue: VecDeque<((usize, usize), usize)> = pair_hierarchy
         .iter()
-        .map(|(&(i, j), &w)| ((i as usize, j as usize), w))
+        .map(|(&pk, &w)| {
+            let pair = Pair::from_key(pk);
+            ((pair.i() as usize, pair.j() as usize), w)
+        })
         .collect();
 
     while let Some(((i, j), w)) = queue.pop_front() {
@@ -415,10 +417,10 @@ mod tests {
     #[test]
     fn test_design_segments_balancing_and_expansion() {
         // Define the pair hierarchy
-        let pair_hierarchy: AHashMap<(NAIDX, NAIDX), usize> = vec![
-            ((0, 1), 1),
-            ((2, 3), 2),
-            ((1, 2), 3),
+        let pair_hierarchy: IntMap<P1KEY, usize> = vec![
+            (Pair::new(0, 1).key(), 1),
+            (Pair::new(2, 3).key(), 2),
+            (Pair::new(1, 2).key(), 3),
         ].into_iter().collect();
 
         // One connected component

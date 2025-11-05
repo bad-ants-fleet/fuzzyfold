@@ -1,22 +1,25 @@
 //! Nussinov-style domain-level base-pair maximization.
 //!
-//! Provides a helper to score domains. 
 
+use ndarray::Array2;
 use ahash::AHashSet;
-use ahash::AHashMap;
+use nohash_hasher::IntMap;
+
+use ff_structure::NAIDX;
+use ff_structure::P1KEY;
+use ff_structure::Pair;
+use ff_structure::PairSet;
 use ff_structure::DotBracket;
 use ff_structure::DotBracketVec;
-use ndarray::Array2;
-use ff_structure::NAIDX;
+
 use crate::DomainRefVec;
 use crate::DomainRegistry;
 use crate::error::RegistryError;
 
-use crate::pair_set::Pair;
-use crate::pair_set::PairSet;
-use crate::P1KEY;
 
 /// Nussinov-style domain-level folding algorithm.
+/// Can be initialized from a domain sequence and the corresponding registry to
+/// look up the domain lengths, or through an arbitrary matrix of pair scores.
 pub struct NussinovDP {
     pair_scores: Array2<usize>,
     dp_table: Array2<usize>,
@@ -63,7 +66,7 @@ impl NussinovDP {
     pub fn get_mfe_pairs(&self, len: Option<usize>) -> PairSet {
         let length = match len {
             Some(l) => l,
-            None => self.dp_table.len(),
+            None => self.dp_table.nrows(),
         };
         let mut pairs = PairSet::new(length);
         traceback(0, length - 1, &self.dp_table, &self.pair_scores, &mut pairs);
@@ -73,9 +76,9 @@ impl NussinovDP {
     pub fn all_mfe_pairs(&self, len: Option<usize>) -> Vec<PairSet> {
         let length = match len {
             Some(l) => l,
-            None => self.dp_table.len(),
+            None => self.dp_table.nrows(),
         };
-        let mut memo: AHashMap<P1KEY, AHashSet<Vec<P1KEY>>> = AHashMap::default();
+        let mut memo: IntMap<P1KEY, AHashSet<Vec<P1KEY>>> = IntMap::default();
         let as_pairs = traceback_all(0, length - 1, &self.dp_table, &self.pair_scores, &mut memo);
         as_pairs.into_iter()
             .map(|ps| {
@@ -91,9 +94,9 @@ impl NussinovDP {
     pub fn all_mfe_structs(&self, len: Option<usize>) -> Vec<DotBracketVec> {
         let length = match len {
             Some(l) => l,
-            None => self.dp_table.len(),
+            None => self.dp_table.nrows(),
         };
-        let mut memo: AHashMap<P1KEY, AHashSet<Vec<P1KEY>>> = AHashMap::default();
+        let mut memo: IntMap<P1KEY, AHashSet<Vec<P1KEY>>> = IntMap::default();
         let as_pairs = traceback_all(0, length - 1, &self.dp_table, &self.pair_scores, &mut memo);
         as_pairs.into_iter()
             .map(|ps| {
@@ -111,12 +114,16 @@ impl NussinovDP {
     pub fn pair_scores(&self) -> &Array2<usize> {
         &self.pair_scores
     }
+
+    pub fn dp_table(&self) -> &Array2<usize> {
+        &self.dp_table
+    }
 }
 
 
 fn nussinov(p: &Array2<usize>) -> Array2<usize> {
     let (n, m) = p.dim();
-    assert!(n == m);
+    debug_assert!(n == m);
     let mut dp = Array2::from_elem((n, n), 0);
     for l in 1..n {
         for i in 0..n - l {
@@ -153,7 +160,6 @@ fn build_pair_scores(
     p
 }
 
-#[allow(dead_code)] // for MFE prediction, no subopts.
 fn traceback(
     i: usize,
     j: usize,
@@ -189,7 +195,7 @@ fn traceback_all(
     j: usize,
     dp: &Array2<usize>,
     p: &Array2<usize>,
-    memo: &mut AHashMap<P1KEY, AHashSet<Vec<P1KEY>>>,
+    memo: &mut IntMap<P1KEY, AHashSet<Vec<P1KEY>>>,
 ) -> AHashSet<Vec<P1KEY>> {
     if i >= j {
         return AHashSet::from([vec![]]);
@@ -248,102 +254,75 @@ fn traceback_all(
 }
 
 
-//#[cfg(test)]
-//mod tests {
-//    use super::*;
-//
-//    fn drv(input_seq: &str, reg: &DomainRegistry) -> DomainRefVec {
-//        input_seq
-//            .split_whitespace()
-//            .map(|name| reg.get(name).unwrap())
-//            .collect()
-//    }
-//
-//    #[test]
-//    fn test_pair_score_simple() {
-//        let mut registry = DomainRegistry::new();
-//        registry.intern("a", 1);
-//        registry.intern("b", 1);
-//        registry.intern("c", 1);
-//
-//        let input = "a a* b b* c";
-//        let domains = drv(input, &registry);
-//        let p = build_pair_scores(&domains, &registry);
-//        assert_eq!(p[(0, 1)], 1);
-//        assert_eq!(p[(1, 0)], 1);
-//        assert_eq!(p[(2, 3)], 1);
-//        assert_eq!(p[(3, 2)], 1);
-//        assert_eq!(p[(0, 2)], 0);
-//    }
-//
-//    #[test]
-//    fn test_nussinov_basic_structure() {
-//        let mut registry = DomainRegistry::new();
-//        registry.intern("a", 1);
-//        registry.intern("b", 2);
-// 
-//        let domains = drv("a a* b b*", &registry);
-//        let p = build_pair_scores(&domains, &registry);
-//        let dp = nussinov(&p);
-//        assert_eq!(dp[(0, 3)], 3); // a-a* and b-b*
-//
-//        let mut pairs: Vec<(usize, usize)> = Vec::new();
-//        traceback(0, domains.len() - 1, &dp, &p, &mut pairs);
-//        assert_eq!(pairs, vec![(0, 1), (2, 3)]); // a-a* and b-b*
-//    }
-//
-//    #[test]
-//    fn test_traceback_all_variants() {
-//        let mut registry = DomainRegistry::new();
-//        registry.intern("a", 1);
-//        registry.intern("x", 2);
-//        let sequence = drv("a x a*", &registry);
-//        let p = build_pair_scores(&sequence, &registry);
-//        assert_eq!(p[(0, 2)], 1); // ensure complement
-//        assert_eq!(p[(2, 0)], 1); // ensure complement
-//        let dp = nussinov(&p);
-//        let mut memo = AHashMap::default();
-//        let structs: Vec<Vec<(usize, usize)>> = traceback_all(0, sequence.len() - 1, &dp, &p, &mut memo).into_iter().collect();
-//        assert_eq!(dp[(0, 2)], 1);
-//        assert_eq!(structs.len(), 1);
-//        assert!(structs[0].contains(&(0, 2)));
-//    }
-//
-//    #[test]
-//    fn test_traceback_all_bifurcation() {
-//        let mut registry = DomainRegistry::new();
-//        registry.intern("a", 1);
-//        let sequence = drv("a a* a a*", &registry);
-//        let p = build_pair_scores(&sequence, &registry);
-//        let dp = nussinov(&p);
-//        let mut memo = AHashMap::default();
-//        let all_structs: Vec<Vec<(usize, usize)>> = traceback_all(0, sequence.len() - 1, &dp, &p, &mut memo).into_iter().collect();
-//        println!("{:?}", all_structs);
-//        assert_eq!(dp[(0, 3)], 2);
-//
-//        assert!(all_structs.iter().any(|s| s.contains(&(0, 1)) && s.contains(&(2, 3))));
-//        assert!(all_structs.iter().any(|s| s.contains(&(0, 3)) && s.contains(&(1, 2))));
-//        let mut all_structs = traceback_structures(0, sequence.len() - 1, &dp, &p);
-//        all_structs.sort_unstable();
-//        assert_eq!(all_structs, [[Some(1), Some(0), Some(3), Some(2)],
-//                                 [Some(3), Some(2), Some(1), Some(0)]]);
-//    }
-//
-//    #[test]
-//    fn test_traceback_all_multioutput() {
-//        let mut registry = DomainRegistry::new();
-//        registry.intern("a", 1);
-//        let sequence = drv("a a* a a* a a* a a*", &registry);
-//        let p = build_pair_scores(&sequence, &registry);
-//        let dp = nussinov(&p);
-//        let all_structs: Vec<Vec<(usize, usize)>> = traceback_all(0, sequence.len() - 1, &dp, &p, &mut AHashMap::default()).into_iter().collect();
-//        println!("{:?}", all_structs);
-//        assert_eq!(all_structs.len(), 14);
-//        let all_structs = traceback_structures(0, sequence.len() - 1, &dp, &p);
-//        for s in &all_structs {
-//            println!("{:?}", s);
-//        }
-//        assert_eq!(all_structs.len(), 14);
-//    }
-//}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pair_score_simple() {
+        let mut registry = DomainRegistry::new();
+        registry.intern("a", 1);
+        registry.intern("b", 1);
+        registry.intern("c", 1);
+
+        let ndp = NussinovDP::try_from(("a a* b b* c", &registry)).unwrap();
+        assert_eq!(ndp.pair_scores[(0, 1)], 1);
+        assert_eq!(ndp.pair_scores[(1, 0)], 1);
+        assert_eq!(ndp.pair_scores[(2, 3)], 1);
+        assert_eq!(ndp.pair_scores[(3, 2)], 1);
+        assert_eq!(ndp.pair_scores[(0, 2)], 0);
+    }
+
+    #[test]
+    fn test_nussinov_basic_structure() {
+        let mut registry = DomainRegistry::new();
+        registry.intern("a", 1);
+        registry.intern("b", 2);
+
+        let ndp = NussinovDP::try_from(("a a* b b*", &registry)).unwrap();
+        assert_eq!(ndp.dp_table[(0, 3)], 3);
+        let pairs = ndp.get_mfe_pairs(None);
+        assert!(pairs.contains(&Pair::new(0, 1)));
+        assert!(pairs.contains(&Pair::new(2, 3)));
+    }
+
+    #[test]
+    fn test_traceback_all_variants() {
+        let mut registry = DomainRegistry::new();
+        registry.intern("a", 1);
+        registry.intern("x", 2);
+
+        let ndp = NussinovDP::try_from(("a x a*", &registry)).unwrap();
+        assert_eq!(ndp.pair_scores[(0, 2)], 1);
+        assert_eq!(ndp.pair_scores[(2, 0)], 1);
+        assert_eq!(ndp.dp_table[(0, 2)], 1);
+
+        let structs = ndp.all_mfe_structs(None);
+        assert_eq!(structs.len(), 1);
+        assert_eq!(structs[0], DotBracketVec::try_from("(.)").unwrap());
+    }
+
+    #[test]
+    fn test_traceback_all_bifurcation() {
+        let mut registry = DomainRegistry::new();
+        registry.intern("a", 1);
+
+        let ndp = NussinovDP::try_from(("a a* a a*", &registry)).unwrap();
+        assert_eq!(ndp.dp_table[(0, 3)], 2);
+
+        let structs = ndp.all_mfe_structs(None);
+        assert_eq!(structs.len(), 2);
+        assert!(structs.contains(&DotBracketVec::try_from("(())").unwrap()));
+        assert!(structs.contains(&DotBracketVec::try_from("()()").unwrap()));
+    }
+
+    #[test]
+    fn test_traceback_all_multioutput() {
+        let mut registry = DomainRegistry::new();
+        registry.intern("a", 1);
+        let ndp = NussinovDP::try_from(("a a* a a* a a* a a*", &registry)).unwrap();
+        let structs = ndp.all_mfe_structs(None);
+        assert_eq!(structs.len(), 14);
+    }
+}
 
