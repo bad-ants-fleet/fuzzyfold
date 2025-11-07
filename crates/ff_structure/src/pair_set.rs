@@ -190,8 +190,8 @@ mod tests {
         let pt = PairTable::try_from("((..))").unwrap();
         let pl = PairSet::from(&pt);
         let s = format!("{}", pl);
-        assert!(s.contains("(0,5)"));
-        assert!(s.contains("(1,4)"));
+        assert!(s.contains("(0, 5)"));
+        assert!(s.contains("(1, 4)"));
     }
 }
 

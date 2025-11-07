@@ -6,17 +6,16 @@
 //!  1) the new pairs cannot affect any structures in the history of the path.
 //!  2) the new pairs can transform the previous structure to the new one.
 //!
-//!
-//!
 
 use std::collections::VecDeque;
 use nohash_hasher::IntSet;
 use nohash_hasher::IntMap;
 
-use ff_structure::PairTable;
 use ff_structure::P1KEY;
 use ff_structure::Pair;
 use ff_structure::PairSet;
+use ff_structure::PairTable;
+
 use crate::design::apply_move::ApplyMove;
 
 #[derive(Debug, Clone, Default)]

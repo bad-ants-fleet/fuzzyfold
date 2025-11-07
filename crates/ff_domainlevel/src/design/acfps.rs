@@ -1,25 +1,22 @@
 //! Abstract cotranscriptional folding pathways.
 
-
 use std::fmt;
 use std::error;
-use std::collections::HashMap;
 use ndarray::Array2;
 use nohash_hasher::IntMap;
 use nohash_hasher::IntSet;
 
 use ff_structure::P1KEY;
-use ff_structure::DotBracket;
-use ff_structure::DotBracketVec;
-use ff_structure::PairTable;
 use ff_structure::Pair;
 use ff_structure::PairSet;
+use ff_structure::PairTable;
+use ff_structure::DotBracket;
+use ff_structure::DotBracketVec;
 
 use crate::NussinovDP;
-use crate::design::{
-    PartialOrder, 
-    UnionFind};
 use crate::DomainRegistry;
+use crate::design::UnionFind;
+use crate::design::PartialOrder;
 use crate::design::SegmentSequence;
 
 #[derive(Debug, Clone)]
@@ -210,7 +207,7 @@ pub fn enum_structs(n: usize) -> (usize, Vec<usize>) {
 
 pub fn generate_structs(n: usize) -> Vec<Vec<DotBracket>> {
     use DotBracket::*;
-    fn helper(n: usize, memo: &mut HashMap<usize, Vec<Vec<DotBracket>>>
+    fn helper(n: usize, memo: &mut IntMap<usize, Vec<Vec<DotBracket>>>
     ) -> Vec<Vec<DotBracket>> {
         if let Some(res) = memo.get(&n) {
             return res.clone();
@@ -248,7 +245,7 @@ pub fn generate_structs(n: usize) -> Vec<Vec<DotBracket>> {
         results
     }
 
-    helper(n, &mut HashMap::new())
+    helper(n, &mut IntMap::default())
 }
 
 /// --- Core filtered cartesian product function ---

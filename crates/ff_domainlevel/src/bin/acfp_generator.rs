@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if new.is_valid(&mut registry) {
                     next_acfps.push(new.clone());
                     lin_ext += new.all_total_orders().unwrap().len();
-                    if len == 6 {
+                    if len == 4 {
                         let segseq = SegmentSequence::design_from_acfp(&new, &mut registry).unwrap();
                         println!("{len:<3} \"{}\" {}", 
                             display_acfp(new.path()), 
