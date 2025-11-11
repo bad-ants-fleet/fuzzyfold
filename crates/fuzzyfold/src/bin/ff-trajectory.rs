@@ -22,7 +22,6 @@ pub struct RateModelParams {
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "ff-simulate")]
 #[command(version, about = "Stochastic Simulation Algorithm for RNA folding")]
 pub struct Cli {
     /// Input file (FASTA-like), or "-" for stdin
