@@ -54,8 +54,8 @@ fn main() -> Result<()> {
     println!("{} {:>8} {:>14} {:>14} {:>15}",
         sequence,
         "energy".green(),
-        "arivaltime".cyan(),
-        "waitingtime".cyan(),
+        "arrival time".cyan(),
+        "waiting time".cyan(),
         "mean-waiting".cyan(),
     );
 
