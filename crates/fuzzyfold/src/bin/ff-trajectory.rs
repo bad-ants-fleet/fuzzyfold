@@ -51,7 +51,7 @@ fn main() -> Result<()> {
     if let Some(h) = header {
         println!("{}", h.yellow())
     }
-    println!("{} {:>8} {:>14} -> {:>14} {:>15}",
+    println!("{} {:>8} {:>14} {:>14} {:>15}",
         sequence,
         "energy".green(),
         "arivaltime".cyan(),
@@ -66,11 +66,11 @@ fn main() -> Result<()> {
         &mut rng(), 
         cli.t_end, 
         |t, tinc, flux, ls| {
-            println!("{} {:8.2} {:14.8e} -> {:14.8e} {:15.8e}",
+            println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
                 ls,
                 ls.energy() as f64 / 100.,
                 t,
-                t + tinc,
+                tinc,
                 1.0 / flux,
             );
             true

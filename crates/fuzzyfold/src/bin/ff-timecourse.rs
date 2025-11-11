@@ -27,7 +27,7 @@ use fuzzyfold::kinetics_parsers::RateModelParams;
 use fuzzyfold::kinetics_parsers::TimelineParameters;
 
 #[derive(Debug, Parser)]
-#[command(version, about = "Stochastic Simulation Algorithm for RNA folding")]
+#[command(version, about = "Stochastically simulated nucleic acid ensembles over time.")]
 pub struct Cli {
     /// Input file (FASTA-like), or "-" for stdin
     #[arg(value_name = "INPUT", default_value = "-")]
