@@ -178,8 +178,8 @@ pub struct EnergyTables {
     pub int11_enthalpies: Box<[[[[Option<i32>; B]; B]; P]; P]>,
     pub int21:            Box<[[[[[Option<i32>; B]; B]; B]; P]; P]>,
     pub int21_enthalpies: Box<[[[[[Option<i32>; B]; B]; B]; P]; P]>,
-    pub int22:            Box<[[[[[[Option<i32>; B - 1]; B - 1]; B - 1]; B - 1]; P - 1]; P - 1]>,
-    pub int22_enthalpies: Box<[[[[[[Option<i32>; B - 1]; B - 1]; B - 1]; B - 1]; P - 1]; P - 1]>,
+    pub int22:            Box<[[[[[[Option<i32>; B]; B]; B]; B]; P]; P]>,
+    pub int22_enthalpies: Box<[[[[[[Option<i32>; B]; B]; B]; B]; P]; P]>,
 
     pub hairpin:            [Option<i32>; 31],
     pub hairpin_enthalpies: [Option<i32>; 31],
@@ -222,8 +222,8 @@ impl Default for EnergyTables {
             int11_enthalpies: Box::new([[[[None; B]; B]; P]; P]),
             int21:            Box::new([[[[[None; B]; B]; B]; P]; P]),
             int21_enthalpies: Box::new([[[[[None; B]; B]; B]; P]; P]),
-            int22:            Box::new([[[[[[None; B - 1]; B - 1]; B - 1]; B - 1]; P - 1]; P - 1]),
-            int22_enthalpies: Box::new([[[[[[None; B - 1]; B - 1]; B - 1]; B - 1]; P - 1]; P - 1]),            
+            int22:            Box::new([[[[[[None; B]; B]; B]; B]; P]; P]),
+            int22_enthalpies: Box::new([[[[[[None; B]; B]; B]; B]; P]; P]),
 
             hairpin: [None; 31],
             hairpin_enthalpies: [None; 31],
@@ -316,6 +316,7 @@ impl EnergyTables {
                 HairpinSequences,
             );
         }
+
         Ok(tables) 
     }
 

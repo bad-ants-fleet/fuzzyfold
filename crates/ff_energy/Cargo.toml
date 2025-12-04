@@ -17,6 +17,7 @@ ff_structure.workspace = true
 ahash.workspace = true
 colored.workspace = true
 env_logger.workspace = true
+itertools.workspace = true
 log.workspace = true
 
 [badges]

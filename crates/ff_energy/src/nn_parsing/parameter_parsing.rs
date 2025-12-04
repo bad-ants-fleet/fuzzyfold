@@ -12,6 +12,7 @@
 use crate::{Base, NucleotideVec};
 use crate::PairTypeRNA;
 use crate::nn_parsing::EnergyTables;
+use itertools::Itertools;
 
 const PARAM_FILE_PAIR_ORDER: [PairTypeRNA; 7] = [
     PairTypeRNA::CG,
@@ -304,6 +305,31 @@ macro_rules! impl_int22_parser {
                 if self.inner == PARAM_FILE_PAIR_ORDER.len() - 1 {
                     self.inner = 0;
                     self.outer += 1;
+                }
+                if self.outer == PARAM_FILE_PAIR_ORDER.len() - 1 {
+                    // The positions of pairtype: NN, and Base: N in the matrix.
+                    let n_idx = [6usize, 6, 4, 4, 4, 4];
+                    // Full ranges for each axis
+                    let ranges: Vec<_> = n_idx.iter().map(|&n| 0..n).collect();
+                    let masks: Vec<u8> = (1u8..64).collect();
+                    for idx in ranges.iter().cloned().multi_cartesian_product() {
+                        let val_idx: [usize; 6] = idx.clone().try_into().unwrap();
+                        let val = tables.$field[val_idx[0]][val_idx[1]][val_idx[2]][val_idx[3]][val_idx[4]][val_idx[5]].unwrap();
+                        //println!("{:?}: {}", val_idx, val);
+                        for &mask in &masks {
+                            //println!("{:06b}", mask);
+                            let mut msk_idx = val_idx;
+                            for axis in 0..6 {
+                                if (mask >> axis) & 1 == 1 {
+                                    msk_idx[axis] = n_idx[axis];
+                                }
+                            }
+                            //println!("{:?}", val_idx);
+                            //println!("{:?}", msk_idx);
+                            tables.$field[msk_idx[0]][msk_idx[1]][msk_idx[2]][msk_idx[3]][msk_idx[4]][msk_idx[5]] = Some(
+                                val.max(tables.$field[msk_idx[0]][msk_idx[1]][msk_idx[2]][msk_idx[3]][msk_idx[4]][msk_idx[5]].unwrap_or(i32::MIN)));
+                        }
+                    }
                 }
             }
         }

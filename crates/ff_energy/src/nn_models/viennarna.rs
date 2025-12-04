@@ -141,16 +141,11 @@ impl ViennaRNA {
                 [revseq[1] as usize][fwdseq[1] as usize]
                 [fwdseq[2] as usize].expect("from file"),
             (4, 4) => 
-                // TODO: what to do if N comes up?
-                if is_ru_end(outer) || is_ru_end(inner) {
-                    900 // ouch
-                } else {
-                    self.energy_tables.int22
-                    [outer as usize][inner as usize]
-                    [fwdseq[1] as usize][fwdseq[2] as usize]
-                    [revseq[1] as usize][revseq[2] as usize]
-                    .expect("from file")
-                },
+                self.energy_tables.int22
+                [outer as usize][inner as usize]
+                [fwdseq[1] as usize][fwdseq[2] as usize]
+                [revseq[1] as usize][revseq[2] as usize]
+                .expect("from file"),
             (l, 2) | (2, l) => { // General Bulge case
                 let n = l - 2;
                 let pg1 = if !is_ru_end(outer) { 0 } else {
