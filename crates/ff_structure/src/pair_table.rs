@@ -6,7 +6,7 @@ use crate::NAIDX;
 use crate::StructureError;
 use crate::{DotBracket, DotBracketVec};
 
-/// As of v0.1.3 the PairTabel field is private. A pair-table should
+/// As of v0.1.3 the PairTable field is private. A pair-table should
 /// be constructed by From or TryFrom traits, but then be save to use.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PairTable(Vec<Option<NAIDX>>);
