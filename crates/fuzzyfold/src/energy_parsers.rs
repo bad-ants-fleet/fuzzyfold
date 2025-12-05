@@ -8,8 +8,6 @@ use colored::*;
 use ff_energy::ViennaRNA;
 use ff_energy::parameters::RNA_TURNER_2004;
 use ff_energy::parameters::RNA_ANDRONESCU_2007;
-use ff_energy::parameters::RNA_TURNER_1999;
-use ff_energy::parameters::DNA_MATHEWS_1999;
 use ff_energy::parameters::DNA_MATHEWS_2004;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -17,13 +15,11 @@ pub enum RnaParams {
     Turner2004,
     Turner2004ext,
     Andronescu2007,
-    Turner1999,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum DnaParams {
     Mathews2004,
-    Mathews1999,
 }
 
 /// Free energy evaluation parameters.
@@ -68,7 +64,6 @@ impl EnergyModelArguments {
                 RnaParams::Turner2004 => (RNA_TURNER_2004, "rna_turner_2004"),
                 RnaParams::Turner2004ext => (RNA_TURNER_2004_EXT, "rna_turner_2004_ext"),
                 RnaParams::Andronescu2007 => (RNA_ANDRONESCU_2007, "rna_andronescu_2007"),
-                RnaParams::Turner1999 => (RNA_TURNER_1999,"rna_turner_1999"),
             };
             debug!("{} {}", "Polymer:".bold().red(), name);
             ViennaRNA::from_parameter_str(data).unwrap()
@@ -78,7 +73,6 @@ impl EnergyModelArguments {
             let preset = dna_choice.unwrap_or(DnaParams::Mathews2004);
             let (data, name) = match preset {
                 DnaParams::Mathews2004 => (DNA_MATHEWS_2004, "dna_mathews_2004"),
-                DnaParams::Mathews1999 => (DNA_MATHEWS_1999, "dna_mathews_1999"),
             };
             debug!("{} {}", "Polymer:".bold().red(), name);
             ViennaRNA::from_parameter_str(data).unwrap()

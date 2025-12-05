@@ -80,9 +80,9 @@ fn main() -> Result<()> {
         let energy = model.energy_of_structure(&sequence, &pairings);
 
         let mark = if (ref_en * 100f64).round() as i32 != energy { "*" } else { "" };
-        //if mark == "*" {
+        if mark == "*" {
             println!("{} {:6.2} {:6.2} {}", structure, energy as f64 / 100.0, ref_en, mark);
-        //}
+        }
     }
 
     Ok(())
