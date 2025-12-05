@@ -6,7 +6,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::path::Path;
 
-use crate::parameters::TURNER_2004;
+use crate::parameters::RNA_TURNER_2004;
 use crate::NearestNeighborLoop;
 use crate::LoopDecomposition;
 use crate::Base;
@@ -32,7 +32,7 @@ pub struct ViennaRNA {
 
 impl Default for ViennaRNA {
     fn default() -> Self {
-        ViennaRNA::from_parameter_str(TURNER_2004)
+        ViennaRNA::from_parameter_str(RNA_TURNER_2004)
             .expect("Built-in Turner 2004 parameter file must be valid")
     }
 }
@@ -225,6 +225,7 @@ impl ViennaRNA {
         // For warning purposes only.
         let _ = PairTypeRNA::new((segments[0][0], *segments.last().unwrap().last().unwrap()));
 
+        // Number of stems in the multiloop.
         let n = segments.len(); 
 
         let mut en = 0;
@@ -255,7 +256,9 @@ impl ViennaRNA {
             en += den;
         }
  
-        en + self.energy_tables.ml_params.base_en37 
+        // Number of unpaired bases in the multiloop.
+        let m: usize = segments.iter().map(|s| s.len() - 2).sum();
+        en + self.energy_tables.ml_params.base_en37 * m as i32
            + self.energy_tables.ml_params.closing_en37
            + self.energy_tables.ml_params.intern_en37 * n as i32
     }
