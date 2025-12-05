@@ -246,10 +246,10 @@ impl ViennaRNA {
                     [pair as usize][b5 as usize][b3 as usize].unwrap(),
                 (Some(&b5), None) => 
                     self.energy_tables.dangle5
-                     [pair as usize][b5 as usize].unwrap(),
+                     [pair as usize][b5 as usize].unwrap().min(0),
                 (None, Some(&b3)) => 
                     self.energy_tables.dangle3
-                    [pair as usize][b3 as usize].unwrap(),
+                    [pair as usize][b3 as usize].unwrap().min(0),
                 _ => 0,
             };
             en += den;
@@ -287,10 +287,10 @@ impl ViennaRNA {
                     [pair as usize][b5 as usize][b3 as usize].unwrap(),
                 (Some(&b5), None) => 
                     self.energy_tables.dangle5
-                    [pair as usize][b5 as usize].unwrap(),
+                    [pair as usize][b5 as usize].unwrap().min(0),
                 (None, Some(&b3)) => 
                      self.energy_tables.dangle3
-                    [pair as usize][b3 as usize].unwrap(),
+                    [pair as usize][b3 as usize].unwrap().min(0),
                 _ => 0,
             };
             en += den;

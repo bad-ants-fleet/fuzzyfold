@@ -368,8 +368,12 @@ impl EnergyTables {
             temp_change).unwrap();
 
         self.misc.lxc *= temp_change;
-    }
 
+        self.hairpin_sequences.iter_mut()
+            .for_each(|(_key, (g, h))| {
+                *g = rescale_energy(Some(*g), Some(*h), temp_change).unwrap();
+            });
+    }
 }
 
 #[cfg(test)]
