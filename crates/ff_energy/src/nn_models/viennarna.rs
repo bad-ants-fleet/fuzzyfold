@@ -352,14 +352,14 @@ impl EnergyModel for ViennaRNA {
                 slices.push(&sequence[start..=*j as usize]);
                 self.multibranch(&slices)
             }
-            NearestNeighborLoop::Exterior { branches } => {
+            NearestNeighborLoop::Exterior { ends, branches  } => {
                 let mut slices: Vec<&[Base]> = Vec::new();
-                let mut start = 0;
+                let mut p5 = ends.0 as usize;
                 for &(k, l) in branches {
-                    slices.push(&sequence[start..=k as usize]);
-                    start = l as usize;
+                    slices.push(&sequence[p5..=k as usize]);
+                    p5 = l as usize;
                 }
-                slices.push(&sequence[start..]);
+                slices.push(&sequence[p5..=(ends.1 as usize)]);
                 self.exterior(&slices)
             }
         }
@@ -642,9 +642,6 @@ mod tests {
         let dbr = "...........(.(((((........)))))..)......";
         let e37 = -210;
         assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")), e37);
-
-
-
     }
 }
 

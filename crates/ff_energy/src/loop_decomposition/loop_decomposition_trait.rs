@@ -18,6 +18,7 @@ impl LoopDecomposition for PairTable {
         fn recurse<F: FnMut(&NearestNeighborLoop)>(
             pt: &PairTable,
             closing: Option<(NAIDX, NAIDX)>,
+            ends: Option<(NAIDX, NAIDX)>,
             f: &mut F,
         ) {
             let mut branches = Vec::new();
@@ -32,15 +33,15 @@ impl LoopDecomposition for PairTable {
                 if let Some(q) = pt[p] {
                     debug_assert!(q > p as NAIDX);
                     branches.push((p as NAIDX, q));
-                    recurse(pt, Some((p as NAIDX, q)), f);
+                    recurse(pt, Some((p as NAIDX, q)), None, f);
                     p = q as usize + 1;
                 } else {
                     p += 1;
                 }
             }
-            f(&NearestNeighborLoop::classify(closing, branches));
+            f(&NearestNeighborLoop::classify(ends, closing, branches));
         }
-        recurse(self, None, &mut f);
+        recurse(self, None, Some((0 as NAIDX, (self.len() - 1) as NAIDX)), &mut f);
     }
 
 }
@@ -54,6 +55,7 @@ mod tests {
         let dbn = "......."; // all unpaired → exterior loop only
         let eloop = NearestNeighborLoop::Exterior { 
             branches: vec![], 
+            ends: (0 as NAIDX, 6 as NAIDX), 
         };
 
         let loops = PairTable::try_from(dbn).expect("valid").loops();
@@ -66,37 +68,37 @@ mod tests {
         let hloop = NearestNeighborLoop::Hairpin { 
             closing: (1, 5) 
         };
-        println!("{:?}", hloop.unpaired_indices(26));
-        println!("{:?}", hloop.inclusive_unpaired_indices(26));
+        assert_eq!(vec![2usize, 3, 4], hloop.unpaired_indices());
+        assert_eq!(vec![2usize, 3, 4, 5], hloop.inclusive_unpaired_indices());
 
         let iloop = NearestNeighborLoop::Interior { 
             closing: (1, 9),
             inner: (2, 8) 
         };
-        println!("{:?}", iloop.unpaired_indices(26));
-        println!("{:?}", iloop.inclusive_unpaired_indices(26));
+        let v: Vec<usize> = Vec::new();
+        assert_eq!(v, iloop.unpaired_indices());
+        assert_eq!(vec![2usize, 9], iloop.inclusive_unpaired_indices());
  
         let iloop = NearestNeighborLoop::Interior { 
             closing: (1, 9),
             inner: (2, 7) 
         };
-        println!("{:?}", iloop.unpaired_indices(26));
-        println!("{:?}", iloop.inclusive_unpaired_indices(26));
+        assert_eq!(vec![8usize], iloop.unpaired_indices());
+        assert_eq!(vec![2usize, 8, 9], iloop.inclusive_unpaired_indices());
  
-
         let mloop = NearestNeighborLoop::Multibranch { 
             closing: (1, 15),
             branches: vec![(2, 4), (5, 9)],
         };
-        println!("{:?}", mloop.unpaired_indices(26));
-        println!("{:?}", mloop.inclusive_unpaired_indices(26));
+        assert_eq!(vec![10usize, 11, 12, 13, 14], mloop.unpaired_indices());
+        assert_eq!(vec![2usize, 5, 10, 11, 12, 13, 14, 15], mloop.inclusive_unpaired_indices());
 
         let eloop = NearestNeighborLoop::Exterior { 
+            ends: (0, 15), 
             branches: vec![(1, 5), (6, 11)], 
         };
-        println!("{:?}", eloop.unpaired_indices(26));
-        println!("{:?}", eloop.inclusive_unpaired_indices(26));
-
+        assert_eq!(vec![0usize, 12, 13, 14, 15], eloop.unpaired_indices());
+        assert_eq!(vec![0usize, 1, 6, 12, 13, 14, 15], eloop.inclusive_unpaired_indices());
     }
 
 
@@ -105,6 +107,7 @@ mod tests {
         let dbn = ".(...).";
         let eloop = NearestNeighborLoop::Exterior { 
             branches: vec![(1, 5)], 
+            ends: (0, 6), 
         };
         let hloop = NearestNeighborLoop::Hairpin { 
             closing: (1, 5) 

@@ -83,7 +83,7 @@ impl<'a, M: EnergyModel> LoopCache<'a, M> {
 
     fn get_loop_neighbors(&self, index: usize) -> MoveEnergies {
         let (combo, energy) = self.loop_list.get(&index).expect("where's the loop?");
-        let unpaired = combo.unpaired_indices(self.sequence.len());
+        let unpaired = combo.unpaired_indices();
 
         let mut neighbors = Vec::new(); 
         for (idx_i, &i) in unpaired.iter().enumerate() {
@@ -247,7 +247,7 @@ impl<'a, M: EnergyModel> LoopStructure<'a, M> {
         self.loop_neighbors.remove(&i_index).expect("at least empty list.");
 
         let (combo, _) = self.registry.get_loop_by_index(&o_index);
-        for k in &combo.inclusive_unpaired_indices(self.registry.sequence.len()) {
+        for k in &combo.inclusive_unpaired_indices() {
             debug_assert!(self.loop_lookup[&(*k as NAIDX)] == o_index || self.loop_lookup[&(*k as NAIDX)] == i_index);
             self.loop_lookup.insert(*k as NAIDX, o_index);
         }
@@ -284,11 +284,11 @@ impl<'a, M: EnergyModel> LoopStructure<'a, M> {
         self.pair_neighbors.insert(i, delta);
 
         let (outer, _) = self.registry.get_loop_by_index(&o_id);
-        for k in &outer.inclusive_unpaired_indices(self.registry.sequence.len()) {
+        for k in &outer.inclusive_unpaired_indices() {
             self.loop_lookup.insert(*k as NAIDX, o_id);
         }
         let (inner, _) = self.registry.get_loop_by_index(&i_id);
-        for k in &inner.inclusive_unpaired_indices(self.registry.sequence.len()) {
+        for k in &inner.inclusive_unpaired_indices() {
             self.loop_lookup.insert(*k as NAIDX, i_id);
         }
 
@@ -318,7 +318,7 @@ impl<'a, T: LoopDecomposition, M: EnergyModel> TryFrom<(&'a [Base], &T, &'a M)> 
             if let Some((i, j)) = l.closing() {
                 pair_list.insert(i as NAIDX, j as NAIDX); 
             }
-            for k in &l.inclusive_unpaired_indices(sequence.len()) {
+            for k in &l.inclusive_unpaired_indices() {
                 loop_lookup.insert(*k as NAIDX, lli);
             }
         });
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn test_add_then_del_roundtrip() {
         let seq = NucleotideVec::from_lossy("GCCCCGGUCA");
-        let structure = PairTable::try_from("...........").unwrap();
+        let structure = PairTable::try_from("..........").unwrap();
         let model = ViennaRNA::default();
 
         let mut ls = LoopStructure::try_from((&seq[..], &structure, &model)).unwrap();
