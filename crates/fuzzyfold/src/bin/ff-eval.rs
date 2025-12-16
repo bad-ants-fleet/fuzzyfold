@@ -7,9 +7,8 @@ use clap::Parser;
 use clap::ArgAction;
 use anyhow::Result;
 
-use ff_energy::EnergyModel;
-use ff_structure::PairTable;
-
+use fuzzyfold::energy::EnergyModel;
+use fuzzyfold::structure::MultiPairTable;
 use fuzzyfold::input_parsers::ruler;
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
@@ -64,7 +63,7 @@ fn main() -> Result<()> {
         println!("{}", h.yellow())
     }
 
-    let pairings = PairTable::try_from(&structure)?;
+    let pairings = MultiPairTable::try_from(&structure)?;
     let energy = model.energy_of_structure(&sequence, &pairings);
 
     info!("{}", ruler(sequence.len() - 1).magenta());

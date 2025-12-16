@@ -5,6 +5,8 @@ use std::convert::TryFrom;
 
 use crate::PairTable;
 use crate::MultiPairTable;
+use crate::MultiStruct;
+use crate::StrandPairTable;
 use crate::StructureError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -95,10 +97,35 @@ impl From<&PairTable> for DotBracketVec {
     }
 }
 
-
 impl From<&MultiPairTable> for DotBracketVec {
+    fn from(mpt: &MultiPairTable) -> Self {
+        let mut db = Vec::with_capacity(mpt.len());
 
-    fn from(pt: &MultiPairTable) -> Self {
+        for (i, entry) in mpt.iter().enumerate() {
+            match entry {
+                MultiStruct::Unpaired => {
+                    db.push(DotBracket::Unpaired);
+                }
+                MultiStruct::StrandBreak => {
+                    db.push(DotBracket::Break);
+                }
+                MultiStruct::Paired(j) => {
+                    let j = *j as usize;
+                    if i < j {
+                        db.push(DotBracket::Open);
+                    } else {
+                        db.push(DotBracket::Close);
+                    }
+                }
+            }
+        }
+        DotBracketVec(db)
+    }
+}
+
+impl From<&StrandPairTable> for DotBracketVec {
+
+    fn from(pt: &StrandPairTable) -> Self {
         let mut result: Vec<DotBracket> = Vec::with_capacity(pt.len() + pt.num_strands());
 
         for (si, strand) in pt.iter().enumerate() {
@@ -180,14 +207,14 @@ mod tests {
 
     #[test]
     fn test_dot_bracket_vec_from_multi_pair_table_hack() {
-        let pt = MultiPairTable::try_from("((..))+").unwrap();
+        let pt = StrandPairTable::try_from("((..))+").unwrap();
         let dbv = DotBracketVec::from(&pt);
         assert_eq!(format!("{}", dbv), "((..))+");
     }
 
     #[test]
     fn test_dot_bracket_vec_from_multi_pair_table() {
-        let pt = MultiPairTable::try_from("((..)+)").unwrap();
+        let pt = StrandPairTable::try_from("((..)+)").unwrap();
         let dbv = DotBracketVec::from(&pt);
         assert_eq!(format!("{}", dbv), "((..)+)+");
     }

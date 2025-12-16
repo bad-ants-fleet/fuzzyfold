@@ -34,7 +34,7 @@ impl std::error::Error for SequenceError {}
 
 
 #[derive(Clone, Hash, Copy, Debug, Eq, PartialEq)]
-pub enum Base { A, C, G, U, N }
+pub enum Base { A, C, G, U, N, StrandBreak }
 pub const BCOUNT: usize = 5; // 5 Base variants for tables.
 
 impl TryFrom<char> for Base {
@@ -46,7 +46,7 @@ impl TryFrom<char> for Base {
             'G' => Ok(Base::G),
             'U' | 'T' => Ok(Base::U),
             'N' => Ok(Base::N),
-            '&' | '+' => Err(SequenceError::Separator(c)), 
+            '&' | '+' => Ok(Base::StrandBreak),
             _ => Err(SequenceError::InvalidChar(c)),
         }
     }
@@ -60,6 +60,7 @@ impl fmt::Display for Base {
             Base::G => 'G',
             Base::U => 'U',
             Base::N => 'N',
+            Base::StrandBreak => '+',
         };
         write!(f, "{}", c)
     }

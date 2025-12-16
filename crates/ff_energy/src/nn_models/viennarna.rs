@@ -27,7 +27,9 @@ use crate::K0;
 pub struct ViennaRNA {
     min_hp_size: usize,
     temperature: f64,
+    association: i32,
     energy_tables: EnergyTables,
+    //extended_parameters
 }
 
 impl Default for ViennaRNA {
@@ -55,6 +57,7 @@ impl ViennaRNA {
         Ok(ViennaRNA {
             min_hp_size: 3,
             temperature: 37.0,
+            association: 410,
             energy_tables,
         })
     }
@@ -352,16 +355,39 @@ impl EnergyModel for ViennaRNA {
                 slices.push(&sequence[start..=*j as usize]);
                 self.multibranch(&slices)
             }
-            NearestNeighborLoop::Exterior { ends, branches  } => {
+            NearestNeighborLoop::Exterior { ends: (p5, p3), branches  } => {
                 let mut slices: Vec<&[Base]> = Vec::new();
-                let mut p5 = ends.0 as usize;
+                let mut p5 = *p5 as usize;
                 for &(k, l) in branches {
                     slices.push(&sequence[p5..=k as usize]);
                     p5 = l as usize;
                 }
-                slices.push(&sequence[p5..=(ends.1 as usize)]);
+                slices.push(&sequence[p5..=(*p3 as usize)]);
                 self.exterior(&slices)
             }
+            NearestNeighborLoop::JointExterior { ends: (p5, p3), branches  } => {
+                let mut slices: Vec<&[Base]> = Vec::new();
+                let mut branches = branches.clone();
+
+                debug_assert!(!branches.is_empty());
+                branches.rotate_left(1);
+                let last = branches.len() - 1;
+                let (i, j) = branches[last];
+                branches[last] = (j, i);
+                while let Some(&(i, _)) = branches.first() {
+                    if i > *p3 { break; }
+                    branches.rotate_left(1);
+                }
+
+                let mut p5 = *p5 as usize;
+                for (k, l) in branches {
+                    slices.push(&sequence[p5..=k as usize]);
+                    p5 = l as usize;
+                }
+                slices.push(&sequence[p5..=(*p3 as usize)]);
+                self.exterior(&slices) + self.association
+            }
+            NearestNeighborLoop::Disconnected { .. } => unreachable!("Must not evaluate disconnected loops.")
         }
     }
 }
@@ -370,6 +396,7 @@ impl EnergyModel for ViennaRNA {
 mod tests {
     use super::*;
     use ff_structure::PairTable;
+    use ff_structure::MultiPairTable;
     use crate::NucleotideVec;
 
     #[test]
@@ -643,6 +670,40 @@ mod tests {
         let e37 = -210;
         assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")), e37);
     }
+ 
+    #[test]
+    fn test_multi_evaluations() {
+        let model = ViennaRNA::default();
+
+        let seq = "GAAAAC";
+        let dbr = "(....)";
+        let e37 = 450;
+        assert_eq!(model.energy_of_structure(
+                &NucleotideVec::from_lossy(seq), 
+                &MultiPairTable::try_from(dbr).expect("valid")), e37);
+
+        let fseq = "GA+AAAC";
+        let fdbr = "(.+...)";
+ 
+        let rseq = "AAAC+GA";
+        let rdbr = "...(+).";
+        assert_eq!(
+            model.energy_of_structure(
+                &NucleotideVec::from_lossy(fseq), 
+                &MultiPairTable::try_from(fdbr).expect("valid")), 
+            model.energy_of_structure(
+                &NucleotideVec::from_lossy(rseq), 
+                &MultiPairTable::try_from(rdbr).expect("valid"))
+        );
+
+        let seq = "GAA+AAC";
+        let dbr = "(..+..)";
+        let e37 = 300;
+        assert_eq!(model.energy_of_structure(
+                &NucleotideVec::from_lossy(seq), 
+                &MultiPairTable::try_from(dbr).expect("valid")), e37);
+    }
+
 }
 
  
