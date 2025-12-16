@@ -9,22 +9,23 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-TIME="1000000"
+TIME="10"
 
-KF="Kinfold --fpt --met --time ${TIME} --start --logML --cut 9999" 
+KF="Kinfold --noShift --fpt --met --time ${TIME} --start --logML --cut 9999" 
 FF="ff-trajectory --t-end ${TIME}"
 
 # Programs to benchmark (space-separated)
-PROGRAMS=("$KF")
+PROGRAMS=("$KF" "$FF")
 
 # Output CSV
-RESULTS="simulate_benchmark_results_t${TIME}.new.csv"
+RESULTS="simulate_benchmark_results_t${TIME}.csv"
 echo "program,input_file,num_sequences,elapsed_seconds" > "$RESULTS"
 
 # Iterate over programs and input files
 for prog in "${PROGRAMS[@]}"; do
     echo $prog
     prog_bin="${prog%% *}"   # take everything before first space
+
     if ! command -v "$prog_bin" &> /dev/null; then
         echo "⚠️ Skipping $prog_bin (not found in PATH)"
         continue
