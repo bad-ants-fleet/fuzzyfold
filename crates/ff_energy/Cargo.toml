@@ -16,9 +16,14 @@ ff_structure.workspace = true
 
 ahash.workspace = true
 colored.workspace = true
+criterion.workspace = true
 env_logger.workspace = true
 itertools.workspace = true
 log.workspace = true
+
+[[bench]]
+name = "energy_models"
+harness = false
 
 [badges]
 maintenance = { status = "actively-developed" }
