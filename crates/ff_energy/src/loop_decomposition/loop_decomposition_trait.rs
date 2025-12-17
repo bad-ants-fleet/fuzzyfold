@@ -80,8 +80,12 @@ impl LoopDecomposition for MultiPairTable {
                     MultiStruct::StrandBreak => {
                         if let Some((p5, p3)) = ends {
                             let p = p as NAIDX;
-                            f(&NearestNeighborLoop::classify(Some((p5, p - 1)), None, branches));
-                            branches = Vec::new();
+                            let inner;
+                            (branches, inner) = branches
+                                .iter()
+                                .copied()
+                                .partition(|&(_, k)| k <= p5);
+                            f(&NearestNeighborLoop::classify(Some((p5, p - 1)), None, inner));
                             ends = Some((p + 1, p3));
                         } else {
                             let p = p as NAIDX;

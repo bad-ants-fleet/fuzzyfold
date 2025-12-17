@@ -702,8 +702,22 @@ mod tests {
         assert_eq!(model.energy_of_structure(
                 &NucleotideVec::from_lossy(seq), 
                 &MultiPairTable::try_from(dbr).expect("valid")), e37);
+
+        let seq = "GC+UUUUAGU+AU+AC";
+        let dbr = "((+(...)).+..+.)";
+        let e37 = 1140;
+        assert_eq!(model.energy_of_structure(
+                &NucleotideVec::from_lossy(seq), 
+                &MultiPairTable::try_from(dbr).expect("valid")), e37);
+
+        let seq = "GC&UUUUAGU&AGAAACU&AGAAACU&AC";
+        let dbr = "((&(...)).&.(...).&.(...).&.)";
+        let e37 = 2020;
+        assert_eq!(model.energy_of_structure(
+                &NucleotideVec::from_lossy(seq), 
+                &MultiPairTable::try_from(dbr).expect("valid")), e37);
+ 
     }
 
 }
 
- 

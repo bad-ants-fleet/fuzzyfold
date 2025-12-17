@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::hint::black_box;
+use criterion::BatchSize;
 use criterion::criterion_group;
 use criterion::criterion_main;
 use criterion::Criterion;
@@ -37,65 +38,67 @@ const INPUT_L1000: &str = concat!(env!("CARGO_MANIFEST_DIR"),
 const INPUT_L2500: &str = concat!(env!("CARGO_MANIFEST_DIR"), 
     "/benches/data/benchmark_random_structures_len2500.vrna");
 
+struct BenchCase {
+    name: &'static str,
+    path: &'static str,
+}
+
+const CASES: &[BenchCase] = &[
+    BenchCase { name: "len_0050", path: INPUT_L50 },
+    BenchCase { name: "len_0100", path: INPUT_L100 },
+    BenchCase { name: "len_0250", path: INPUT_L250 },
+    BenchCase { name: "len_0500", path: INPUT_L500 },
+    BenchCase { name: "len_0750", path: INPUT_L750 },
+    BenchCase { name: "len_1000", path: INPUT_L1000 },
+    BenchCase { name: "len_2500", path: INPUT_L2500 },
+];
+
+fn load_raw_inputs(path: &str) -> Vec<(NucleotideVec, PairTable)> {
+    let file = File::open(path).expect("Cannot open input file");
+    let reader = BufReader::new(file);
+    let mut inputs = Vec::new();
+    let mut lines = reader.lines();
+    while let Some(Ok(header)) = lines.next() {
+        assert!(header.starts_with('>'), "Malformed benchmarking input.");
+        let seq = lines.next().unwrap().unwrap();
+        let dbr = lines.next().unwrap().unwrap();
+        let seq = NucleotideVec::try_from(seq.as_str()).unwrap();
+        let pt  = PairTable::try_from(dbr.as_str()).unwrap();
+        inputs.push((seq, pt));
+    }
+    inputs
+}
 
 fn simulate_benchmark(c: &mut Criterion) {
     let emodel = ViennaRNA::default();
     let rmodel = Metropolis::new(emodel.temperature(), 1.0);
-
     let mut group = c.benchmark_group("Seeded stochastic simulations.");
-    group.measurement_time(std::time::Duration::from_secs(50)); // increase from default 5s
-    group.bench_function("simulate_len_0050", |b| {
-        b.iter(|| simulate_all_from_file(INPUT_L50, &emodel, &rmodel))
-    });
-    group.bench_function("simulate_len_0100", |b| {
-        b.iter(|| simulate_all_from_file(INPUT_L100, &emodel, &rmodel))
-    });
-    group.bench_function("simulate_len_0250", |b| {
-        b.iter(|| simulate_all_from_file(INPUT_L250, &emodel, &rmodel))
-    });
-    group.bench_function("simulate_len_0500", |b| {
-        b.iter(|| simulate_all_from_file(INPUT_L500, &emodel, &rmodel))
-    });
-    group.bench_function("simulate_len_0750", |b| {
-        b.iter(|| simulate_all_from_file(INPUT_L750, &emodel, &rmodel))
-    });
-    group.bench_function("simulate_len_1000", |b| {
-        b.iter(|| simulate_all_from_file(INPUT_L1000, &emodel, &rmodel))
-    });
-    group.bench_function("simulate_len_2500", |b| {
-        b.iter(|| simulate_all_from_file(INPUT_L2500, &emodel, &rmodel))
-    });
-    group.finish();
-}
+    group.measurement_time(std::time::Duration::from_secs(50)); 
 
-fn simulate_all_from_file(path: &str, emodel: &ViennaRNA, rmodel: &Metropolis) {
-    let file = File::open(path).expect("Cannot open input file");
-    let reader = BufReader::new(file);
-    let mut rng = StdRng::seed_from_u64(42);
+    for case in CASES {
+        let inputs = load_raw_inputs(case.path); 
+        let mut rng = StdRng::seed_from_u64(42);
+        group.bench_function(format!("simulate_{}", case.name), |b| {
+            b.iter_batched(
+                || &inputs, 
+                |inputs| {
+                    for (seq, pt) in inputs {
+                        let loops = LoopStructure::try_from((&seq[..], pt, &emodel))
+                            .expect("failed to build loop structure");
+                        let mut simulator = LoopStructureSSA::from((loops, &rmodel));
 
-    let mut lines = reader.lines();
-    while let Some(Ok(header)) = lines.next() {
-        if !header.starts_with('>') {
-            panic!("Malformed benchmarking input.");
-        }
-
-        let sequence = lines.next().unwrap().unwrap();
-        let structure = lines.next().unwrap().unwrap();
-
-        let sequence = NucleotideVec::try_from(sequence.as_str()).unwrap();
-        let pairings = PairTable::try_from(structure.as_str())
-            .expect("invalid structure in input");
-        let loops = LoopStructure::try_from((&sequence[..], &pairings, emodel))
-            .expect("failed to build loop structure");
-
-        let mut simulator = LoopStructureSSA::from((loops, rmodel));
-
-        simulator.simulate(
-            &mut rng, 
-            black_box(10.0), 
-            |_t, _ti, _fl, _ls| { true }
-        );
+                        simulator.simulate(
+                            &mut rng, 
+                            black_box(10.0), 
+                            |_t, _ti, _fl, _ls| { true }
+                        );
+                    }
+                },
+                BatchSize::LargeInput,
+            )
+        });
     }
+    group.finish();
 }
 
 criterion_group!(benches, simulate_benchmark);
