@@ -63,6 +63,10 @@ fn main() -> Result<()> {
         println!("{}", h.yellow())
     }
 
+    //NOTE: we use MPT as it is the more general method, but if you do a lot of
+    //single-stranded evaluations, then it is a bit of overhead compared to
+    //PairTable. May be worth to refactor and wrap PT and MPT into an enum which
+    //implements LoopDecomposition.
     let pairings = MultiPairTable::try_from(&structure)?;
     let energy = model.energy_of_structure(&sequence, &pairings);
 
@@ -70,6 +74,19 @@ fn main() -> Result<()> {
     println!("{}\n{} {}", sequence, structure, format!("{:>6.2}", energy as f64 / 100.0).green());
     info!("{}", ruler(sequence.len() - 1).magenta());
 
+    if sequence.has_indistinguishable_strands() {
+        // St1&St2 vs St2&St1
+        // AAA&AAA vs AAA&AAA
+        // ...&... vs ...&... -> 1x
+        // .(.&.). vs .(.&.). -> 1x
+        // (.)&... vs ...&(.) -> 2x
+        info!("{}", "Note: Due to physically indistinguishable input sequences, the 
+ensemble frequencies of distinguishable conformations do not 
+correspond to the frequencies of dot-bracket representations. 
+Symmetric structures have only one representation, while 
+asymmetic structures have R representations.".red().bold())
+    }
     Ok(())
+
 }
 

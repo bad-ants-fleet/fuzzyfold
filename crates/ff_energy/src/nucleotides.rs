@@ -77,7 +77,6 @@ impl Deref for NucleotideVec {
     }
 }
 
-
 impl Borrow<[Base]> for NucleotideVec {
     fn borrow(&self) -> &[Base] {
         &self.0
@@ -115,6 +114,16 @@ impl NucleotideVec {
         }).collect();
         NucleotideVec(vec)
     }
+
+    pub fn has_indistinguishable_strands(&self) -> bool {
+        let blocks: Vec<&[Base]> = self.0
+            .split(|b| *b == Base::StrandBreak)
+            .collect();
+        blocks.iter().enumerate().any(|(i, a)| {
+            blocks.iter().skip(i + 1).any(|b| a == b)
+        })
+    }
+
 }
 
 const PAIR_LOOKUP: [[PairTypeRNA; BCOUNT]; BCOUNT] = {
