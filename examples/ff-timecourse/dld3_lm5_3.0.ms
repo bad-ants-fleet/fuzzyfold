@@ -1,4 +1,4 @@
->lmin=lm5_bh=3.0
+>LM5 lmin=lm5_bh=3.0
 UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 .((((....((((......((((...))))..))))....)))).
 .((((....((((....(.((((...))))).))))....)))).

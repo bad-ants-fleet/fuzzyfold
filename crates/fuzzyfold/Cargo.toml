@@ -14,12 +14,16 @@ categories.workspace = true
 autobins = false
 
 [[bin]]
+name = "ff-randseq"
+path = "src/bin/ff-randseq.rs"
+
+[[bin]]
 name = "ff-eval"
 path = "src/bin/ff-eval.rs"
 
 [[bin]]
-name = "ff-randseq"
-path = "src/bin/ff-randseq.rs"
+name = "ff-locmin"
+path = "src/bin/ff-locmin.rs"
 
 [[bin]]
 name = "ff-timecourse"
@@ -41,6 +45,7 @@ rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
+ahash.workspace = true
 anyhow = "1.0.100"
 clap = { version = "4.5.47", features = ["derive"] }
 indicatif = "0.18.0"

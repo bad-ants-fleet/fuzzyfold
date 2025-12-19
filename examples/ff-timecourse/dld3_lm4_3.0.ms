@@ -1,4 +1,4 @@
->lmin=lm4_bh=3.0
+>LM4 lmin=lm4_bh=3.0
 UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 .((((....)))).((((........))))..((((....)))).
 .(((......))).((((........))))..((((....)))).

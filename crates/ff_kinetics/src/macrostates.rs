@@ -201,11 +201,22 @@ impl<'a, E: EnergyModel> MacrostateRegistry<'a, E> {
             .trim()
             .to_string();
 
-        let name = header_line
-            .strip_prefix('>')
-            .ok_or_else(|| io_err("First line must start with '>'", source))?
-            .trim()
-            .to_string();
+        let name = {
+            let token = header_line
+                .strip_prefix('>')
+                .ok_or_else(|| io_err("First line must start with '>'", source))?
+                .split_whitespace()
+                .next()
+                .ok_or_else(|| io_err("Header line is empty", source))?;
+            if token.chars().all(|c| c.is_ascii_alphanumeric()) {
+                token.to_string()
+            } else {
+                return Err(io_err(
+                        "Header name must be alphanumeric",
+                        source,
+                ));
+            }
+        };
 
         let seq_line = lines
             .next()
