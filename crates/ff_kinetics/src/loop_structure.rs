@@ -1,7 +1,9 @@
 use std::fmt;
+use ahash::AHashSet;
 use nohash_hasher::IntMap;
 use nohash_hasher::IntSet;
 use crate::reaction::Move;
+use crate::reaction::ApplyMove;
 
 use ff_structure::NAIDX;
 use ff_structure::DotBracket;
@@ -359,6 +361,55 @@ impl<'a, M: EnergyModel> From<&LoopStructure<'a, M>> for DotBracketVec {
             vec[*j as usize] = DotBracket::Close;
         }
         DotBracketVec(vec)
+    }
+}
+
+impl<'a, M: EnergyModel> LoopStructure<'a, M> {
+    fn recursive_gen_neighbors<F>(
+        &mut self,
+        structure: &DotBracketVec,
+        max_delta: i32,
+        max_distance: u16,
+        seen: &mut AHashSet<DotBracketVec>,
+        emit: &mut F,
+    ) where F: FnMut(&DotBracketVec, i32)
+    {
+        let mut mdbr = structure.clone();
+        if !seen.insert(structure.clone()) {
+            return;
+        }
+        emit(&mdbr, self.energy());
+
+        for (bp_move, delta) in self.all_moves() {
+            mdbr.apply_move(bp_move);
+            if seen.contains(&mdbr) {
+                mdbr.undo_move(bp_move);
+                continue;
+            } 
+            self.apply_move(bp_move);
+            if delta <= max_delta && max_distance > 0 {
+                self.recursive_gen_neighbors(
+                    &mdbr, 
+                    max_delta - delta, 
+                    max_distance - 1,
+                    seen,
+                    emit,
+                );
+            }
+            self.undo_move(bp_move);
+            mdbr.undo_move(bp_move);
+        }
+    }
+
+    pub fn generate_neighbors<F>(&mut self, 
+        maxdelta: i32, 
+        maxsteps: u16,
+        mut callback: F,
+    ) where F: FnMut(&DotBracketVec, i32) {
+        let mut seen = AHashSet::default();
+        let structure = DotBracketVec::from(&*self);
+        self.recursive_gen_neighbors(&structure, maxdelta, maxsteps, 
+            &mut seen, &mut callback);
     }
 }
 

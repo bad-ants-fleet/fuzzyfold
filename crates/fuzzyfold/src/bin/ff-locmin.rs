@@ -1,31 +1,37 @@
 use std::io::Write;
-use log::info;
 use colored::*;
 use env_logger::Builder;
 use clap::Args;
 use clap::Parser;
 use clap::ArgAction;
+use clap::ArgGroup;
 use anyhow::Result;
-use ahash::AHashMap;
 
-use fuzzyfold::energy::EnergyModel;
-use fuzzyfold::structure::DotBracketVec;
 use fuzzyfold::structure::PairTable;
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
 use fuzzyfold::kinetics::LoopStructure;
-use fuzzyfold::kinetics::reaction::ApplyMove;
 
 
 #[derive(Debug, Args)]
+#[command(
+    group = ArgGroup::new("criterion")
+        .required(true)
+        .multiple(true)
+        .args(["delta", "maxdist"])
+)]
 pub struct LocminInput {
     /// Input file (FASTA-like), or "-" for stdin
     #[arg(value_name = "INPUT", default_value = "-")]
     pub input: String,
 
+    /// give delta energy
+    #[arg(short, long)]
+    pub delta: Option<f64>,
+
     /// Input file (FASTA-like), or "-" for stdin
-    #[arg(short, long, default_value_t = 0.0)]
-    pub delta: f64,
+    #[arg(short, long)]
+    pub maxdist: Option<u16>,
 
     /// Verbosity (-v = info, -vv = debug)
     #[arg(short, long, action = ArgAction::Count)]
@@ -59,55 +65,41 @@ fn init_logging(verbosity: u8) {
         .init();
 }
 
-fn find_neighbors<'a, E: EnergyModel>(
-    lss: &mut LoopStructure<'a, E>,
-    structure: &DotBracketVec,
-    max_delta: i32,
-    neighbors: &mut AHashMap<DotBracketVec, i32>,
-) {
-    let mut mdbr = structure.clone();
-    for (bp_move, delta) in lss.all_moves() {
-        mdbr.apply_move(bp_move);
-        if neighbors.contains_key(&mdbr) {
-            mdbr.undo_move(bp_move);
-            continue;
-        } 
-
-        lss.apply_move(bp_move);
-        neighbors.insert(mdbr.clone(), lss.energy());
-
-        if delta <= max_delta {
-            println!("{} {:>6.2}", lss, (lss.energy() as f64 / 100.0));
-            find_neighbors(lss, structure, max_delta - delta, neighbors);
-        } else {
-            //println!("{} {:>6.2} *", lss, (lss.energy() as f64 / 100.0));
-        }
-        lss.undo_move(bp_move);
-        mdbr.undo_move(bp_move);
-    }
-}
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
     init_logging(cli.lmin.verbose);
-
     let emodel = cli.energy.build_model();
-
     let (header, sequence, structure) = read_eval_input(&cli.lmin.input)?;
-    if let Some(h) = header {
-        println!("{}", h.yellow())
-    } else {
-        println!(">LM delta={:<.2}", cli.lmin.delta)
-    }
-    println!("{}", sequence);
-
-
     let pairings = PairTable::try_from(&structure)?;
+
+    let (delta, distance, info) = match (cli.lmin.delta, cli.lmin.maxdist) {
+        (Some(d), None) => {
+            ((d * 100.0) as i32, u16::MAX, format!("delta = {:<.2}", d))
+        },
+        (None, Some(n)) => (i32::MAX/2, n, format!("maxdist = {}", n)),
+        (Some(d), Some(n)) => ((d * 100.0) as i32, n, format!("delta = {:<.2} maxdist = {}", d, n)),
+        _ => unreachable!("clap guarantees one is set"),
+    };
+
+    if let Some(h) = header {
+        println!("{} ({})", h.yellow(), info);
+        println!("{}", sequence);
+    } else {
+        println!(">LM ({})", info);
+        println!("{}", sequence);
+    }
+
     let mut lss = LoopStructure::try_from((&sequence[..], &pairings, &emodel)).unwrap();
-    println!("{} {:>6.2}", lss, (lss.energy() as f64 / 100.0));
-    let mut neighbors = AHashMap::default();
-    let delta = (cli.lmin.delta * 100.).round() as i32;
-    find_neighbors(&mut lss, &structure, delta, &mut neighbors);
+
+    let mut neighbors = Vec::new();
+    lss.generate_neighbors(delta, distance, 
+        |db, en| { neighbors.push((db.clone(), en)); }
+    );
+    neighbors.sort_by_key(|(_, en)| *en);
+
+    for (db, en) in &neighbors {
+        println!("{} {:.2}", db, *en as f64 / 100.0);
+    }
 
     Ok(())
 

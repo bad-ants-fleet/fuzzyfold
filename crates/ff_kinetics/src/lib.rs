@@ -2,7 +2,6 @@ pub mod timeline;
 pub mod timeline_io;
 pub mod timeline_plotting;
 pub mod reaction;
-pub mod commit_and_delay;
 
 mod rate_model;
 mod loop_structure;
