@@ -31,7 +31,7 @@ pub struct LocminInput {
 
     /// Input file (FASTA-like), or "-" for stdin
     #[arg(short, long)]
-    pub maxdist: Option<u16>,
+    pub maxdist: Option<usize>,
 
     /// Verbosity (-v = info, -vv = debug)
     #[arg(short, long, action = ArgAction::Count)]
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
 
     let (delta, distance, info) = match (cli.lmin.delta, cli.lmin.maxdist) {
         (Some(d), None) => {
-            ((d * 100.0) as i32, u16::MAX, format!("delta = {:<.2}", d))
+            ((d * 100.0) as i32, usize::MAX, format!("delta = {:<.2}", d))
         },
         (None, Some(n)) => (i32::MAX/2, n, format!("maxdist = {}", n)),
         (Some(d), Some(n)) => ((d * 100.0) as i32, n, format!("delta = {:<.2} maxdist = {}", d, n)),
@@ -93,13 +93,17 @@ fn main() -> Result<()> {
 
     let mut neighbors = Vec::new();
     lss.generate_neighbors(delta, distance, 
-        |db, en| { neighbors.push((db.clone(), en)); }
+        |db, en| { 
+            //println!("{} {:.2}", db, en as f64 / 100.0);
+            neighbors.push((db.clone(), en)); }
     );
+
     neighbors.sort_by_key(|(_, en)| *en);
 
-    for (db, en) in &neighbors {
-        println!("{} {:.2}", db, *en as f64 / 100.0);
-    }
+    //for (db, en) in &neighbors {
+    //    println!("{} {:.2}", db, *en as f64 / 100.0);
+    //}
+    println!("{}", neighbors.len());
 
     Ok(())
 

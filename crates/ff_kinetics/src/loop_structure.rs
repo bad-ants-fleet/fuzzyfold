@@ -1,9 +1,6 @@
 use std::fmt;
-use ahash::AHashSet;
 use nohash_hasher::IntMap;
 use nohash_hasher::IntSet;
-use crate::reaction::Move;
-use crate::reaction::ApplyMove;
 
 use ff_structure::NAIDX;
 use ff_structure::DotBracket;
@@ -173,21 +170,6 @@ impl<'a, M: EnergyModel> fmt::Display for LoopStructure<'a, M> {
 }
 
 impl<'a, M: EnergyModel> LoopStructure<'a, M> {
-    pub fn all_moves(&self) -> Vec<(Move, i32)> {
-        let mut result = Vec::new();
-
-        for (_, add_neighbors) in self.get_add_neighbors_per_loop().iter() {
-            for &(i, j, delta) in add_neighbors {
-                result.push((Move::Add { i, j }, delta));
-            }
-        }
-        for (i, j, delta) in self.get_del_neighbors() {
-            result.push((Move::Del { i, j }, delta));
-        }
-
-        result
-    }
-
     /// Return all add neighbors, including an index that 
     /// is necessary to access the actual loop via loop_lookup.
     pub fn get_add_neighbors_per_loop(&self) -> &IntMap<usize, MoveEnergies> {
@@ -363,56 +345,6 @@ impl<'a, M: EnergyModel> From<&LoopStructure<'a, M>> for DotBracketVec {
         DotBracketVec(vec)
     }
 }
-
-impl<'a, M: EnergyModel> LoopStructure<'a, M> {
-    fn recursive_gen_neighbors<F>(
-        &mut self,
-        structure: &DotBracketVec,
-        max_delta: i32,
-        max_distance: u16,
-        seen: &mut AHashSet<DotBracketVec>,
-        emit: &mut F,
-    ) where F: FnMut(&DotBracketVec, i32)
-    {
-        let mut mdbr = structure.clone();
-        if !seen.insert(structure.clone()) {
-            return;
-        }
-        emit(&mdbr, self.energy());
-
-        for (bp_move, delta) in self.all_moves() {
-            mdbr.apply_move(bp_move);
-            if seen.contains(&mdbr) {
-                mdbr.undo_move(bp_move);
-                continue;
-            } 
-            self.apply_move(bp_move);
-            if delta <= max_delta && max_distance > 0 {
-                self.recursive_gen_neighbors(
-                    &mdbr, 
-                    max_delta - delta, 
-                    max_distance - 1,
-                    seen,
-                    emit,
-                );
-            }
-            self.undo_move(bp_move);
-            mdbr.undo_move(bp_move);
-        }
-    }
-
-    pub fn generate_neighbors<F>(&mut self, 
-        maxdelta: i32, 
-        maxsteps: u16,
-        mut callback: F,
-    ) where F: FnMut(&DotBracketVec, i32) {
-        let mut seen = AHashSet::default();
-        let structure = DotBracketVec::from(&*self);
-        self.recursive_gen_neighbors(&structure, maxdelta, maxsteps, 
-            &mut seen, &mut callback);
-    }
-}
-
 
 #[cfg(test)]
 mod tests {

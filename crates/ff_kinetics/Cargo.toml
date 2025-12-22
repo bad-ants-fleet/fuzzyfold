@@ -26,8 +26,13 @@ serde.workspace = true
 serde_json.workspace = true
 
 [[bench]]
+name = "explore"
+harness = false
+
+[[bench]]
 name = "stochastic_simulation"
 harness = false
+
 
 [badges]
 maintenance = { status = "actively-developed" }
