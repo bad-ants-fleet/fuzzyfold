@@ -1,6 +1,5 @@
 use std::fmt;
 use rand::Rng; // -> R
-use nohash_hasher::IntMap;
 
 use ff_structure::NAIDX;
 use ff_energy::EnergyModel; // -> E
@@ -9,7 +8,6 @@ use crate::RateModel; // -> K
 use crate::LoopStructure;
 use crate::explore::Move;
 use crate::rate_tree::RateTree;
-use crate::rate_tree::RateList;
 
 /// An SSA implementation for LoopStructure.
 pub struct LoopStructureSSA<'a, E: EnergyModel, K: RateModel> {
@@ -19,8 +17,6 @@ pub struct LoopStructureSSA<'a, E: EnergyModel, K: RateModel> {
     ratemodel: &'a K,
     /// Heap-like data structure for sampling.
     rate_tree: RateTree,
-    /// Selecting the move from loop-reaction.
-    loop_lists: IntMap<usize, RateList>,
 }
 
 impl<'a, E, K> fmt::Debug for LoopStructureSSA<'a, E, K>
@@ -41,18 +37,11 @@ impl<'a, E: EnergyModel, K: RateModel> From<(LoopStructure<'a, E>, &'a K)>
 {
     fn from((loopstructure, ratemodel): (LoopStructure<'a, E>, &'a K)) -> Self {
         let mut rate_tree = RateTree::new(loopstructure.len());
-        let mut loop_lists = IntMap::default();
 
-        for (lli, add_neighbors) in loopstructure.get_add_neighbors_per_loop().iter() {
-            let mut llist = RateList::new(add_neighbors.len());
+        for (_, add_neighbors) in loopstructure.get_add_neighbors_per_loop().iter() {
             for &(i, j, delta) in add_neighbors {
-                llist.insert(Move::Add { i, j }, ratemodel.rate(delta));
+                rate_tree.insert(Move::Add { i, j }, ratemodel.rate(delta));
             }
-            if !llist.is_empty() {
-                assert!(*lli < 65000, "can't convert to NAIDX!");
-                rate_tree.insert(Move::Loop { idx: *lli as NAIDX }, llist.total_rate())
-            }
-            loop_lists.insert(*lli, llist);
         }
 
         for (i, j, delta) in loopstructure.get_del_neighbors() {
@@ -63,7 +52,6 @@ impl<'a, E: EnergyModel, K: RateModel> From<(LoopStructure<'a, E>, &'a K)>
             ratemodel,
             loopstructure,
             rate_tree,
-            loop_lists,
         }
     }
 }
@@ -73,35 +61,16 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
         format!("{}", self.loopstructure)
     }   
 
-    pub fn remove_loop_reaction(&mut self, i: NAIDX) {
-        let lli = self.loopstructure.loop_lookup().get(&i).unwrap();
-        let llist = self.loop_lists.remove(lli).expect("Reaction must exist.");
-        if !llist.is_empty() && !self.rate_tree.remove(&Move::Loop { idx: *lli as NAIDX}) {
-            panic!("Could not find loop-reaction in RateTree!");
-        }
-    }
-
-    pub fn remove_pair_reaction(&mut self, (i, j): (NAIDX, NAIDX)) {
-        if !self.rate_tree.remove(&Move::Del { i, j }) {
-            panic!("Could not find pair-reaction in RateTree!");
-        }
-        self.remove_loop_reaction(i);
-        self.remove_loop_reaction(j);
-    }
-
-    pub fn insert_loop_reactions(&mut self, 
-        lli: usize, 
+    pub fn update_loop_reactions(&mut self, 
         add_neighbors: Vec<(NAIDX, NAIDX, i32)>
     ) {
-        let mut llist = RateList::new(add_neighbors.len());
         for (i, j, delta) in add_neighbors {
-            llist.insert(Move::Add { i, j }, self.ratemodel.rate(delta));
+            let mv = Move::Add { i, j };
+            let rate = self.ratemodel.rate(delta);
+            if !self.rate_tree.update_rate(&mv, rate) {
+                self.rate_tree.insert(mv, rate);
+            }
         }
-        if !llist.is_empty() {
-            assert!(lli < 65000, "can't convert to NAIDX!");
-            self.rate_tree.insert(Move::Loop { idx: lli as NAIDX }, llist.total_rate())
-        }
-        self.loop_lists.insert(lli, llist);
     }
 
     pub fn update_pair_reactions(&mut self, change: Vec<(NAIDX, NAIDX, i32)>) {
@@ -144,24 +113,29 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
             let mv = self.rate_tree.select_by_threshold(threshold);
 
             match mv {
-                Some((_, Move::Del { i, j })) => {
-                    self.remove_pair_reaction((i, j));
-                    let ((lli, neighbors), pair_changes) = self
+                Some(del @ Move::Del { i, j }) => {
+                    self.rate_tree.remove(del);
+                    let (neighbors, pair_changes) = self
                         .loopstructure.apply_del_move(i, j);
-                    self.insert_loop_reactions(lli, neighbors);
+                    self.update_loop_reactions(neighbors);
                     self.update_pair_reactions(pair_changes);
                 },
-                Some((th, Move::Loop { idx })) => {
-                    let llist = self.loop_lists.get(&(idx as usize)).unwrap();
-                    let (i, j) = llist.select_by_threshold(th).ij();
-                    self.remove_loop_reaction(i);
-                    let ((lli, ami), (llj, amj), pair_changes) = self
+                Some(add @ Move::Add { i, j }) => {
+                    self.rate_tree.remove(add);
+                    let lli = self.loopstructure.loop_lookup().get(&i).unwrap();
+                    for &(p, q, _) in self.loopstructure.get_add_neighbors_per_loop()[lli].iter() {
+                        if q < i || p > j || (i < p && q < j) || (p < i && j < q) {
+                            continue;
+                        }
+                        self.rate_tree.remove(Move::Add { i: p, j: q });
+                    }
+                    let (ami, amj, pair_changes) = self
                         .loopstructure.apply_add_move(i, j);
-                    self.insert_loop_reactions(lli, ami);
-                    self.insert_loop_reactions(llj, amj);
+                    self.update_loop_reactions(ami);
+                    self.update_loop_reactions(amj);
                     self.update_pair_reactions(pair_changes);
                 },
-                _ => panic!("No reaction chosen despite positive flux"),
+                None => panic!("No reaction chosen despite positive flux"),
             }
         }
     }

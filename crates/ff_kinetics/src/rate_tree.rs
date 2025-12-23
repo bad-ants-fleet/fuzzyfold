@@ -1,6 +1,4 @@
-
-use ff_structure::P1KEY;
-use nohash_hasher::IntMap;
+use ahash::AHashMap;
 
 use crate::explore::Move;
 
@@ -15,15 +13,18 @@ struct MoveNode {
 pub struct RateList {
     moves: Vec<Move>,
     rates: Vec<f64>,
+    total: f64,
 }
 
 impl RateList {
     pub fn new(capacity: usize) -> Self {
         let moves = Vec::with_capacity(capacity);
         let rates = Vec::with_capacity(capacity);
+        let total = 0.0;
         RateList {
             moves,
             rates,
+            total,
         }
     }
 
@@ -34,10 +35,11 @@ impl RateList {
     pub fn insert(&mut self, mv: Move, rate: f64) {
         self.moves.push(mv);
         self.rates.push(rate);
+        self.total += rate;
     }
 
     pub fn total_rate(&self) -> f64 {
-        self.rates.iter().sum()
+        self.total
     }
 
     pub fn select_by_threshold(&self, mut threshold: f64) -> Move {
@@ -47,6 +49,7 @@ impl RateList {
                 return mv;
             }
         }
+        //println!("RateList: roundoff error! This should be extremely rare!");
         *self.moves.last().expect("RateList is empty")
     }
 
@@ -58,7 +61,7 @@ pub struct RateTree {
     /// A 1-based vector of Moves.
     entries: Vec<MoveNode>,
     /// To access the index given the Move.
-    pos_map: IntMap<P1KEY, usize>,
+    pos_map: AHashMap<Move, usize>,
 }
 
 impl RateTree {
@@ -75,7 +78,7 @@ impl RateTree {
         }); 
         Self {
             entries,
-            pos_map: IntMap::default(),
+            pos_map: AHashMap::with_capacity(capacity),
         }
     }
 
@@ -143,22 +146,24 @@ impl RateTree {
             mv,
         });
 
-        self.pos_map.insert(mv.key(), idx);
+        self.pos_map.insert(mv, idx);
         self.update_partial_sums(self.parent_idx(idx));
     }
 
     pub fn update_rate(&mut self, mv: &Move, new_rate: f64) -> bool {
-        if let Some(&idx) = self.pos_map.get(&mv.key()) {
-            self.entries[idx].rate = new_rate;
-            self.update_partial_sums(idx);
+        if let Some(&idx) = self.pos_map.get(mv) {
+            if (self.entries[idx].rate - new_rate).abs() > f64::EPSILON {
+                self.entries[idx].rate = new_rate;
+                self.update_partial_sums(idx);
+            } 
             true
         } else {
             false
         }
     }
 
-    pub fn remove(&mut self, mv: &Move) -> bool {
-        let idx = match self.pos_map.remove(&mv.key()) {
+    pub fn remove(&mut self, mv: Move) -> bool {
+        let idx = match self.pos_map.remove(&mv) {
             Some(i) => i,
             None => return false,
         };
@@ -167,8 +172,8 @@ impl RateTree {
 
         if idx != last {
             let last_node = self.entries[last].clone();
-            self.entries[idx] = last_node.clone();
-            self.pos_map.insert(last_node.mv.key(), idx);
+            self.pos_map.insert(last_node.mv, idx);
+            self.entries[idx] = last_node;
             self.update_partial_sums(idx);
         }
 
@@ -179,14 +184,13 @@ impl RateTree {
         true
     }
 
-    pub fn select_by_threshold(&self, mut thresh: f64) -> Option<(f64, Move)> {
+    pub fn select_by_threshold(&self, mut thresh: f64) -> Option<Move> {
         let mut i = 1;
         while i < self.entries.len() {
             let node = &self.entries[i];
             thresh -= node.rate;
             if thresh <= 0.0 {
-                thresh += node.rate;
-                return Some((thresh, node.mv));
+                return Some(node.mv);
             }
             if let Some((l, entry)) = self.left_child(i) {
                 if thresh < entry.rate_sum {
@@ -200,10 +204,10 @@ impl RateTree {
                 break;
             }
         }
+        //println!("RateTree: roundoff error! This should be extremely rare!");
         self.entries
             .last()
-            .map(|n| (0.0, n.mv))
+            .map(|n| n.mv)
     }
 }
-
 

@@ -222,7 +222,7 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
     }
   
     pub fn apply_del_move(&mut self, i: NAIDX, j: NAIDX) -> 
-        (IndexedLoopNeighbors, MoveEnergies) {
+        (MoveEnergies, MoveEnergies) {
         debug_assert_eq!(&j,
             self.pair_list.get(&i).expect("Missing pair_list entry."));
         let &delta = self.pair_neighbors.get(&i).expect("Missing pair_neighbors entry.");
@@ -245,13 +245,13 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
         }
 
         let pair_changes = self.update_pair_neighbors(&combo.pairs());
-        ((o_index, loop_neighbors), pair_changes)
+        (loop_neighbors, pair_changes)
     }
 
     pub fn apply_add_move(&mut self, i: NAIDX, j: NAIDX
     ) -> (
-        IndexedLoopNeighbors,
-        IndexedLoopNeighbors,
+        MoveEnergies,
+        MoveEnergies,
         MoveEnergies,
     ) {
         let &c_index = self.loop_lookup.get(&i).expect("Missing loop_lookup entry for i.");
@@ -287,9 +287,7 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
         let mut pair_changes = self.update_pair_neighbors(combo_pairs);
         pair_changes.push((i, j, delta));
 
-        ((o_id, new_outer_add_neighbors),
-         (i_id, new_inner_add_neighbors),
-        pair_changes)
+        (new_outer_add_neighbors, new_inner_add_neighbors, pair_changes)
     }
 
 }

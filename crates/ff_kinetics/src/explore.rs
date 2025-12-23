@@ -2,14 +2,13 @@ use log::info;
 use ahash::AHashSet;
 
 use ff_structure::NAIDX;
-use ff_structure::P1KEY;
 use ff_structure::DotBracket;
 use ff_structure::DotBracketVec;
 use ff_energy::EnergyModel;
 
 use crate::LoopStructure;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub enum Move {
     Add {
         i: NAIDX,
@@ -19,9 +18,6 @@ pub enum Move {
         i: NAIDX,
         j: NAIDX,
     },
-    Loop {
-        idx: NAIDX,
-    }
 }
 
 impl Move {
@@ -29,7 +25,6 @@ impl Move {
         match self {
             Move::Add { i, j } => Move::Del { i, j },
             Move::Del { i, j } => Move::Add { i, j },
-            Move::Loop { .. } => unreachable!("Loop does not have a reverse move!"),
         }
     }
 
@@ -37,15 +32,6 @@ impl Move {
         match self {
             Move::Add { i, j } => (*i, *j),
             Move::Del { i, j } => (*i, *j),
-            Move::Loop { .. } => unreachable!("Loop does not have ij!"),
-        }
-    }
-
-    pub fn key(&self) -> P1KEY {
-        match self {
-            Move::Add { i, j } => ((*i as P1KEY) << 16) | (*j as P1KEY),
-            Move::Del { i, j } => ((*j as P1KEY) << 16) | (*i as P1KEY),
-            Move::Loop { idx } => ((*idx as P1KEY) << 16) | (*idx as P1KEY),
         }
     }
 }
@@ -68,7 +54,6 @@ impl ApplyMove for DotBracketVec {
                 self[i as usize] = DotBracket::Unpaired;
                 self[j as usize] = DotBracket::Unpaired;
             }
-            _ => unreachable!("Move cannot be applied.")
         }
     }
 }
@@ -82,7 +67,6 @@ impl<'a, E: EnergyModel> ApplyMove for LoopStructure<'a, E> {
             Move::Del { i, j } => {
                 self.apply_del_move(i, j);
             }
-            _ => unreachable!("Move cannot be applied.")
         }
     }
 }
