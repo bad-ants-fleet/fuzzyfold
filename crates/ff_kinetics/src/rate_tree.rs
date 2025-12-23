@@ -1,0 +1,209 @@
+
+use ff_structure::P1KEY;
+use nohash_hasher::IntMap;
+
+use crate::explore::Move;
+
+#[derive(Clone, Debug)]
+struct MoveNode {
+    rate: f64,
+    rate_sum: f64,
+    mv: Move,
+}
+
+/// A binary tree storing all possible moves.
+pub struct RateList {
+    moves: Vec<Move>,
+    rates: Vec<f64>,
+}
+
+impl RateList {
+    pub fn new(capacity: usize) -> Self {
+        let moves = Vec::with_capacity(capacity);
+        let rates = Vec::with_capacity(capacity);
+        RateList {
+            moves,
+            rates,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rates.is_empty()
+    }
+
+    pub fn insert(&mut self, mv: Move, rate: f64) {
+        self.moves.push(mv);
+        self.rates.push(rate);
+    }
+
+    pub fn total_rate(&self) -> f64 {
+        self.rates.iter().sum()
+    }
+
+    pub fn select_by_threshold(&self, mut threshold: f64) -> Move {
+        for (&rate, &mv) in self.rates.iter().zip(self.moves.iter()) {
+            threshold -= rate;
+            if threshold <= 0.0 {
+                return mv;
+            }
+        }
+        *self.moves.last().expect("RateList is empty")
+    }
+
+}
+
+
+/// A binary tree storing all possible moves.
+pub struct RateTree {
+    /// A 1-based vector of Moves.
+    entries: Vec<MoveNode>,
+    /// To access the index given the Move.
+    pos_map: IntMap<P1KEY, usize>,
+}
+
+impl RateTree {
+
+    /// Initialization of a RateTree. 
+    /// As capacity, think about how many moves you expect.
+    /// Roughly the number of base-pairs in the MFE?
+    pub fn new(capacity: usize) -> Self {
+        let mut entries = Vec::with_capacity(capacity + 1);
+        entries.push(MoveNode {
+            rate: 0.0,
+            rate_sum: 0.0,
+            mv: Move::Add { i: 0, j: 0 },
+        }); 
+        Self {
+            entries,
+            pos_map: IntMap::default(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len() - 1
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.len() == 1
+    }
+
+    pub fn total_rate(&self) -> f64 {
+        if self.is_empty() {
+            0.0
+        } else {
+            self.entries[1].rate_sum
+        }
+    }
+    
+    fn parent_idx(&self, i: usize) -> usize {
+        i/2
+    }
+
+    fn left_child(&self, i: usize) -> Option<(usize, &MoveNode)>{
+        let pos = 2 * i;
+        if pos < self.entries.len() {
+            Some((pos, &self.entries[pos]))
+        } else {
+            None
+        }
+    }
+
+    fn right_child(&self, i: usize) -> Option<(usize, &MoveNode)>{
+        let pos = 2 * i + 1;
+        if pos < self.entries.len() {
+            Some((pos, &self.entries[pos]))
+        } else {
+            None
+        }
+    }
+
+    fn update_partial_sums(&mut self, mut i: usize) {
+        while i >= 1 {
+            let mut sum = self.entries[i].rate;
+            if let Some((_, entry)) = self.left_child(i) {
+                sum += entry.rate_sum;
+                if let Some((_, entry)) = self.right_child(i) {
+                    sum += entry.rate_sum;
+                }
+            }
+            self.entries[i].rate_sum = sum;
+            if i == 1 {
+                break;
+            }
+            i = self.parent_idx(i);
+        }
+    }
+
+    pub fn insert(&mut self, mv: Move, rate: f64) {
+        let idx = self.entries.len();
+
+        self.entries.push(MoveNode {
+            rate,
+            rate_sum: rate,
+            mv,
+        });
+
+        self.pos_map.insert(mv.key(), idx);
+        self.update_partial_sums(self.parent_idx(idx));
+    }
+
+    pub fn update_rate(&mut self, mv: &Move, new_rate: f64) -> bool {
+        if let Some(&idx) = self.pos_map.get(&mv.key()) {
+            self.entries[idx].rate = new_rate;
+            self.update_partial_sums(idx);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn remove(&mut self, mv: &Move) -> bool {
+        let idx = match self.pos_map.remove(&mv.key()) {
+            Some(i) => i,
+            None => return false,
+        };
+
+        let last = self.entries.len() - 1;
+
+        if idx != last {
+            let last_node = self.entries[last].clone();
+            self.entries[idx] = last_node.clone();
+            self.pos_map.insert(last_node.mv.key(), idx);
+            self.update_partial_sums(idx);
+        }
+
+        self.entries.pop();
+        if last >= 1 {
+            self.update_partial_sums(self.parent_idx(last));
+        }
+        true
+    }
+
+    pub fn select_by_threshold(&self, mut thresh: f64) -> Option<(f64, Move)> {
+        let mut i = 1;
+        while i < self.entries.len() {
+            let node = &self.entries[i];
+            thresh -= node.rate;
+            if thresh <= 0.0 {
+                thresh += node.rate;
+                return Some((thresh, node.mv));
+            }
+            if let Some((l, entry)) = self.left_child(i) {
+                if thresh < entry.rate_sum {
+                    i = l;
+                    continue;
+                } else {
+                    thresh -= entry.rate_sum;
+                    i = l + 1;
+                }
+            } else {
+                break;
+            }
+        }
+        self.entries
+            .last()
+            .map(|n| (0.0, n.mv))
+    }
+}
+
+

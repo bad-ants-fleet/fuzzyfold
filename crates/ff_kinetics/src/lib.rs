@@ -1,7 +1,7 @@
 pub mod timeline;
 pub mod timeline_io;
 pub mod timeline_plotting;
-pub mod reaction;
+pub mod rate_tree;
 
 mod rate_model;
 mod loop_structure;

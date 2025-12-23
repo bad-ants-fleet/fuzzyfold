@@ -10,16 +10,16 @@ use ff_energy::LoopDecomposition;
 use ff_energy::EnergyModel;
 use ff_energy::Base;
 
-struct LoopCache<'a, M: EnergyModel> {
+struct LoopCache<'a, E: EnergyModel> {
     sequence: &'a [Base],
-    model: &'a M,
+    model: &'a E,
     loop_list: IntMap<usize, (NearestNeighborLoop, i32)>,
     l_indices: IntSet<usize>,
 }
 
-impl<'a, M: EnergyModel> LoopCache<'a, M> {
+impl<'a, E: EnergyModel> LoopCache<'a, E> {
 
-    pub fn new(sequence: &'a [Base], model: &'a M) -> Self {
+    pub fn new(sequence: &'a [Base], model: &'a E) -> Self {
         Self { 
             sequence,
             model,
@@ -116,8 +116,8 @@ impl<'a, M: EnergyModel> LoopCache<'a, M> {
 type MoveEnergies = Vec<(NAIDX, NAIDX, i32)>;
 type IndexedLoopNeighbors = (usize, MoveEnergies);
 
-pub struct LoopStructure<'a, M: EnergyModel> {
-    registry: LoopCache<'a, M>,
+pub struct LoopStructure<'a, E: EnergyModel> {
+    registry: LoopCache<'a, E>,
     /// From sequence index to registry index.
     loop_lookup: IntMap<NAIDX, usize>, 
     /// registry index to list of (i, j, deltaE)
@@ -128,7 +128,7 @@ pub struct LoopStructure<'a, M: EnergyModel> {
     pair_neighbors: IntMap<NAIDX, i32>, 
 }
 
-impl<'a, M: EnergyModel> Clone for LoopStructure<'a, M> {
+impl<'a, E: EnergyModel> Clone for LoopStructure<'a, E> {
     fn clone(&self) -> Self {
         Self {
             registry: LoopCache {
@@ -145,7 +145,7 @@ impl<'a, M: EnergyModel> Clone for LoopStructure<'a, M> {
     }
 }
 
-impl<'a, M: EnergyModel> fmt::Debug for LoopStructure<'a, M> {
+impl<'a, E: EnergyModel> fmt::Debug for LoopStructure<'a, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LoopStructure")
             .field("loop_lookup", &self.loop_lookup)
@@ -156,7 +156,7 @@ impl<'a, M: EnergyModel> fmt::Debug for LoopStructure<'a, M> {
     }
 }
 
-impl<'a, M: EnergyModel> fmt::Display for LoopStructure<'a, M> {
+impl<'a, E: EnergyModel> fmt::Display for LoopStructure<'a, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Convert sequence to string
         let mut dbr = vec!['.'; self.registry.sequence.len()];
@@ -169,13 +169,21 @@ impl<'a, M: EnergyModel> fmt::Display for LoopStructure<'a, M> {
     }
 }
 
-impl<'a, M: EnergyModel> LoopStructure<'a, M> {
+impl<'a, E: EnergyModel> LoopStructure<'a, E> {
     /// Return all add neighbors, including an index that 
     /// is necessary to access the actual loop via loop_lookup.
     pub fn get_add_neighbors_per_loop(&self) -> &IntMap<usize, MoveEnergies> {
         &self.loop_neighbors
     }
+
+    pub fn len(&self) -> usize {
+        self.pair_neighbors.len() + self.loop_neighbors.len()
+    }
  
+    pub fn is_empty(&self) -> bool {
+        self.pair_neighbors.is_empty() && self.loop_neighbors.is_empty()
+    }
+
     /// Return all remove neighbors, where all i, j are also
     /// the indices to access the outer/inner loop via loop_lookup.
     pub fn get_del_neighbors(&self) -> MoveEnergies {
@@ -286,10 +294,10 @@ impl<'a, M: EnergyModel> LoopStructure<'a, M> {
 
 }
 
-impl<'a, T: LoopDecomposition, M: EnergyModel> TryFrom<(&'a [Base], &T, &'a M)> for LoopStructure<'a, M> {
+impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> for LoopStructure<'a, E> {
     type Error = String;
 
-    fn try_from((sequence, pairings, model): (&'a [Base], &T, &'a M)
+    fn try_from((sequence, pairings, model): (&'a [Base], &T, &'a E)
     ) -> Result<Self, Self::Error> {
         let mut registry = LoopCache::new(sequence, model);
         let mut pair_list: IntMap<NAIDX, NAIDX>  = IntMap::default();
@@ -334,8 +342,8 @@ impl<'a, T: LoopDecomposition, M: EnergyModel> TryFrom<(&'a [Base], &T, &'a M)> 
 
 }
 
-impl<'a, M: EnergyModel> From<&LoopStructure<'a, M>> for DotBracketVec {
-    fn from(ls: &LoopStructure<'a, M>) -> Self {
+impl<'a, E: EnergyModel> From<&LoopStructure<'a, E>> for DotBracketVec {
+    fn from(ls: &LoopStructure<'a, E>) -> Self {
         // Use the same logic as your Display impl, but avoid allocating a String unnecessarily
         let mut vec = vec![DotBracket::Unpaired; ls.registry.sequence.len()];
         for (i, j) in &ls.pair_list {

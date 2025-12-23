@@ -1,14 +1,15 @@
 use log::info;
 use ahash::AHashSet;
+
 use ff_structure::NAIDX;
+use ff_structure::P1KEY;
 use ff_structure::DotBracket;
 use ff_structure::DotBracketVec;
-
 use ff_energy::EnergyModel;
 
 use crate::LoopStructure;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Move {
     Add {
         i: NAIDX,
@@ -18,6 +19,9 @@ pub enum Move {
         i: NAIDX,
         j: NAIDX,
     },
+    Loop {
+        idx: NAIDX,
+    }
 }
 
 impl Move {
@@ -25,6 +29,23 @@ impl Move {
         match self {
             Move::Add { i, j } => Move::Del { i, j },
             Move::Del { i, j } => Move::Add { i, j },
+            Move::Loop { .. } => unreachable!("Loop does not have a reverse move!"),
+        }
+    }
+
+    pub fn ij(&self) -> (NAIDX, NAIDX) {
+        match self {
+            Move::Add { i, j } => (*i, *j),
+            Move::Del { i, j } => (*i, *j),
+            Move::Loop { .. } => unreachable!("Loop does not have ij!"),
+        }
+    }
+
+    pub fn key(&self) -> P1KEY {
+        match self {
+            Move::Add { i, j } => ((*i as P1KEY) << 16) | (*j as P1KEY),
+            Move::Del { i, j } => ((*j as P1KEY) << 16) | (*i as P1KEY),
+            Move::Loop { idx } => ((*idx as P1KEY) << 16) | (*idx as P1KEY),
         }
     }
 }
@@ -47,11 +68,12 @@ impl ApplyMove for DotBracketVec {
                 self[i as usize] = DotBracket::Unpaired;
                 self[j as usize] = DotBracket::Unpaired;
             }
+            _ => unreachable!("Move cannot be applied.")
         }
     }
 }
 
-impl<'a, M: EnergyModel> ApplyMove for LoopStructure<'a, M> { 
+impl<'a, E: EnergyModel> ApplyMove for LoopStructure<'a, E> { 
     fn apply_move(&mut self, mv: Move) {
         match mv {
             Move::Add { i, j } => {
@@ -60,6 +82,7 @@ impl<'a, M: EnergyModel> ApplyMove for LoopStructure<'a, M> {
             Move::Del { i, j } => {
                 self.apply_del_move(i, j);
             }
+            _ => unreachable!("Move cannot be applied.")
         }
     }
 }
@@ -72,7 +95,7 @@ struct Frame {
     max_delta: i32,
 }
 
-impl<'a, M: EnergyModel> LoopStructure<'a, M> {
+impl<'a, E: EnergyModel> LoopStructure<'a, E> {
     pub fn all_moves(&self) -> Vec<(Move, i32)> {
         let mut result = Vec::new();
 
