@@ -1,4 +1,3 @@
-use std::fmt;
 use rand::Rng; // -> R
 
 use ff_structure::NAIDX;
@@ -19,15 +18,18 @@ pub struct LoopStructureSSA<'a, E: EnergyModel, K: RateModel> {
     rate_tree: RateTree,
 }
 
-impl<'a, E, K> fmt::Debug for LoopStructureSSA<'a, E, K>
+// NOTE: A basic implementation for debugging. Feel free to adapt.
+// This code is not performance-critical and not considered part of the stable API.
+#[cfg(debug_assertions)]
+impl<'a, E, K> std::fmt::Debug for LoopStructureSSA<'a, E, K>
 where
     E: EnergyModel,
-    K: RateModel + fmt::Debug,
+    K: RateModel + std::fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LoopStructureSSA")
-            .field("ratemodel", &self.ratemodel) 
             .field("loopstructure", &format!("{}", self.loopstructure))
+            .field("ratemodel", &self.ratemodel) 
             .finish()
     }
 }
@@ -40,13 +42,15 @@ impl<'a, E: EnergyModel, K: RateModel> From<(LoopStructure<'a, E>, &'a K)>
 
         for (_, add_neighbors) in loopstructure.get_add_neighbors_per_loop().iter() {
             for &(i, j, delta) in add_neighbors {
-                rate_tree.insert(Move::Add { i, j }, ratemodel.rate(delta));
+                rate_tree.init_insert(Move::Add { i, j }, ratemodel.rate(delta));
             }
         }
 
         for (i, j, delta) in loopstructure.get_del_neighbors() {
-            rate_tree.insert(Move::Del { i, j }, ratemodel.rate(delta));
+            rate_tree.init_insert(Move::Del { i, j }, ratemodel.rate(delta));
         }
+
+        rate_tree.init_partial_sums();
 
         Self {
             ratemodel,
@@ -61,28 +65,7 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
         format!("{}", self.loopstructure)
     }   
 
-    pub fn update_loop_reactions(&mut self, 
-        add_neighbors: Vec<(NAIDX, NAIDX, i32)>
-    ) {
-        for (i, j, delta) in add_neighbors {
-            let mv = Move::Add { i, j };
-            let rate = self.ratemodel.rate(delta);
-            if !self.rate_tree.update_rate(&mv, rate) {
-                self.rate_tree.insert(mv, rate);
-            }
-        }
-    }
-
-    pub fn update_pair_reactions(&mut self, change: Vec<(NAIDX, NAIDX, i32)>) {
-        for (i, j, delta) in change {
-            let mv = Move::Del { i, j };
-            let rate = self.ratemodel.rate(delta);
-            if !self.rate_tree.update_rate(&mv, rate) {
-                self.rate_tree.insert(mv, rate);
-            }
-        }
-    }
-
+    /// Main simulation function.
     pub fn simulate<R, F>(
         &mut self,
         rng: &mut R,
@@ -114,6 +97,8 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
 
             match mv {
                 Some(del @ Move::Del { i, j }) => {
+                    // We use "dirty replace, without changing the rate, because the loop 
+                    // will be updated afterwards as part of the new loop reactions.
                     if !self.rate_tree.dirty_replace(&del, &Move::Add {i, j}) {
                         panic!("Dirty rate replacement failed.");
                     }
@@ -123,15 +108,22 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
                     self.update_pair_reactions(pair_changes);
                 },
                 Some(add @ Move::Add { i, j }) => {
+                    // We use "dirty replace, without changing the rate, because the loop 
+                    // will be updated afterwards as part of the new pair reactions.
                     if !self.rate_tree.dirty_replace(&add, &Move::Del {i, j}) {
                         panic!("Dirty rate replacement failed.");
                     }
-                    let lli = self.loopstructure.loop_lookup().get(&i).unwrap();
-                    for &(p, q, _) in self.loopstructure.get_add_neighbors_per_loop()[lli].iter() {
-                        if q < i || p > j || (i < p && q < j) || (p < i && j < q) {
-                            continue;
+                    // Get the loop-list index to remove loop reactions.
+                    if let Some(lli) = self.loopstructure.loop_lookup().get(&i) {
+                        for &(p, q, _) in self.loopstructure.get_add_neighbors_per_loop()[lli].iter() {
+                            // Those are the ones that will be updated later anyway.
+                            if q < i || j < p || (i < p && q < j) || (p < i && j < q) {
+                                continue;
+                            }
+                            self.rate_tree.remove(Move::Add { i: p, j: q });
                         }
-                        self.rate_tree.remove(Move::Add { i: p, j: q });
+                    } else {
+                        panic!("Could not find loop list index!");
                     }
                     let (ami, amj, pair_changes) = self
                         .loopstructure.apply_add_move(i, j);
@@ -140,6 +132,34 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
                     self.update_pair_reactions(pair_changes);
                 },
                 None => panic!("No reaction chosen despite positive flux"),
+            }
+        }
+    }
+
+    /// Update all reactions to add a new pair within a specific loop. 
+    fn update_loop_reactions(
+        &mut self, 
+        add_neighbors: Vec<(NAIDX, NAIDX, i32)>
+    ) {
+        for (i, j, delta) in add_neighbors {
+            let mv = Move::Add { i, j };
+            let rate = self.ratemodel.rate(delta);
+            if !self.rate_tree.update_rate(&mv, rate) {
+                self.rate_tree.insert(mv, rate);
+            }
+        }
+    }
+
+    /// Update all reactions that remove an existing pair. 
+    fn update_pair_reactions(
+        &mut self, 
+        change: Vec<(NAIDX, NAIDX, i32)>
+    ) {
+        for (i, j, delta) in change {
+            let mv = Move::Del { i, j };
+            let rate = self.ratemodel.rate(delta);
+            if !self.rate_tree.update_rate(&mv, rate) {
+                self.rate_tree.insert(mv, rate);
             }
         }
     }
@@ -156,7 +176,6 @@ mod tests {
     use ff_energy::NucleotideVec;
     use crate::Metropolis;
 
-    // --- The actual test ----------------------------------------------------
     #[test]
     fn test_simple_ssa_simulation() {
         let emodel = ViennaRNA::default();
@@ -164,11 +183,10 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
 
         let sequence = "CAAAG";
-        let structure = ".....";
+        let pairings = ".....";
 
         let sequence = NucleotideVec::try_from(sequence).unwrap();
-        let pairings = PairTable::try_from(structure)
-            .expect("invalid structure in input");
+        let pairings = PairTable::try_from(pairings).unwrap();
         let loops = LoopStructure::try_from((&sequence[..], &pairings, &emodel))
             .expect("failed to build loop structure");
 
@@ -183,9 +201,7 @@ mod tests {
             );
             true
         });
-
         assert!(steps > 0, "Simulation must perform at least one step");
-        //assert!(simulator.log_flux.is_finite(), "Flux must remain finite");
     }
 }
 

@@ -51,6 +51,31 @@ impl RateTree {
         }
     }
     
+    pub fn init_insert(&mut self, mv: Move, rate: f64) {
+        let idx = self.entries.len();
+
+        self.entries.push(MoveNode {
+            rate,
+            rate_sum: rate,
+            mv,
+        });
+
+        self.pos_map.insert(mv, idx);
+    }
+
+    pub fn init_partial_sums(&mut self) {
+        for i in (1..=self.parent_idx(self.entries.len() - 1)).rev() {
+            let mut sum = self.entries[i].rate;
+            if let Some((_, entry)) = self.left_child(i) {
+                sum += entry.rate_sum;
+                if let Some((_, entry)) = self.right_child(i) {
+                    sum += entry.rate_sum;
+                }
+            }
+            self.entries[i].rate_sum = sum;
+        }
+    }
+
     fn parent_idx(&self, i: usize) -> usize {
         i/2
     }
@@ -75,16 +100,17 @@ impl RateTree {
 
     fn update_partial_sums(&mut self, mut i: usize) {
         while i >= 1 {
-            let osum = self.entries[i].rate_sum;
             let mut sum = self.entries[i].rate;
             if let Some((_, entry)) = self.left_child(i) {
                 sum += entry.rate_sum;
                 if let Some((_, entry)) = self.right_child(i) {
                     sum += entry.rate_sum;
                 }
-            }
-            if (sum - osum).abs() < f64::EPSILON {
-                break
+                // NOTE: Floating-point comparison. We don't know how small rates may be in
+                // practice. This captures when continuation makes certainly no difference.
+                if self.entries[i].rate_sum == sum {
+                    break;
+                }
             }
             self.entries[i].rate_sum = sum;
             if i == 1 {
@@ -169,7 +195,7 @@ impl RateTree {
                 break;
             }
         }
-        //println!("RateTree: roundoff error! This should be extremely rare!");
+        println!("RateTree: roundoff error! This should be extremely rare!");
         self.entries
             .last()
             .map(|n| n.mv)
