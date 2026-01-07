@@ -111,7 +111,7 @@ file, add another 100 simulations, and update the stored timeline accordingly.
 Try it! This is the recommended way to extend your simulation dataset without
 restarting from scratch.
 
-An example output file from $10^4$ aggregated simulations of 1-second runs may look like this:
+An example output file from $10^5$ aggregated simulations of 1-second runs may look like this:
 
 ![Timecourse plot](example_dld3.svg)
 
