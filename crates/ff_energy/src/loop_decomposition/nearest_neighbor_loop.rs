@@ -9,14 +9,13 @@ use std::ops::Range;
 use colored::*;
 
 use ff_structure::NAIDX;
-use ff_structure::P1KEY;
 
 /// Types of nearest neighbor loops.
 ///
 /// The loops store different combinations of indices (typically u16) that can be used extract
 /// relevant Bases from the corresponding sequence. Indices are given in canonical form: (i < j) <
 /// (p < q). (There is only one exception to this rule, the ends of JointExterior.)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NearestNeighborLoop {
     Hairpin {
         closing: (NAIDX, NAIDX), 
@@ -122,45 +121,6 @@ impl NearestNeighborLoop {
             NearestNeighborLoop::Exterior { branches, .. } => branches.clone(),
             NearestNeighborLoop::JointExterior { branches, .. } => branches.clone(),
             NearestNeighborLoop::Disconnected { .. } => todo!("For now, get this explicitly for the disconnected components!"),
-        }
-    }
-
-    /// Return all base pairs (closing, inner, and/or branches) as packed P1KEY.
-    /// Exterior loops use 0 as a sentinel closing key.
-    pub fn loop_key(&self) -> Vec<P1KEY> {
-        fn pack(i: NAIDX, j: NAIDX) -> P1KEY {
-            ((i as P1KEY) << NAIDX::BITS) | (j as P1KEY)
-        }
-
-        match self {
-            NearestNeighborLoop::Hairpin { closing } => {
-                vec![pack(closing.0, closing.1)]
-            }
-            NearestNeighborLoop::Interior { closing, inner } => {
-                vec![
-                    pack(closing.0, closing.1),
-                    pack(inner.0, inner.1),
-                ]
-            }
-            NearestNeighborLoop::Multibranch { closing, branches } => {
-                let mut keys = Vec::with_capacity(1 + branches.len());
-                keys.push(pack(closing.0, closing.1));
-                keys.extend(branches.iter().map(|&(i, j)| pack(i, j)));
-                keys
-            }
-            NearestNeighborLoop::Exterior { ends, branches } => {
-                let mut keys = Vec::with_capacity(1 + branches.len());
-                keys.push(ends.0 as P1KEY); // NOTE: key only uses 5' end!
-                keys.extend(branches.iter().map(|&(i, j)| pack(i, j)));
-                keys
-            }
-            NearestNeighborLoop::JointExterior { ends, branches } => {
-                let mut keys = Vec::with_capacity(1 + branches.len());
-                keys.push(ends.0 as P1KEY); // NOTE: key only uses 5' end!
-                keys.extend(branches.iter().map(|&(i, j)| pack(i, j)));
-                keys
-            }
-            NearestNeighborLoop::Disconnected { .. } => unreachable!("No support for disconnected loop keys."),
         }
     }
 
