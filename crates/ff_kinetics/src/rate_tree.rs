@@ -10,53 +10,6 @@ struct MoveNode {
 }
 
 /// A binary tree storing all possible moves.
-pub struct RateList {
-    moves: Vec<Move>,
-    rates: Vec<f64>,
-    total: f64,
-}
-
-impl RateList {
-    pub fn new(capacity: usize) -> Self {
-        let moves = Vec::with_capacity(capacity);
-        let rates = Vec::with_capacity(capacity);
-        let total = 0.0;
-        RateList {
-            moves,
-            rates,
-            total,
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.rates.is_empty()
-    }
-
-    pub fn insert(&mut self, mv: Move, rate: f64) {
-        self.moves.push(mv);
-        self.rates.push(rate);
-        self.total += rate;
-    }
-
-    pub fn total_rate(&self) -> f64 {
-        self.total
-    }
-
-    pub fn select_by_threshold(&self, mut threshold: f64) -> Move {
-        for (&rate, &mv) in self.rates.iter().zip(self.moves.iter()) {
-            threshold -= rate;
-            if threshold <= 0.0 {
-                return mv;
-            }
-        }
-        //println!("RateList: roundoff error! This should be extremely rare!");
-        *self.moves.last().expect("RateList is empty")
-    }
-
-}
-
-
-/// A binary tree storing all possible moves.
 pub struct RateTree {
     /// A 1-based vector of Moves.
     entries: Vec<MoveNode>,
@@ -122,12 +75,16 @@ impl RateTree {
 
     fn update_partial_sums(&mut self, mut i: usize) {
         while i >= 1 {
+            let osum = self.entries[i].rate_sum;
             let mut sum = self.entries[i].rate;
             if let Some((_, entry)) = self.left_child(i) {
                 sum += entry.rate_sum;
                 if let Some((_, entry)) = self.right_child(i) {
                     sum += entry.rate_sum;
                 }
+            }
+            if (sum - osum).abs() < f64::EPSILON {
+                break
             }
             self.entries[i].rate_sum = sum;
             if i == 1 {
@@ -152,14 +109,22 @@ impl RateTree {
 
     pub fn update_rate(&mut self, mv: &Move, new_rate: f64) -> bool {
         if let Some(&idx) = self.pos_map.get(mv) {
-            if (self.entries[idx].rate - new_rate).abs() > f64::EPSILON {
-                self.entries[idx].rate = new_rate;
-                self.update_partial_sums(idx);
-            } 
+            self.entries[idx].rate = new_rate;
+            self.update_partial_sums(idx);
             true
         } else {
             false
         }
+    }
+
+    pub fn dirty_replace(&mut self, old_mv: &Move, new_mv: &Move) -> bool {
+        let idx = match self.pos_map.remove(old_mv) {
+            Some(i) => i,
+            None => return false,
+        };
+        self.pos_map.insert(*new_mv, idx);
+        self.entries[idx].mv = *new_mv;
+        true
     }
 
     pub fn remove(&mut self, mv: Move) -> bool {

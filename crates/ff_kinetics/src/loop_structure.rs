@@ -114,7 +114,6 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
 }
 
 type MoveEnergies = Vec<(NAIDX, NAIDX, i32)>;
-type IndexedLoopNeighbors = (usize, MoveEnergies);
 
 pub struct LoopStructure<'a, E: EnergyModel> {
     registry: LoopCache<'a, E>,

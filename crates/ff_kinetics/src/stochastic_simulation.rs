@@ -114,14 +114,18 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
 
             match mv {
                 Some(del @ Move::Del { i, j }) => {
-                    self.rate_tree.remove(del);
+                    if !self.rate_tree.dirty_replace(&del, &Move::Add {i, j}) {
+                        panic!("Dirty rate replacement failed.");
+                    }
                     let (neighbors, pair_changes) = self
                         .loopstructure.apply_del_move(i, j);
                     self.update_loop_reactions(neighbors);
                     self.update_pair_reactions(pair_changes);
                 },
                 Some(add @ Move::Add { i, j }) => {
-                    self.rate_tree.remove(add);
+                    if !self.rate_tree.dirty_replace(&add, &Move::Del {i, j}) {
+                        panic!("Dirty rate replacement failed.");
+                    }
                     let lli = self.loopstructure.loop_lookup().get(&i).unwrap();
                     for &(p, q, _) in self.loopstructure.get_add_neighbors_per_loop()[lli].iter() {
                         if q < i || p > j || (i < p && q < j) || (p < i && j < q) {
