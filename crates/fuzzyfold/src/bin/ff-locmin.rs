@@ -33,8 +33,12 @@ pub struct LocminInput {
     #[arg(short, long)]
     pub maxdist: Option<usize>,
 
+    /// give delta energy
+    #[arg(short, long)]
+    pub sorted: bool, 
+
     /// Verbosity (-v = info, -vv = debug)
-    #[arg(short, long, action = ArgAction::Count)]
+    #[arg(short, long, hide = true, action = ArgAction::Count)]
     pub verbose: u8,
 }
 
@@ -91,19 +95,23 @@ fn main() -> Result<()> {
 
     let mut lss = LoopStructure::try_from((&sequence[..], &pairings, &emodel)).unwrap();
 
-    let mut neighbors = Vec::new();
-    lss.generate_neighbors(delta, distance, 
-        |db, en| { 
-            //println!("{} {:.2}", db, en as f64 / 100.0);
-            neighbors.push((db.clone(), en)); }
-    );
-
-    neighbors.sort_by_key(|(_, en)| *en);
-
-    //for (db, en) in &neighbors {
-    //    println!("{} {:.2}", db, *en as f64 / 100.0);
-    //}
-    println!("{}", neighbors.len());
+    if !cli.lmin.sorted {
+        lss.generate_neighbors(delta, distance, 
+            |db, en| { 
+                println!("{} {:.2}", db, en as f64 / 100.0);
+            }
+        );
+    } else {
+        let mut neighbors = Vec::new();
+        lss.generate_neighbors(delta, distance, 
+            |db, en| { 
+                neighbors.push((db.clone(), en)); }
+        );
+        neighbors.sort_by_key(|(_, en)| *en);
+        for (db, en) in &neighbors {
+            println!("{} {:.2}", db, *en as f64 / 100.0);
+        }
+    }
 
     Ok(())
 

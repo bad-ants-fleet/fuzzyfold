@@ -30,10 +30,10 @@ corresponds to 'local minimum 3'.)*
 To partition the overall secondary-structure ensemble into smaller ensembles of
 interest, we define **macro-states** using files such as `dld3_lm*.ms`.
 
-Example (`dld3_lm3.ms`):
+Example (`dld3_lm3_3.0.ms`):
 
 ```fasta
->lmin=lm3_bh=3.0
+>LM3 lmin=lm3_bh=3.0
 UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 .((((....)))).((((........))))...............
 .((((....)))).((((.(....).))))...............
@@ -46,7 +46,7 @@ UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 ```
 
 Here:
-- The first line defines the **macro-state name** (`lmin=lm3_bh=3.0`).
+- The first line defines the **macro-state name** (`LM3`) and, optionally, some more description after a white-space (`lmin=lm3_bh=3.0`).
 - The second line specifies the **sequence**.
 - The remaining lines list all **secondary structures** that belong to this macro-state.
 
@@ -75,24 +75,20 @@ or equivalently:
 ff-timecourse --macrostates dld3*.ms --t-log 100 --t-ext 1e-7 --t-end 0.1 -n 100 < dld3_lm3.fa
 ```
 
-Use:
+To familiarize yourself with timeline parameters such as `--t-log`, `--t-ext`, and `--t-end`:
 
 ```bash
 ff-timecourse --help
 ```
 
-to familiarize yourself with timeline parameters such as `--t-log`, `--t-ext`, and `--t-end`.
-
 During execution, the program prints simulation parameters to `STDOUT`,
 displays a **progress bar**, and outputs **time-course data** once all runs are
-completed.  The time course is also plotted automatically as an SVG file, for
-example:
+completed.  The time course is also plotted automatically as an SVG file, 
+where the plot name is derived from the input file. For example:
 
 ```
 ff_dld3.svg
 ```
-
-where the plot name is derived from the input file.
 
 ---
 
@@ -112,7 +108,7 @@ This command creates `my_dld3.tln`, which stores the results from 100
 simulations.  Running the same command again will automatically reload the
 file, add another 100 simulations, and update the stored timeline accordingly.
 
-Try it — this is the recommended way to extend your simulation dataset without
+Try it! This is the recommended way to extend your simulation dataset without
 restarting from scratch.
 
 An example output file from $10^4$ aggregated simulations of 1-second runs may look like this:

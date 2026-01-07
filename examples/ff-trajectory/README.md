@@ -71,7 +71,7 @@ This creates a random 50-nt sequence and follows its stochastic folding trajecto
 An example asimulation output is shown below:
 
 ```
-GCGUUUCCAGGGUUUAGACGGACGGGUGUGACUCGCCCAGCCCCGACCUC   energy   arrival time   waiting time    mean-waiting
+GCGUUUCCAGGGUUUAGACGGACGGGUGUGACUCGCCCAGCCCCGACCUC   energy   arrival-time   waiting-time    mean-waiting
 ..................................................     0.00   0.00000000e0  5.48838308e-1    1.15990269e0
 .......................(.......)..................     2.10  5.48838308e-1  7.42186429e-1   6.00461698e-1
 .......................(.......).....(......).....     4.50   1.29102474e0  6.62519714e-1   3.57034800e-1
@@ -95,13 +95,13 @@ GCGUUUCCAGGGUUUAGACGGACGGGUGUGACUCGCCCAGCCCCGACCUC   energy   arrival time   wai
 
 Each line represents one **structure** visited during the trajectory, with columns:
 
-| Column | Description |
+| Header | Description |
 |---------|-------------|
-| **structure** | Secondary structure in dot-bracket notation |
-| **energy** | Free energy (kcal/mol) |
-| **arrival time** | Absolute time when the structure was reached |
-| **waiting time** | Duration spent in that structure before transition |
-| **mean-waiting** | Mean waiting time in this structure (1/flux) |
+| **sequence** | Corresponding structure in dot-bracket notation. |
+| **energy** | Free energy evaluation (kcal/mol). |
+| **arrival-time** | Simulation time at which the structure was observed. |
+| **waiting-time** | Time spent in the structure until transition. |
+| **mean-waiting** | Mean waiting time in the structure (1/flux) |
 
 ---
 
