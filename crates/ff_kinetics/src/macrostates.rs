@@ -208,7 +208,7 @@ impl<'a, E: EnergyModel> MacrostateRegistry<'a, E> {
                 .split_whitespace()
                 .next()
                 .ok_or_else(|| io_err("Header line is empty", source))?;
-            if token.chars().all(|c| c.is_ascii_alphanumeric()) {
+            if token.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
                 token.to_string()
             } else {
                 return Err(io_err(
@@ -230,13 +230,25 @@ impl<'a, E: EnergyModel> MacrostateRegistry<'a, E> {
         }
 
         let mut structures = Vec::new();
+        let mut warned_trailing = false;
         for (lineno, line) in lines.enumerate() {
             let line = line?;
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            match DotBracketVec::try_from(line) {
+            // Take only the first whitespace-separated token
+            let (structure_str, had_trailing) = match line.split_once(char::is_whitespace) {
+                Some((s, _rest)) => (s, true),
+                None => (line, false),
+            };
+
+            if had_trailing && !warned_trailing {
+                eprintln!("Warning: trailing data after dot-bracket structures is ignored in {}.", source);
+                warned_trailing = true;
+            }
+
+            match DotBracketVec::try_from(structure_str) {
                 Ok(dbv) => structures.push(dbv),
                 Err(e) => {
                     return Err(io_err(
@@ -278,7 +290,7 @@ impl<'a, E: EnergyModel> MacrostateRegistry<'a, E> {
             1 => matches[0],
             _ => {
                 // For now: raise a panic, since overlapping macrostates are ambiguous
-                panic!("Structure {:?} belongs to multiple macrostates — not implemented", structure);
+                panic!("Structure {:?} belongs to multiple macrostates - not implemented", structure);
             }
         }
     }

@@ -260,8 +260,10 @@ impl NearestNeighborLoop {
 
             Self::Multibranch { closing: (a, b), branches } => {
                 debug_assert!(*a < i && j < *b, "Pair (i,j) outside loop");
-                let mut outer_branches = vec![(i, j)];
-                let mut inner_branches = vec![];
+                let mut outer_branches = Vec::with_capacity(branches.len() + 1);
+                let mut inner_branches = Vec::with_capacity(branches.len());
+                outer_branches.push((i, j));
+
                 for &(p, q) in branches {
                     debug_assert!(p < q);
                     if j < p || q < i {
@@ -277,8 +279,9 @@ impl NearestNeighborLoop {
             }
 
             Self::Exterior { ends, branches } => {
-                let mut outer_branches = vec![(i, j)];
-                let mut inner_branches = vec![];
+                let mut outer_branches = Vec::with_capacity(branches.len() + 1);
+                let mut inner_branches = Vec::with_capacity(branches.len());
+                outer_branches.push((i, j));
                 for &(p, q) in branches {
                     debug_assert!(p < q);
                     if j < p || q < i {
@@ -295,8 +298,9 @@ impl NearestNeighborLoop {
 
             Self::JointExterior { ends: (p5, p3), branches } => {
                 let closing = branches.first().expect("JointExterior must have closing pair.");
-                let mut outer_branches = vec![(i, j)];
-                let mut inner_branches = vec![];
+                let mut outer_branches = Vec::with_capacity(branches.len() + 1);
+                let mut inner_branches = Vec::with_capacity(branches.len());
+                outer_branches.push((i, j));
                 for &(p, q) in branches.iter().skip(1) {
                     debug_assert!(p < q);
                     if j < p || q < i {

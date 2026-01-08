@@ -195,7 +195,7 @@ impl RateTree {
                 break;
             }
         }
-        println!("RateTree: roundoff error! This should be extremely rare!");
+        eprintln!("RateTree: roundoff error! This should be extremely rare!");
         self.entries
             .last()
             .map(|n| n.mv)

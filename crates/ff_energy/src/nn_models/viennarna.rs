@@ -346,7 +346,7 @@ impl EnergyModel for ViennaRNA {
                 self.interior(left, right)
             }
             NearestNeighborLoop::Multibranch { closing: (i, j), branches } => {
-                let mut slices: Vec<&[Base]> = Vec::new();
+                let mut slices: Vec<&[Base]> = Vec::with_capacity(branches.len() + 1);
                 let mut start = *i as usize;
                 for &(k, l) in branches {
                     slices.push(&sequence[start..=k as usize]);
@@ -356,7 +356,7 @@ impl EnergyModel for ViennaRNA {
                 self.multibranch(&slices)
             }
             NearestNeighborLoop::Exterior { ends: (p5, p3), branches  } => {
-                let mut slices: Vec<&[Base]> = Vec::new();
+                let mut slices: Vec<&[Base]> = Vec::with_capacity(branches.len() + 1);
                 let mut p5 = *p5 as usize;
                 for &(k, l) in branches {
                     slices.push(&sequence[p5..=k as usize]);
@@ -366,7 +366,7 @@ impl EnergyModel for ViennaRNA {
                 self.exterior(&slices)
             }
             NearestNeighborLoop::JointExterior { ends: (p5, p3), branches  } => {
-                let mut slices: Vec<&[Base]> = Vec::new();
+                let mut slices: Vec<&[Base]> = Vec::with_capacity(branches.len() + 1);
                 let mut branches = branches.clone();
 
                 debug_assert!(!branches.is_empty());
