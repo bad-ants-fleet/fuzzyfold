@@ -1,4 +1,4 @@
-use ahash::AHashMap;
+use rustc_hash::FxHashMap;
 
 use crate::explore::Move;
 
@@ -14,7 +14,7 @@ pub struct RateTree {
     /// A 1-based vector of Moves.
     entries: Vec<MoveNode>,
     /// To access the index given the Move.
-    pos_map: AHashMap<Move, usize>,
+    pos_map: FxHashMap<Move, usize>,
 }
 
 impl RateTree {
@@ -31,7 +31,7 @@ impl RateTree {
         }); 
         Self {
             entries,
-            pos_map: AHashMap::with_capacity(capacity),
+            pos_map: FxHashMap::default(),
         }
     }
 

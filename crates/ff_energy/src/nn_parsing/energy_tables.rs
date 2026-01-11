@@ -1,7 +1,7 @@
 
 use std::fmt;
 use std::io::BufRead;
-use ahash::AHashMap;
+use rustc_hash::FxHashMap;
 
 use crate::nn_parsing::ParamFileSection;
 use crate::nn_parsing::SectionParser;
@@ -192,7 +192,7 @@ pub struct EnergyTables {
     pub ninio: NINIO,
     pub misc: Misc,
 
-    pub hairpin_sequences: AHashMap<NucleotideVec, (i32, i32)>,
+    pub hairpin_sequences: FxHashMap<NucleotideVec, (i32, i32)>,
 }
 
 impl Default for EnergyTables {
@@ -235,7 +235,7 @@ impl Default for EnergyTables {
             ninio: NINIO::default(),
             misc: Misc::default(),
 
-            hairpin_sequences: AHashMap::new(),
+            hairpin_sequences: FxHashMap::default(),
         }
     }
 }

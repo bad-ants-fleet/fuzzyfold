@@ -1,5 +1,5 @@
 use log::info;
-use ahash::AHashSet;
+use rustc_hash::FxHashSet;
 
 use ff_structure::NAIDX;
 use ff_structure::DotBracket;
@@ -103,7 +103,7 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
         let root = DotBracketVec::from(&*self);
         let mut path = Vec::new();
 
-        let mut seen = AHashSet::default();
+        let mut seen = FxHashSet::default();
         seen.insert(root.clone());
 
         let mut stack = Vec::new();

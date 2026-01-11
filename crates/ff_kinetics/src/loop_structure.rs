@@ -1,6 +1,5 @@
 use std::fmt;
 use nohash_hasher::IntMap;
-use nohash_hasher::IntSet;
 
 use ff_structure::NAIDX;
 use ff_structure::DotBracket;
@@ -10,11 +9,14 @@ use ff_energy::LoopDecomposition;
 use ff_energy::EnergyModel;
 use ff_energy::Base;
 
+type LoopEntry = (NearestNeighborLoop, i32);
+type MoveEnergies = Vec<(NAIDX, NAIDX, i32)>;
+
 struct LoopCache<'a, E: EnergyModel> {
     sequence: &'a [Base],
     model: &'a E,
-    loop_list: IntMap<usize, (NearestNeighborLoop, i32)>,
-    l_indices: IntSet<usize>,
+    loops: Vec<Option<LoopEntry>>,
+    free: Vec<usize>,
 }
 
 impl<'a, E: EnergyModel> LoopCache<'a, E> {
@@ -23,65 +25,72 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
         Self { 
             sequence,
             model,
-            loop_list: IntMap::default(),
-            l_indices: IntSet::default(),
+            loops: Vec::new(),
+            free: Vec::new(),
         }
     }
 
-    pub fn insert_loop(&mut self, combo: &NearestNeighborLoop) -> usize {
-        let energy = self.model.energy_of_loop(self.sequence, combo);
-        let index = self.allocate_index();
-        self.loop_list.insert(index, (combo.to_owned(), energy));
-        index
+    #[inline]
+    pub fn get(&self, idx: usize) -> &LoopEntry {
+        self.loops
+            .get(idx)
+            .and_then(|e| e.as_ref())
+            .expect("Invalid LoopCache index")
     }
 
-    pub fn get_loop_by_index(&self, index: &usize) -> &(NearestNeighborLoop, i32) {
-        self.loop_list.get(index).expect("Incorrect index")
+    pub fn insert_loop(&mut self, combo: NearestNeighborLoop) -> (usize, i32) {
+        let energy = self.model.energy_of_loop(self.sequence, &combo);
+
+        if let Some(idx) = self.free.pop() {
+            self.loops[idx] = Some((combo, energy));
+            (idx, energy)
+        } else {
+            let idx = self.loops.len();
+            self.loops.push(Some((combo, energy)));
+            (idx, energy)
+        }
     }
 
-    pub fn calc_pair_energy(&mut self, outer_index: usize, inner_index: usize) -> i32 {
-        let (outer, o_en) = self.loop_list.get(&outer_index).expect("Missing outer loop_list entry.");
-        let (inner, i_en) = self.loop_list.get(&inner_index).expect("Missing inner loop_list entry.");
-        let combo = &outer.join_loop(inner);
-        let combo_energy = self.model.energy_of_loop(self.sequence, combo);
+    pub fn calc_pair_energy(&self, outer_index: usize, inner_index: usize) -> i32 {
+        let (outer, o_en) = self.get(outer_index);
+        let (inner, i_en) = self.get(inner_index);
+        let combo = outer.join_loop(inner);
+        let combo_energy = self.model.energy_of_loop(self.sequence, &combo);
         combo_energy - (o_en + i_en)
     }
 
     pub fn apply_delete_move(&mut self, outer_index: usize, inner_index: usize, delta: i32) -> usize {
-        let (outer, o_en) = self.loop_list.get(&outer_index).expect("Missing outer loop_list entry.");
-        let (inner, i_en) = self.loop_list.get(&inner_index).expect("Missing inner loop_list entry.");
+        let (outer, o_en) = self.get(outer_index);
+        let (inner, i_en) = self.get(inner_index);
         let combo = outer.join_loop(inner);
         let combo_energy = (o_en + i_en) - delta;
-
         // re-use outer_index for the new loop.
-        self.loop_list.insert(outer_index, (combo, combo_energy));
-        self.loop_list.remove(&inner_index);
-        self.l_indices.insert(inner_index);
+        self.loops[outer_index] = Some((combo, combo_energy));
+        self.loops[inner_index] = None;
+        self.free.push(inner_index);
         outer_index
     }
 
     pub fn apply_addition_move(&mut self, 
-        combo_index: usize, 
-        combo: NearestNeighborLoop, c_energy: i32, i: NAIDX, j: NAIDX
+        c_index: usize, 
+        combo: NearestNeighborLoop,
+        c_en: i32, 
+        i: NAIDX, j: NAIDX
     ) -> (usize, usize, i32) {
         let (outer, inner) = combo.split_loop(i, j);
 
         //NOTE: could look delta up directly by searching loop_list.
-        let outer_energy = self.model.energy_of_loop(self.sequence, &outer);
-        let inner_energy = self.model.energy_of_loop(self.sequence, &inner);
-
-        let outer_index = combo_index;
-        let inner_index = self.allocate_index();
-        self.loop_list.insert(outer_index, (outer, outer_energy));
-        self.loop_list.insert(inner_index, (inner, inner_energy));
+        let o_en = self.model.energy_of_loop(self.sequence, &outer);
+        self.loops[c_index] = Some((outer, o_en));
+        let (i_index, i_en) = self.insert_loop(inner);
 
         // How does the energy change if we apply the base-pair move.
-        let delta = (outer_energy + inner_energy) - c_energy;
-        (outer_index, inner_index, -delta)
+        let delta = (o_en + i_en) - c_en;
+        (c_index, i_index, -delta)
     }
 
     fn get_loop_neighbors(&self, index: usize) -> MoveEnergies {
-        let (combo, energy) = self.loop_list.get(&index).expect("where's the loop?");
+        let (combo, energy) = self.get(index);
         let unpaired = combo.unpaired_indices();
 
         let mut neighbors = Vec::new(); 
@@ -102,18 +111,8 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
         }
         neighbors
     }
-
-    pub fn allocate_index(&mut self) -> usize {
-        if let Some(&x) = self.l_indices.iter().next() {
-            self.l_indices.remove(&x);
-            x
-        } else {
-            self.loop_list.len()
-        }
-    }
 }
 
-type MoveEnergies = Vec<(NAIDX, NAIDX, i32)>;
 
 pub struct LoopStructure<'a, E: EnergyModel> {
     registry: LoopCache<'a, E>,
@@ -125,6 +124,8 @@ pub struct LoopStructure<'a, E: EnergyModel> {
     pair_list: IntMap<NAIDX, NAIDX>,
     /// pair id to deltaE
     pair_neighbors: IntMap<NAIDX, i32>, 
+    /// free energy of structure
+    energy: i32,
 }
 
 impl<'a, E: EnergyModel> Clone for LoopStructure<'a, E> {
@@ -133,13 +134,14 @@ impl<'a, E: EnergyModel> Clone for LoopStructure<'a, E> {
             registry: LoopCache {
                 sequence: self.registry.sequence,
                 model: self.registry.model,
-                loop_list: self.registry.loop_list.clone(),
-                l_indices: self.registry.l_indices.clone(),
+                loops: self.registry.loops.clone(),
+                free: self.registry.free.clone(),
             },
             loop_lookup: self.loop_lookup.clone(),
             loop_neighbors: self.loop_neighbors.clone(),
             pair_list: self.pair_list.clone(),
             pair_neighbors: self.pair_neighbors.clone(),
+            energy: self.energy,
         }
     }
 }
@@ -199,10 +201,7 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
     }
 
     pub fn energy(&self) -> i32 {
-        self.registry.loop_list
-            .values()
-            .map(|(_, e)| *e)
-            .sum()
+        self.energy
     }
 
     fn update_pair_neighbors(&mut self,
@@ -227,6 +226,7 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
         let &delta = self.pair_neighbors.get(&i).expect("Missing pair_neighbors entry.");
         self.pair_list.remove(&i); 
         self.pair_neighbors.remove(&i); 
+        self.energy += delta;
 
         let &o_index = self.loop_lookup.get(&i).expect("Missing loop_lookup entry for i.");
         let &i_index = self.loop_lookup.get(&j).expect("Missing loop_lookup entry for j.");
@@ -237,7 +237,7 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
         self.loop_neighbors.insert(o_index, loop_neighbors.clone());
         self.loop_neighbors.remove(&i_index).expect("at least empty list.");
 
-        let (combo, _) = self.registry.get_loop_by_index(&o_index);
+        let (combo, _) = self.registry.get(o_index);
         for k in &combo.inclusive_unpaired_indices() {
             debug_assert!(self.loop_lookup[&(*k as NAIDX)] == o_index || self.loop_lookup[&(*k as NAIDX)] == i_index);
             self.loop_lookup.insert(*k as NAIDX, o_index);
@@ -258,12 +258,13 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
             self.loop_lookup.get(&j).expect("Missing loop_lookup entry for j."),
             "Missing loop_lookup entry for j."
         );
-        let (combo, c_energy) = self.registry.get_loop_by_index(&c_index);
+        let (combo, c_en) = self.registry.get(c_index);
         let combo_pairs = &combo.pairs();
         // How does the energy change if we apply the base-pair move.
         let (o_id, i_id, delta) = self.registry.apply_addition_move(
-            c_index, combo.clone(), *c_energy, i, j
+            c_index, combo.to_owned(), *c_en, i, j
         );
+        self.energy -= delta;
 
 
         let new_outer_add_neighbors = self.registry.get_loop_neighbors(o_id);
@@ -274,11 +275,11 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
         self.pair_list.insert(i, j);
         self.pair_neighbors.insert(i, delta);
 
-        let (outer, _) = self.registry.get_loop_by_index(&o_id);
+        let (outer, _) = self.registry.get(o_id);
         for k in &outer.inclusive_unpaired_indices() {
             self.loop_lookup.insert(*k as NAIDX, o_id);
         }
-        let (inner, _) = self.registry.get_loop_by_index(&i_id);
+        let (inner, _) = self.registry.get(i_id);
         for k in &inner.inclusive_unpaired_indices() {
             self.loop_lookup.insert(*k as NAIDX, i_id);
         }
@@ -299,25 +300,23 @@ impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
         let mut registry = LoopCache::new(sequence, model);
         let mut pair_list: IntMap<NAIDX, NAIDX>  = IntMap::default();
         let mut loop_lookup: IntMap<NAIDX, usize> = IntMap::default();
+        let mut loop_neighbors = IntMap::default();
+        let mut energy = 0;
 
         // Decomposing the structure into loops and initializing
         // loop_list, pair_list, and loop_lookup. 
         pairings.for_each_loop(|l| {
-            let lli = registry.insert_loop(l);
+            let (lli, en) = registry.insert_loop(l.to_owned());
             if let Some((i, j)) = l.closing() {
                 pair_list.insert(i as NAIDX, j as NAIDX); 
             }
             for k in &l.inclusive_unpaired_indices() {
                 loop_lookup.insert(*k as NAIDX, lli);
             }
+            energy += en;
+            let neighbors = registry.get_loop_neighbors(lli);
+            loop_neighbors.insert(lli, neighbors);
         });
-
-        // Now we want to get all neighbors where pairs can be added
-        let mut loop_neighbors = IntMap::default();
-        for &nn_idx in registry.loop_list.keys() {
-            let neighbors = registry.get_loop_neighbors(nn_idx);
-            loop_neighbors.insert(nn_idx, neighbors);
-        }
 
         let mut pair_neighbors = IntMap::default();
         for (i, j) in pair_list.iter() {
@@ -334,6 +333,7 @@ impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
             loop_neighbors,
             pair_list,
             pair_neighbors,
+            energy,
         })
     }
 

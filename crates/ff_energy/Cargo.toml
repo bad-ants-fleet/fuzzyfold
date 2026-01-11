@@ -14,11 +14,11 @@ categories.workspace = true
 [dependencies]
 ff_structure.workspace = true
 
-ahash.workspace = true
 colored.workspace = true
 criterion.workspace = true
 env_logger.workspace = true
 itertools.workspace = true
+rustc-hash.workspace = true
 log.workspace = true
 
 [[bench]]

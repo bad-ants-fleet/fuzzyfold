@@ -3,7 +3,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io;
 use std::path::PathBuf;
-use ahash::AHashMap;
+use rustc_hash::FxHashMap;
 use rand::Rng;
 
 use ff_structure::DotBracketVec;
@@ -61,7 +61,7 @@ use crate::{K0, KB};
 #[derive(Debug)]
 pub struct Macrostate {
     name: String,
-    ensemble: AHashMap<DotBracketVec, (i32, f64)>,
+    ensemble: FxHashMap<DotBracketVec, (i32, f64)>,
     ensemble_energy: Option<f64>,
 }
 
@@ -71,7 +71,7 @@ impl Macrostate {
     pub fn new_catch_all(name: &str) -> Self {
         Macrostate { 
             name: name.to_owned(),
-            ensemble: AHashMap::new(),
+            ensemble: FxHashMap::default(),
             ensemble_energy: None,
         }
     }
@@ -82,7 +82,7 @@ impl Macrostate {
         structures: &[DotBracketVec], 
         energy_model: &'a E, 
     ) -> Self {
-        let mut ensemble = AHashMap::with_capacity(structures.len());
+        let mut ensemble = FxHashMap::default();
         let rt = KB * (K0 + energy_model.temperature());
 
         let mut q_sum = 0.0;
@@ -109,7 +109,7 @@ impl Macrostate {
         &self.name
     }
 
-    pub fn ensemble(&self) -> &AHashMap<DotBracketVec, (i32, f64)> {
+    pub fn ensemble(&self) -> &FxHashMap<DotBracketVec, (i32, f64)> {
         &self.ensemble
     }
 
