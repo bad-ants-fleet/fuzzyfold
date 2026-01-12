@@ -117,7 +117,7 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
 pub struct LoopStructure<'a, E: EnergyModel> {
     registry: LoopCache<'a, E>,
     /// From sequence index to registry index.
-    loop_lookup: IntMap<NAIDX, usize>, 
+    loop_lookup: Vec<usize>, 
     /// registry index to list of (i, j, deltaE)
     loop_neighbors: IntMap<usize, MoveEnergies>,
     /// Current pairs, i<j where i is the id.
@@ -196,7 +196,7 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
 
     /// A pair-table like structure, where each position points to 
     /// exactly one loop. 
-    pub fn loop_lookup(&self) -> &IntMap<NAIDX, usize> {
+    pub fn loop_lookup(&self) -> &Vec<usize> {
         &self.loop_lookup
     }
 
@@ -210,8 +210,8 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
     {
         let mut change = Vec::new();
         for &(i, j) in pairs {
-            let &o_index = self.loop_lookup.get(&i).expect("Missing loop_lookup entry for i.");
-            let &i_index = self.loop_lookup.get(&j).expect("Missing loop_lookup entry for j.");
+            let o_index = self.loop_lookup[i as usize];
+            let i_index = self.loop_lookup[j as usize];
             let delta = self.registry.calc_pair_energy(o_index, i_index);
             self.pair_neighbors.insert(i, delta);
             change.push((i, j, delta));
@@ -219,19 +219,20 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
         change
     }
   
-    pub fn apply_del_move(&mut self, i: NAIDX, j: NAIDX) -> 
-        (MoveEnergies, MoveEnergies) {
-        debug_assert_eq!(&j,
-            self.pair_list.get(&i).expect("Missing pair_list entry."));
-        let &delta = self.pair_neighbors.get(&i).expect("Missing pair_neighbors entry.");
-        self.pair_list.remove(&i); 
-        self.pair_neighbors.remove(&i); 
+    pub fn apply_del_move(&mut self, i: NAIDX, j: NAIDX
+    ) -> (MoveEnergies, MoveEnergies) 
+    {
+        if j != self.pair_list.remove(&i).expect("Missing pair_list entry.") {
+            panic!("Inconsistent pair-list entry.");
+        }
+
+        let o_index = self.loop_lookup[i as usize];
+        let i_index = self.loop_lookup[j as usize];
+        let delta = self.pair_neighbors.remove(&i).expect("Missing pair_neighbors entry."); 
         self.energy += delta;
 
-        let &o_index = self.loop_lookup.get(&i).expect("Missing loop_lookup entry for i.");
-        let &i_index = self.loop_lookup.get(&j).expect("Missing loop_lookup entry for j.");
-        let c_id = self.registry.apply_delete_move(o_index, i_index, -delta);
-        debug_assert_eq!(c_id, o_index); // by convention.
+        let c_index = self.registry.apply_delete_move(o_index, i_index, -delta);
+        assert_eq!(c_index, o_index); // by convention.
 
         let loop_neighbors = self.registry.get_loop_neighbors(o_index);
         self.loop_neighbors.insert(o_index, loop_neighbors.clone());
@@ -239,8 +240,8 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
 
         let (combo, _) = self.registry.get(o_index);
         for k in &combo.inclusive_unpaired_indices() {
-            debug_assert!(self.loop_lookup[&(*k as NAIDX)] == o_index || self.loop_lookup[&(*k as NAIDX)] == i_index);
-            self.loop_lookup.insert(*k as NAIDX, o_index);
+            debug_assert!(self.loop_lookup[*k] == o_index || self.loop_lookup[*k] == i_index);
+            self.loop_lookup[*k] = o_index;
         }
 
         let pair_changes = self.update_pair_neighbors(&combo.pairs());
@@ -248,16 +249,10 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
     }
 
     pub fn apply_add_move(&mut self, i: NAIDX, j: NAIDX
-    ) -> (
-        MoveEnergies,
-        MoveEnergies,
-        MoveEnergies,
-    ) {
-        let &c_index = self.loop_lookup.get(&i).expect("Missing loop_lookup entry for i.");
-        debug_assert_eq!(&c_index, 
-            self.loop_lookup.get(&j).expect("Missing loop_lookup entry for j."),
-            "Missing loop_lookup entry for j."
-        );
+    ) -> (MoveEnergies, MoveEnergies, MoveEnergies) 
+    {
+        let c_index = self.loop_lookup[i as usize];
+        debug_assert_eq!(c_index, self.loop_lookup[j as usize], "Missing loop_lookup entry for j.");
         let (combo, c_en) = self.registry.get(c_index);
         let combo_pairs = &combo.pairs();
         // How does the energy change if we apply the base-pair move.
@@ -266,10 +261,8 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
         );
         self.energy -= delta;
 
-
         let new_outer_add_neighbors = self.registry.get_loop_neighbors(o_id);
         let new_inner_add_neighbors = self.registry.get_loop_neighbors(i_id);
-
         self.loop_neighbors.insert(o_id, new_outer_add_neighbors.clone());
         self.loop_neighbors.insert(i_id, new_inner_add_neighbors.clone());
         self.pair_list.insert(i, j);
@@ -277,11 +270,11 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
 
         let (outer, _) = self.registry.get(o_id);
         for k in &outer.inclusive_unpaired_indices() {
-            self.loop_lookup.insert(*k as NAIDX, o_id);
+            self.loop_lookup[*k] = o_id;
         }
         let (inner, _) = self.registry.get(i_id);
         for k in &inner.inclusive_unpaired_indices() {
-            self.loop_lookup.insert(*k as NAIDX, i_id);
+            self.loop_lookup[*k] = i_id;
         }
 
         let mut pair_changes = self.update_pair_neighbors(combo_pairs);
@@ -298,9 +291,9 @@ impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
     fn try_from((sequence, pairings, model): (&'a [Base], &T, &'a E)
     ) -> Result<Self, Self::Error> {
         let mut registry = LoopCache::new(sequence, model);
-        let mut pair_list: IntMap<NAIDX, NAIDX>  = IntMap::default();
-        let mut loop_lookup: IntMap<NAIDX, usize> = IntMap::default();
+        let mut loop_lookup: Vec<usize> = vec![0; sequence.len()];
         let mut loop_neighbors = IntMap::default();
+        let mut pair_list: IntMap<NAIDX, NAIDX>  = IntMap::default();
         let mut energy = 0;
 
         // Decomposing the structure into loops and initializing
@@ -311,7 +304,7 @@ impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
                 pair_list.insert(i as NAIDX, j as NAIDX); 
             }
             for k in &l.inclusive_unpaired_indices() {
-                loop_lookup.insert(*k as NAIDX, lli);
+                loop_lookup[*k] = lli;
             }
             energy += en;
             let neighbors = registry.get_loop_neighbors(lli);
@@ -320,8 +313,8 @@ impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
 
         let mut pair_neighbors = IntMap::default();
         for (i, j) in pair_list.iter() {
-            let &o_index = loop_lookup.get(i).expect("Missing loop_lookup entry for i.");
-            let &i_index = loop_lookup.get(j).expect("Missing loop_lookup entry for j.");
+            let o_index = loop_lookup[*i as usize];
+            let i_index = loop_lookup[*j as usize];
             // How does the free energy change if the move is applied.
             let delta = registry.calc_pair_energy(o_index, i_index);
             pair_neighbors.insert(*i, delta);

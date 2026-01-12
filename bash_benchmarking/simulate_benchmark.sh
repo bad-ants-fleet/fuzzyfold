@@ -15,11 +15,11 @@ KF="Kinfold --noShift --fpt --met --time ${TIME} --start --logML --cut 9999"
 FF="ff-trajectory --t-end ${TIME}"
 
 # Programs to benchmark (space-separated)
-PROGRAMS=("$KF" "$FF")
+PROGRAMS=("$FF")
 
 # Output CSV
-RESULTS="simulate_benchmark_results_t${TIME}.csv"
-echo "program,input_file,num_sequences,elapsed_seconds" > "$RESULTS"
+RESULTS="simulate_benchmark_results_FF_t${TIME}.csv"
+echo "program,input_file,seq_index,seq_len,elapsed_seconds" > "$RESULTS"
 
 # Iterate over programs and input files
 for prog in "${PROGRAMS[@]}"; do
@@ -36,32 +36,27 @@ for prog in "${PROGRAMS[@]}"; do
             echo "⚠️ Skipping $infile (file not found)"
             continue
         fi
-
         numseq=$(grep -c '^>' "$infile")
         echo "⏱  Running $prog on $infile ($numseq sequences)..."
-        total_time=0
-        count=0
 
+        idx=0
         while true; do
             read -r header || break
             read -r seq || break
             read -r struct || break
-            count=$((count + 1))
+            idx=$((idx + 1))
 
             # Program input: seq on first line, structure on second line
             input="${seq}\n${struct}"
-            #echo -e $input
+            seq_len=${#seq}
 
             start=$(date +%s.%N)
             echo -e $input | $prog >/dev/null 
             end=$(date +%s.%N)
 
             runtime=$(awk -v s="$start" -v e="$end" 'BEGIN {printf "%.9f", e - s}')
-            total_time=$(awk -v a="$total_time" -v b="$runtime" 'BEGIN {printf "%.6f", a + b}')
-            #echo "$runtime"
+            echo "$prog,$infile,$idx,$seq_len,$runtime" >> "$RESULTS"
         done < "$infile"
-
-        echo "$prog,$infile,$count,$total_time" >> "$RESULTS"
     done
 done
 
