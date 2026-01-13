@@ -1,20 +1,19 @@
-use clap::Parser;
-use anyhow::Result;
-use colored::*;
-use serde_json::to_string_pretty;
 use std::fs;
 use std::sync::Arc;
 use std::path::Path;
 use std::path::PathBuf;
 use rayon::prelude::*;
+use rand::rng;
+use clap::Parser;
+use anyhow::Result;
+use colored::*;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
-use rand::rng;
+use serde_json::to_string_pretty;
 
 use ff_structure::PairTable;
 use ff_structure::DotBracketVec;
 use ff_energy::EnergyModel;
-use ff_kinetics::Metropolis;
 use ff_kinetics::LoopStructure;
 use ff_kinetics::LoopStructureSSA;
 use ff_kinetics::timeline::Timeline;
@@ -23,7 +22,7 @@ use ff_kinetics::MacrostateRegistry;
 
 use fuzzyfold::input_parsers::read_fasta_like_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
-use fuzzyfold::kinetics_parsers::RateModelParams;
+use fuzzyfold::kinetics_parsers::RateModelArguments;
 use fuzzyfold::kinetics_parsers::TimelineParameters;
 
 #[derive(Debug, Parser)]
@@ -46,11 +45,11 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "Simulation parameters")]
     simulation: TimelineParameters,
 
-    #[command(flatten, next_help_heading = "Kinetic model parameters")]
-    kinetics: RateModelParams,
-
     #[command(flatten, next_help_heading = "Energy model parameters")]
     energy: EnergyModelArguments,
+
+    #[command(flatten, next_help_heading = "Kinetic model parameters")]
+    kinetics: RateModelArguments,
 }
 
 fn main() -> Result<()> {
@@ -59,7 +58,7 @@ fn main() -> Result<()> {
 
     // --- Build simulator ---
     let emodel = cli.energy.build_model();
-    let rmodel = Metropolis::new(emodel.temperature(), cli.kinetics.k0);
+    let rmodel = cli.kinetics.build_model(emodel.temperature());
 
     let (header, sequence, structure) = read_fasta_like_input(&cli.input)?;
     let pairings = PairTable::try_from(&structure)?;

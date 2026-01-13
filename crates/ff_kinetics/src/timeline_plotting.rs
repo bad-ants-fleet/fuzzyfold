@@ -88,7 +88,7 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
 
 
     // Build data per structure
-    let mut trajectories: Vec<(usize, Vec<(f64, f64)>)> = Vec::new();
+    let mut trajectories: Vec<(usize, Vec<(f64, f64, f64)>)> = Vec::new();
 
     for (id, _) in timeline.registry.iter() {
         let mut series = Vec::new();
@@ -96,12 +96,13 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
             let count = tp.ensemble.get(&id).copied().unwrap_or(0);
             let occu = if tp.counter > 0 {
                 count as f64 / tp.counter as f64
-            } else {
-                0.0
-            };
-            series.push((tp.time, occu));
+            } else { 0.0 };
+            let se = if tp.counter > 0 {
+                (occu * (1.0 - occu) / tp.counter as f64).sqrt()
+            } else { 0.0 };
+            series.push((tp.time, occu, se));
         }
-        if series.iter().any(|(_, occu)| *occu >= 0.1) { // threshold filter
+        if series.iter().any(|(_, occu, _)| *occu >= 0.02) { // threshold filter
             trajectories.push((id, series));
         }
     }
@@ -116,13 +117,35 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
         let name = timeline.registry.macrostates()[*id].name();
         let energy = timeline.registry.macrostates()[*id].ensemble_energy().unwrap_or(0.0);
 
+        let z = 1.0; // or 1.96 for 95%
+        let band_color = color.mix(0.2);
+
+        let upper = series.iter().map(|(t, p, se)| (*t, (p + z * se).min(1.0)));
+        let lower = series.iter().rev().map(|(t, p, se)| (*t, (p - z * se).max(0.0)));
+
+        let upper = upper.chain(lower);
+
+        chart_left.draw_series(AreaSeries::new(
+                upper.clone()
+                .filter(|(t, _)| *t <= t_lin),
+                0.0,
+                band_color,
+        )).unwrap();
+
         chart_left.draw_series(LineSeries::new(
-                series.iter().cloned().filter(|(t, _)| *t <= t_lin),
+                series.iter().cloned().map(|(t, p, _)| (t, p)).filter(|(t, _)| *t <= t_lin),
                 color.stroke_width(2),
         )).unwrap();
 
+        chart_right.draw_series(AreaSeries::new(
+                upper
+                .filter(|(t, _)| *t >= t_lin),
+                0.0,
+                band_color,
+        )).unwrap();
+ 
         chart_right.draw_series(LineSeries::new(
-            series.iter().cloned().filter(|(t, _)| *t >= t_lin),
+            series.iter().cloned().map(|(t, p, _)| (t, p)).filter(|(t, _)| *t >= t_lin),
             color.stroke_width(2),
         )).unwrap()
             .label(format!("{:20} {:>6.2}", name.trim(), energy))   // <-- label for legend

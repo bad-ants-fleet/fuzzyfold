@@ -15,8 +15,8 @@ type MoveEnergies = Vec<(NAIDX, NAIDX, i32)>;
 struct LoopCache<'a, E: EnergyModel> {
     sequence: &'a [Base],
     model: &'a E,
-    loops: Vec<Option<LoopEntry>>,
-    free: Vec<usize>,
+    loops: Vec<LoopEntry>,
+    stale: Vec<usize>,
 }
 
 impl<'a, E: EnergyModel> LoopCache<'a, E> {
@@ -26,7 +26,7 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
             sequence,
             model,
             loops: Vec::new(),
-            free: Vec::new(),
+            stale: Vec::new(),
         }
     }
 
@@ -34,19 +34,18 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
     pub fn get(&self, idx: usize) -> &LoopEntry {
         self.loops
             .get(idx)
-            .and_then(|e| e.as_ref())
             .expect("Invalid LoopCache index")
     }
 
     pub fn insert_loop(&mut self, combo: NearestNeighborLoop) -> (usize, i32) {
         let energy = self.model.energy_of_loop(self.sequence, &combo);
 
-        if let Some(idx) = self.free.pop() {
-            self.loops[idx] = Some((combo, energy));
+        if let Some(idx) = self.stale.pop() {
+            self.loops[idx] = (combo, energy);
             (idx, energy)
         } else {
             let idx = self.loops.len();
-            self.loops.push(Some((combo, energy)));
+            self.loops.push((combo, energy));
             (idx, energy)
         }
     }
@@ -65,9 +64,8 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
         let combo = outer.join_loop(inner);
         let combo_energy = (o_en + i_en) - delta;
         // re-use outer_index for the new loop.
-        self.loops[outer_index] = Some((combo, combo_energy));
-        self.loops[inner_index] = None;
-        self.free.push(inner_index);
+        self.loops[outer_index] = (combo, combo_energy);
+        self.stale.push(inner_index);
         outer_index
     }
 
@@ -81,7 +79,7 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
 
         //NOTE: could look delta up directly by searching loop_list.
         let o_en = self.model.energy_of_loop(self.sequence, &outer);
-        self.loops[c_index] = Some((outer, o_en));
+        self.loops[c_index] = (outer, o_en);
         let (i_index, i_en) = self.insert_loop(inner);
 
         // How does the energy change if we apply the base-pair move.
@@ -135,7 +133,7 @@ impl<'a, E: EnergyModel> Clone for LoopStructure<'a, E> {
                 sequence: self.registry.sequence,
                 model: self.registry.model,
                 loops: self.registry.loops.clone(),
-                free: self.registry.free.clone(),
+                stale: self.registry.stale.clone(),
             },
             loop_lookup: self.loop_lookup.clone(),
             loop_neighbors: self.loop_neighbors.clone(),

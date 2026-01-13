@@ -1,25 +1,17 @@
-use clap::Args;
-use clap::Parser;
-use colored::*;
-use anyhow::Result;
-
 use rand::rng;
+use clap::Parser;
+use anyhow::Result;
+use colored::*;
+
 use ff_structure::PairTable;
 use ff_energy::EnergyModel;
 use ff_kinetics::LoopStructure;
 use ff_kinetics::LoopStructureSSA;
-use ff_kinetics::Metropolis;
 
 use fuzzyfold::input_parsers::read_fasta_like_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
+use fuzzyfold::kinetics_parsers::RateModelArguments;
 //TODO: support seeded rng.
-
-#[derive(Debug, Args)]
-pub struct RateModelParams {
-    /// Metropolis rate constant (must be > 0).
-    #[arg(long, default_value_t = 1.0)]
-    pub k0: f64,
-}
 
 #[derive(Debug, Parser)]
 #[command(version, about = "Stochastic Simulation Algorithm for RNA folding")]
@@ -32,11 +24,15 @@ pub struct Cli {
     #[arg(long, default_value_t = 1.0)]
     t_end: f64,
 
-    #[command(flatten, next_help_heading = "Kinetic model parameters")]
-    kinetics: RateModelParams,
+    /// Set the number of simulation steps (ignore t_end!!)
+    #[arg(long, default_value_t = 0)]
+    num_steps: usize,
 
     #[command(flatten, next_help_heading = "Energy model parameters")]
     energy: EnergyModelArguments,
+
+    #[command(flatten, next_help_heading = "Kinetic model parameters")]
+    kinetics: RateModelArguments,
 }
 
 fn main() -> Result<()> {
@@ -44,7 +40,7 @@ fn main() -> Result<()> {
 
     // --- Build simulator ---
     let emodel = cli.energy.build_model();
-    let rmodel = Metropolis::new(emodel.temperature(), cli.kinetics.k0);
+    let rmodel = cli.kinetics.build_model(emodel.temperature());
 
     let (header, sequence, structure) = read_fasta_like_input(&cli.input)?;
     let pairings = PairTable::try_from(&structure)?;
@@ -62,9 +58,12 @@ fn main() -> Result<()> {
     let loops = LoopStructure::try_from((&sequence[..], &pairings, &emodel)).unwrap();
     let mut simulator = LoopStructureSSA::from((loops, &rmodel));
 
+    let t_end = if cli.num_steps == 0 { cli.t_end } else { f64::MAX };
+    let mut steps = 0;
+
     simulator.simulate(
         &mut rng(), 
-        cli.t_end, 
+        t_end, 
         |t, tinc, flux, ls| {
             println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
                 ls,
@@ -73,6 +72,10 @@ fn main() -> Result<()> {
                 tinc,
                 1.0 / flux,
             );
+            steps += 1;
+            if steps == cli.num_steps {
+               return false;
+            }
             true
         },
     );
