@@ -1,6 +1,6 @@
 [package]
 name = "fuzzyfold"
-version = "0.2.0"
+version = "0.3.0"
 description = "Nucleic acid secondary structure kinetics."
 documentation = "https://docs.rs/fuzzyfold"
 keywords = ["dna", "rna", "secondary-structure", "kinetics", "nearest-neighbor"]

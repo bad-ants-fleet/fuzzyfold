@@ -66,13 +66,13 @@ Note that the starting structure from `dld3_lm3.fa` is part of this macro-state.
 To simulate 100 trajectories starting in a specific lm3 conformation:
 
 ```bash
-cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --t-log 100 --t-ext 1e-7 --t-end 0.1 -n 100
+cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --k0 1e6 --t-log 100 --t-ext 1e-7 --t-end 0.1 -n 100
 ```
 
 or equivalently:
 
 ```bash
-ff-timecourse --macrostates dld3*.ms --t-log 100 --t-ext 1e-7 --t-end 0.1 -n 100 < dld3_lm3.fa
+ff-timecourse --macrostates dld3*.ms --k0 1e6 --t-log 100 --t-ext 1e-7 --t-end 0.1 -n 100 < dld3_lm3.fa
 ```
 
 To familiarize yourself with timeline parameters such as `--t-log`, `--t-ext`, and `--t-end`:
@@ -101,7 +101,7 @@ To reduce statistical noise in ensemble dynamics, you may want to perform
 For example:
 
 ```bash
-cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --t-log 100 --t-ext 1e-7 --t-end 1 -n 100 --timeline my_dld3.tln
+cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --k0 1e6 --t-log 100 --t-ext 1e-7 --t-end 1 -n 100 --timeline my_dld3.tln
 ```
 
 This command creates `my_dld3.tln`, which stores the results from 100
