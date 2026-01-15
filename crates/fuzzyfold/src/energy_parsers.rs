@@ -1,12 +1,12 @@
-use std::path::PathBuf;
-use clap::Args;
-use clap::ValueEnum;
-use ff_energy::parameters::RNA_TURNER_2004_EXT;
 use log::debug;
 use colored::*;
+use clap::Args;
+use clap::ValueEnum;
+use std::path::PathBuf;
 
 use ff_energy::ViennaRNA;
 use ff_energy::parameters::RNA_TURNER_2004;
+use ff_energy::parameters::RNA_TURNER_2004_EXT;
 use ff_energy::parameters::RNA_ANDRONESCU_2007;
 use ff_energy::parameters::DNA_MATHEWS_2004;
 

@@ -11,7 +11,7 @@ UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 ```
 
 Use this file as input to enumerate the neighborhood using base-pair moves. The following
-command returns all structures with energy smaller or equal E(s) + 3.00 kcal/mol:
+command returns all reachable structures with energy smaller or equal E(s) + 2.80 kcal/mol:
 
 ```bash
 cat dld3_lm3.fa | ff-locmin --delta 2.8 --sorted
@@ -36,8 +36,8 @@ UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 
 Be careful, the energy delta is relative to the starting structure. If it is
 too high, then many more low-energy structures will be enumerated. Use `--help`
-to familiarize yourself with the other parameters, such as sorting and maximum
-base-pair distances.
+to familiarize yourself with the other parameters, such as maximum base-pair
+distances.
 
 ```bash
 ff-timecourse --help

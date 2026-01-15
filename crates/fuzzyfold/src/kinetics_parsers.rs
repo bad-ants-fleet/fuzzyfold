@@ -1,12 +1,55 @@
 use clap::Args;
-use anyhow::Result;
+use clap::ValueEnum;
 use anyhow::bail;
+use anyhow::Result;
+
+use ff_kinetics::RateModel;
+use ff_kinetics::Kawasaki;
+use ff_kinetics::Metropolis;
+
+#[derive(Debug)]
+pub enum RateModelImpl {
+    Metropolis(Metropolis),
+    Kawasaki(Kawasaki),
+}
+
+impl RateModel for RateModelImpl {
+    #[inline]
+    fn rate(&self, delta_e: i32) -> f64 {
+        match self {
+            Self::Metropolis(m) => m.rate(delta_e),
+            Self::Kawasaki(k)   => k.rate(delta_e),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum RateModelKind {
+    Metropolis,
+    Kawasaki,
+}
 
 #[derive(Debug, Args)]
-pub struct RateModelParams {
+pub struct RateModelArguments {
     /// Metropolis rate constant (must be > 0).
-    #[arg(long, default_value_t = 1e6)]
+    #[arg(long, default_value_t = 1.0)]
     pub k0: f64,
+
+    #[arg(long, value_enum, default_value = "metropolis")]
+    pub model: RateModelKind,
+}
+
+impl RateModelArguments {
+    pub fn build_model(&self, temperature: f64) -> RateModelImpl {
+        match self.model {
+            RateModelKind::Metropolis => RateModelImpl::Metropolis(
+                Metropolis::new(temperature, self.k0)
+            ),
+            RateModelKind::Kawasaki   => RateModelImpl::Kawasaki(
+                Kawasaki::new(temperature, self.k0)
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Args)]

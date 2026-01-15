@@ -15,15 +15,16 @@ are also welcome to reach out directly at this point.
 
 ## Current fuzzyfold software
  - **ff-eval**: Free-energy evaluation for secondary structures.
- - **ff-trajectory**: Single stochastic nucleic-acid folding trajectories.
- - **ff-timecourse**: Stochastic nucleic-acid secondary-structure ensemble simulations.
+ - **ff-trajectory**: Single stochastic nucleic acid folding trajectories.
+ - **ff-timecourse**: Stochastic nucleic acid secondary structure ensemble simulations.
  - **ff-randseq**: Generate a random sequence. 
+ - **ff-locmin**: Enumerate secondary structure neighborhoods.
 
 (Other software is work in progress and not yet published to crates.io)
 
 ## Current fuzzyfold crates
- - ff_structure: Common secondary-structure data structures.
- - ff_energy: Secondary-structure free-energy evaluation.
+ - ff_structure: Nucleic acid secondary structure data structures.
+ - ff_energy: Secondary structure free energy evaluation.
  - ff_kinetics: Stochastic folding kinetics for nucleic acids.
 
 (Other crates are work in progress and not yet published to crates.io)
