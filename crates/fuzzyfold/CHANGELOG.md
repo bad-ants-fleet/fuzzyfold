@@ -2,6 +2,9 @@
 
 All notable changes to this crate will be documented in this file.
 
+## development:
+- silent mode for ff-trajectory.
+
 ## [0.3.0] - 2026-01-13
 ### Added
 - ff-eval now supports multi-fold

@@ -40,14 +40,18 @@ impl<'a, E: EnergyModel, K: RateModel> From<(LoopStructure<'a, E>, &'a K)>
     fn from((loopstructure, ratemodel): (LoopStructure<'a, E>, &'a K)) -> Self {
         let mut rate_tree = RateTree::new(loopstructure.len());
 
-        for (_, add_neighbors) in loopstructure.get_add_neighbors_per_loop().iter() {
-            for &(i, j, delta) in add_neighbors {
-                rate_tree.init_insert(Move::Add { i, j }, ratemodel.rate(delta));
-            }
+        for (i, j, delta) in loopstructure.iter_add_moves() {
+            rate_tree.init_insert(
+                Move::Add { i, j }, 
+                ratemodel.rate(delta)
+            );
         }
 
-        for (i, j, delta) in loopstructure.get_del_neighbors() {
-            rate_tree.init_insert(Move::Del { i, j }, ratemodel.rate(delta));
+        for (i, j, delta) in loopstructure.iter_del_moves() {
+            rate_tree.init_insert(
+                Move::Del { i, j },
+                ratemodel.rate(delta)
+            );
         }
 
         rate_tree.init_partial_sums();
@@ -61,8 +65,8 @@ impl<'a, E: EnergyModel, K: RateModel> From<(LoopStructure<'a, E>, &'a K)>
 }
 
 impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
-    pub fn current_structure(&self) -> String {
-        format!("{}", self.loopstructure)
+    pub fn current_structure(&self) -> &LoopStructure<'a, E> {
+        &self.loopstructure
     }   
 
     /// Main simulation function.
@@ -115,7 +119,7 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
                     }
                     // Get the loop-list index to remove loop reactions.
                     let lli = self.loopstructure.loop_lookup()[i as usize];
-                    for &(p, q, _) in self.loopstructure.get_add_neighbors_per_loop()[&lli].iter() {
+                    for (p, q, _) in self.loopstructure.iter_add_moves_for_loop(lli) {
                         // Those are the ones that will be updated later anyway.
                         if q < i || j < p || (i < p && q < j) || (p < i && j < q) {
                             continue;

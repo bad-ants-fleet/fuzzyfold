@@ -10,7 +10,8 @@ use ff_energy::EnergyModel;
 use ff_energy::Base;
 
 type LoopEntry = (NearestNeighborLoop, i32);
-type MoveEnergies = Vec<(NAIDX, NAIDX, i32)>;
+type MoveEnergy = (NAIDX, NAIDX, i32);
+type MoveEnergies = Vec<MoveEnergy>;
 
 struct LoopCache<'a, E: EnergyModel> {
     sequence: &'a [Base],
@@ -126,23 +127,23 @@ pub struct LoopStructure<'a, E: EnergyModel> {
     energy: i32,
 }
 
-impl<'a, E: EnergyModel> Clone for LoopStructure<'a, E> {
-    fn clone(&self) -> Self {
-        Self {
-            registry: LoopCache {
-                sequence: self.registry.sequence,
-                model: self.registry.model,
-                loops: self.registry.loops.clone(),
-                stale: self.registry.stale.clone(),
-            },
-            loop_lookup: self.loop_lookup.clone(),
-            loop_neighbors: self.loop_neighbors.clone(),
-            pair_list: self.pair_list.clone(),
-            pair_neighbors: self.pair_neighbors.clone(),
-            energy: self.energy,
-        }
-    }
-}
+//impl<'a, E: EnergyModel> Clone for LoopStructure<'a, E> {
+//    fn clone(&self) -> Self {
+//        Self {
+//            registry: LoopCache {
+//                sequence: self.registry.sequence,
+//                model: self.registry.model,
+//                loops: self.registry.loops.clone(),
+//                stale: self.registry.stale.clone(),
+//            },
+//            loop_lookup: self.loop_lookup.clone(),
+//            loop_neighbors: self.loop_neighbors.clone(),
+//            pair_list: self.pair_list.clone(),
+//            pair_neighbors: self.pair_neighbors.clone(),
+//            energy: self.energy,
+//        }
+//    }
+//}
 
 impl<'a, E: EnergyModel> fmt::Debug for LoopStructure<'a, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -158,7 +159,7 @@ impl<'a, E: EnergyModel> fmt::Debug for LoopStructure<'a, E> {
 impl<'a, E: EnergyModel> fmt::Display for LoopStructure<'a, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Convert sequence to string
-        let mut dbr = vec!['.'; self.registry.sequence.len()];
+        let mut dbr = vec!['.'; self.loop_lookup().len()];
         for (i, j) in &self.pair_list {
             dbr[*i as usize] = '(';
             dbr[*j as usize] = ')';
@@ -169,10 +170,22 @@ impl<'a, E: EnergyModel> fmt::Display for LoopStructure<'a, E> {
 }
 
 impl<'a, E: EnergyModel> LoopStructure<'a, E> {
-    /// Return all add neighbors, including an index that 
-    /// is necessary to access the actual loop via loop_lookup.
-    pub fn get_add_neighbors_per_loop(&self) -> &IntMap<usize, MoveEnergies> {
-        &self.loop_neighbors
+    /// Return all add moves.
+    pub fn iter_add_moves(&self) -> impl Iterator<Item = MoveEnergy> + '_ {
+        self.loop_neighbors
+            .values()
+            .flat_map(|moves| moves.iter().copied())
+    }
+
+    pub fn iter_add_moves_for_loop(&self, lli: usize) -> impl Iterator<Item = MoveEnergy> + '_ {
+        self.loop_neighbors.get(&lli).into_iter().flat_map(|moves| moves.iter().copied())
+    }
+
+    /// Return all add moves.
+    pub fn iter_del_moves(&self) -> impl Iterator<Item = MoveEnergy> + '_ {
+        self.pair_neighbors
+            .iter()
+            .map(|(&i, &delta_e)| (i, self.pair_list[&i], delta_e))
     }
 
     pub fn len(&self) -> usize {
@@ -181,15 +194,6 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
  
     pub fn is_empty(&self) -> bool {
         self.pair_neighbors.is_empty() && self.loop_neighbors.is_empty()
-    }
-
-    /// Return all remove neighbors, where all i, j are also
-    /// the indices to access the outer/inner loop via loop_lookup.
-    pub fn get_del_neighbors(&self) -> MoveEnergies {
-        self.pair_neighbors
-            .iter()
-            .map(|(&i, &delta_e)| (i, self.pair_list[&i], delta_e))
-            .collect()
     }
 
     /// A pair-table like structure, where each position points to 
@@ -333,7 +337,7 @@ impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
 impl<'a, E: EnergyModel> From<&LoopStructure<'a, E>> for DotBracketVec {
     fn from(ls: &LoopStructure<'a, E>) -> Self {
         // Use the same logic as your Display impl, but avoid allocating a String unnecessarily
-        let mut vec = vec![DotBracket::Unpaired; ls.registry.sequence.len()];
+        let mut vec = vec![DotBracket::Unpaired; ls.loop_lookup().len()];
         for (i, j) in &ls.pair_list {
             vec[*i as usize] = DotBracket::Open;
             vec[*j as usize] = DotBracket::Close;
@@ -358,11 +362,7 @@ mod tests {
         let mut ls = LoopStructure::try_from((&seq[..], &structure, &model)).unwrap();
 
         // Clone neighbor list so we don’t mutate while iterating
-        let neighbors: Vec<(NAIDX, NAIDX, i32)> = ls
-            .get_add_neighbors_per_loop()
-            .iter()
-            .flat_map(|(_, nbrs)| nbrs.iter().copied())
-            .collect();
+        let neighbors: Vec<(NAIDX, NAIDX, i32)> = ls.iter_add_moves().collect();
 
         for (i, j, de) in neighbors {
             let initial_energy = ls.energy();
@@ -373,7 +373,7 @@ mod tests {
             println!("{i} {j} {}", ls.energy());
 
             // delete the same pair
-            let (p, q, rde) = ls.get_del_neighbors().first().cloned().unwrap();
+            let (p, q, rde) = ls.iter_del_moves().next().unwrap();
             println!("({p} {q} {rde}) at energy: {}", ls.energy());
             assert_eq!((i, j), (p, q), "same pair gets deleted");
             assert_eq!(de, -rde, "inverse energy of reverse move");
@@ -393,7 +393,7 @@ mod tests {
         let model = ViennaRNA::default();
 
         let ls = LoopStructure::try_from((&seq[..], &structure, &model)).unwrap();
-        let neighbors = ls.get_del_neighbors();
+        let neighbors = ls.iter_del_moves().collect::<Vec<_>>();
         println!("{:?}", neighbors);
 
         let structure = PairTable::try_from("..........").unwrap();
@@ -401,7 +401,7 @@ mod tests {
         let _ = ls.apply_add_move(0, 8);
         println!("{:?}", neighbors);
         let _ = ls.apply_add_move(1, 6);
-        assert_eq!(neighbors, ls.get_del_neighbors());
+        assert_eq!(neighbors, ls.iter_del_moves().collect::<Vec<_>>());
     }
 
 }

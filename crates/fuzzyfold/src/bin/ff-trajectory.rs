@@ -28,6 +28,10 @@ pub struct Cli {
     #[arg(long, default_value_t = 0)]
     num_steps: usize,
 
+    /// Do not print trajectory, only last structure.
+    #[arg(short, long)]
+    pub silent: bool, 
+
     #[command(flatten, next_help_heading = "Energy model parameters")]
     energy: EnergyModelArguments,
 
@@ -58,13 +62,36 @@ fn main() -> Result<()> {
     let loops = LoopStructure::try_from((&sequence[..], &pairings, &emodel)).unwrap();
     let mut simulator = LoopStructureSSA::from((loops, &rmodel));
 
-    let t_end = if cli.num_steps == 0 { cli.t_end } else { f64::MAX };
-    let mut steps = 0;
-
-    simulator.simulate(
-        &mut rng(), 
-        t_end, 
-        |t, tinc, flux, ls| {
+    if cli.silent { // Mostly for benchmarking anyway.
+        if cli.num_steps == 0 { 
+            simulator.simulate(&mut rng(), cli.t_end,
+                |_, _, _, _|  true);
+            let ls = simulator.current_structure();
+            println!("{} {:8.2}", ls, ls.energy() as f64 / 100.);
+        } else {
+            let mut steps = 0;
+            simulator.simulate(&mut rng(), f64::MAX, |_, _, _, _| {
+                steps += 1;
+                steps < cli.num_steps 
+            });
+            let ls = simulator.current_structure();
+            println!("{} {:8.2}", ls, ls.energy() as f64 / 100.);
+        }
+    } else if cli.num_steps == 0 { 
+        let callback = |t, tinc, flux, ls: &LoopStructure<'_, _>| {
+            println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
+                ls,
+                ls.energy() as f64 / 100.,
+                t,
+                tinc,
+                1.0 / flux,
+            );
+            true
+        };
+        simulator.simulate(&mut rng(), cli.t_end, callback);
+    } else {
+        let mut steps = 0;
+        let callback = |t, tinc, flux, ls: &LoopStructure<'_, _>| {
             println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
                 ls,
                 ls.energy() as f64 / 100.,
@@ -73,12 +100,11 @@ fn main() -> Result<()> {
                 1.0 / flux,
             );
             steps += 1;
-            if steps == cli.num_steps {
-               return false;
-            }
-            true
-        },
-    );
+            steps < cli.num_steps 
+        };
+        simulator.simulate(&mut rng(), f64::MAX, callback);
+    }
+
     Ok(())
 }
 

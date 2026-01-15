@@ -83,12 +83,10 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
     pub fn all_moves(&self) -> Vec<(Move, i32)> {
         let mut result = Vec::new();
 
-        for (_, add_neighbors) in self.get_add_neighbors_per_loop().iter() {
-            for &(i, j, delta) in add_neighbors {
-                result.push((Move::Add { i, j }, delta));
-            }
+        for (i, j, delta) in self.iter_add_moves() {
+            result.push((Move::Add { i, j }, delta));
         }
-        for (i, j, delta) in self.get_del_neighbors() {
+        for (i, j, delta) in self.iter_del_moves() {
             result.push((Move::Del { i, j }, delta));
         }
 
