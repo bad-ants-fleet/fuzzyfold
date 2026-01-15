@@ -114,7 +114,7 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
                         panic!("Dirty rate replacement failed.");
                     }
                     // Get the loop-list index to remove loop reactions.
-                    let lli = self.loopstructure.loop_lookup()[i as usize];
+                    let lli = self.loopstructure.loop_lookup()[i as usize].unwrap();
                     for &(p, q, _) in self.loopstructure.get_add_neighbors_per_loop()[&lli].iter() {
                         // Those are the ones that will be updated later anyway.
                         if q < i || j < p || (i < p && q < j) || (p < i && j < q) {
@@ -131,6 +131,91 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
                 None => panic!("No reaction chosen despite positive flux"),
             }
         }
+    }
+
+
+    /// Cotranscriptional simulation function.
+    pub fn co_simulate<R, F>(
+        &mut self,
+        rng: &mut R,
+        times: Vec<f64>, 
+        mut callback: F,
+    )
+    where
+        R: Rng + ?Sized,
+        F: FnMut(f64, f64, f64, &LoopStructure<'a, E>) -> bool,
+    {
+        let mut t = 0.;
+
+        for time in times {
+
+            while t < time {
+                let rsum = self.rate_tree.total_rate();
+
+                // sample waiting time ~ Exp(flux)
+                let tinc = -rng.random::<f64>().ln() / rsum;
+
+                //if the next reaction takes linger than i, break
+                if t + tinc >= time {
+                    t = time; 
+                    break;
+                }
+
+                // Callback bewore applying the waiting time.
+                // If callback return's false, then abort the simulation!
+                if !callback(t, tinc, rsum, &self.loopstructure) {
+                    break;
+                }
+
+                t += tinc;
+
+                let threshold = rng.random::<f64>() * rsum;
+                let mv = self.rate_tree.select_by_threshold(threshold);
+
+                match mv {
+                    Some(del @ Move::Del { i, j }) => {
+                        // We use "dirty replace, without changing the rate, because the loop 
+                        // will be updated afterwards as part of the new loop reactions.
+                        if !self.rate_tree.dirty_replace(&del, &Move::Add {i, j}) {
+                            panic!("Dirty rate replacement failed.");
+                        }
+                        let (neighbors, pair_changes) = self
+                            .loopstructure.apply_del_move(i, j);
+                        self.update_loop_reactions(neighbors);
+                        self.update_pair_reactions(pair_changes);
+                    },
+                    Some(add @ Move::Add { i, j }) => {
+                        // We use "dirty replace, without changing the rate, because the loop 
+                        // will be updated afterwards as part of the new pair reactions.
+                        if !self.rate_tree.dirty_replace(&add, &Move::Del {i, j}) {
+                            panic!("Dirty rate replacement failed.");
+                        }
+                        // Get the loop-list index to remove loop reactions.
+                        let lli = self.loopstructure.loop_lookup()[i as usize].unwrap();
+                        for &(p, q, _) in self.loopstructure.get_add_neighbors_per_loop()[&lli].iter() {
+                            // Those are the ones that will be updated later anyway.
+                            if q < i || j < p || (i < p && q < j) || (p < i && j < q) {
+                                continue;
+                            }
+                            self.rate_tree.remove(Move::Add { i: p, j: q });
+                        }
+                        let (ami, amj, pair_changes) = self
+                            .loopstructure.apply_add_move(i, j);
+                        self.update_loop_reactions(ami);
+                        self.update_loop_reactions(amj);
+                        self.update_pair_reactions(pair_changes);
+                    },
+                    None => panic!("No reaction chosen despite positive flux"),
+                }
+            }
+        }
+
+        //apply extension mover until total sequence length is reached
+        let (loop_neighbors, pair_changes) = self.loopstructure.apply_ext_move();
+        self.update_loop_reactions(loop_neighbors);
+        self.update_pair_reactions(pair_changes);
+
+
     }
 
     /// Update all reactions to add a new pair within a specific loop. 
@@ -200,7 +285,62 @@ mod tests {
         });
         assert!(steps > 0, "Simulation must perform at least one step");
     }
+
+    #[test]
+    fn test_cotranscriptional_simulation() {
+        let emodel = ViennaRNA::default();
+        let rmodel = Metropolis::new(emodel.temperature(), 1.0);
+        let mut rng = StdRng::seed_from_u64(42);
+
+        let sequence = "GCGCAAAAGCGCUUUUGCGCAAAAGCGC";
+        let current_structure = "..";
+        let t_max: Vec<f64> = vec![0.01, 0.15, 0.21, 0.31, 0.35, 0.4, 0.5, 0.8, 0.9, 0.95, 1.1, 1.9, 2.6, 3.0, 3.5, 4.0, 6.0, 6.5, 7.0, 7.4, 7.8, 8.2, 8.7, 8.9, 9.0, 9.2, 10.2];
+        let max_t = *t_max.last().unwrap();
+
+        let sequence = NucleotideVec::try_from(sequence).unwrap();
+        let pairings = PairTable::try_from(current_structure)
+            .expect("invalid structure in input");
+        let loops = LoopStructure::try_from((&sequence[..], &pairings, &emodel))
+            .expect("failed to build loop structure");
+
+        let mut simulator = LoopStructureSSA::from((loops, &rmodel));
+
+        let mut time_steps = Vec::new();
+        let mut sequence_lengths = Vec::new();
+
+        let mut steps = 0;
+
+        simulator.co_simulate(
+            &mut rng, 
+            t_max,  
+            |t, tinc, flux, ls| {
+                steps += 1;
+                time_steps.push(t);
+                let len = ls.loop_lookup().len();
+                sequence_lengths.push(len);
+                println!(
+                    "Step {}: t={:.4}, Δt={:.4}, flux={:.3e}",
+                    steps, t, tinc, flux
+                );
+                true
+        });
+
+
+        let last_time_step = time_steps.last().unwrap();
+        
+        assert!(*last_time_step <= max_t, "Simulation time should not exceed last time point in t_max");
+        
+        println!("Sequence length:");
+        for l in &sequence_lengths {
+            println!("{}", l);
+        }
+
+        assert!(sequence_lengths.last().unwrap() <= &sequence.len(), "Sequence length should not exceed total sequence length"); 
+        
+    }
+
 }
+
 
 
 
