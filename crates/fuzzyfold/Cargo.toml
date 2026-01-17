@@ -33,6 +33,10 @@ path = "src/bin/ff-timecourse.rs"
 name = "ff-trajectory"
 path = "src/bin/ff-trajectory.rs"
 
+[[bin]]
+name = "ff-trajectory_co_simulate"
+path = "src/bin/ff-trajectory_co_simulate.rs"
+
 [dependencies]
 ff_structure.workspace = true
 ff_energy.workspace = true
