@@ -15,8 +15,8 @@ type MoveEnergies = Vec<(NAIDX, NAIDX, i32)>;
 struct LoopCache<'a, E: EnergyModel> {
     sequence: &'a [Base],
     model: &'a E,
-    loops: Vec<LoopEntry>,
-    stale: Vec<usize>,
+    loops: Vec<Option<LoopEntry>>,
+    free: Vec<usize>,
 }
 
 impl<'a, E: EnergyModel> LoopCache<'a, E> {
@@ -26,7 +26,7 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
             sequence,
             model,
             loops: Vec::new(),
-            stale: Vec::new(),
+            free: Vec::new(),
         }
     }
 
@@ -34,6 +34,7 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
     pub fn get(&self, idx: usize) -> &LoopEntry {
         self.loops
             .get(idx)
+            .and_then(|e| e.as_ref())
             .expect("Invalid LoopCache index")
     }
 
@@ -46,12 +47,12 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
     pub fn insert_loop(&mut self, combo: NearestNeighborLoop) -> (usize, i32) {
         let energy = self.model.energy_of_loop(self.sequence, &combo);
 
-        if let Some(idx) = self.stale.pop() {
-            self.loops[idx] = (combo, energy);
+        if let Some(idx) = self.free.pop() {
+            self.loops[idx] = Some((combo, energy));
             (idx, energy)
         } else {
             let idx = self.loops.len();
-            self.loops.push((combo, energy));
+            self.loops.push(Some((combo, energy)));
             (idx, energy)
         }
     }
@@ -70,8 +71,9 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
         let combo = outer.join_loop(inner);
         let combo_energy = (o_en + i_en) - delta;
         // re-use outer_index for the new loop.
-        self.loops[outer_index] = (combo, combo_energy);
-        self.stale.push(inner_index);
+        self.loops[outer_index] = Some((combo, combo_energy));
+        self.loops[inner_index] = None;
+        self.free.push(inner_index);
         outer_index
     }
 
@@ -85,7 +87,7 @@ impl<'a, E: EnergyModel> LoopCache<'a, E> {
 
         //NOTE: could look delta up directly by searching loop_list.
         let o_en = self.model.energy_of_loop(self.sequence, &outer);
-        self.loops[c_index] = (outer, o_en);
+        self.loops[c_index] = Some((outer, o_en));
         let (i_index, i_en) = self.insert_loop(inner);
 
         // How does the energy change if we apply the base-pair move.
@@ -139,7 +141,7 @@ impl<'a, E: EnergyModel> Clone for LoopStructure<'a, E> {
                 sequence: self.registry.sequence,
                 model: self.registry.model,
                 loops: self.registry.loops.clone(),
-                stale: self.registry.stale.clone(),
+                free: self.registry.free.clone(),
             },
             loop_lookup: self.loop_lookup.clone(),
             loop_neighbors: self.loop_neighbors.clone(),
@@ -299,10 +301,13 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
             },
             _ => panic!("should have been exterior loop"),
         };
+
+        println!("After extend: {:?}", new);
         let (_, new_en) = self.registry.update(index, new);
         self.energy += new_en - old_en;
 
         let loop_neighbors = self.registry.get_loop_neighbors(index);
+        println!("New neighbors: {} pairs possible", loop_neighbors.len());
         self.loop_neighbors.insert(index, loop_neighbors.clone());
 
         let (new, _) = self.registry.get(index);
@@ -453,11 +458,10 @@ mod tests {
     #[test]
     fn test_appyl_ext_move() {
         let seq = NucleotideVec::from_lossy("UGCCCCGGUCA");
-        let structure_1 = PairTable::try_from(".((....).)").unwrap();
-        let structure_2 = PairTable::try_from(".((....).).").unwrap();
+        let structure = PairTable::try_from(".((....).)").unwrap();
         let model = ViennaRNA::default();
 
-        let mut ls = LoopStructure::try_from((&seq[..], &structure_1, &model)).unwrap();
+        let mut ls = LoopStructure::try_from((&seq[..], &structure, &model)).unwrap();
         let add_neighbors_1: Vec<_> = ls.get_add_neighbors_per_loop()
             .iter()
             .flat_map(|(_, neighbors) | neighbors.clone())
@@ -466,19 +470,21 @@ mod tests {
         let energy_1 = ls.energy();
         println!("Energy before extension: {}", ls.energy());
         
-
-        let result = ls.apply_ext_move();
-
+        let (loop_neighbors, pair_changes) = ls.apply_ext_move();
+        
+        assert!(loop_neighbors.len() != 0, "No new neighbors");
+        assert!(pair_changes.len() != 0, "No pair changes");
         let energy_2 = ls.energy();
         let add_neighbors_2: Vec<_> = ls.get_add_neighbors_per_loop()
             .iter()
             .flat_map(|(_, neighbors) | neighbors.clone())
             .collect();
         println!("Energy after extension:{}", ls.energy());
-        assert_ne!(energy_1, energy_2);
-        assert_ne!(add_neighbors_1, add_neighbors_2);
+        assert_ne!(energy_1, energy_2, "Energy should change after extension");
+        assert_ne!(add_neighbors_1, add_neighbors_2, "Neighbors should change after extension");
 
-        let ls_exp = LoopStructure::try_from((&seq[..], &structure_2, &model)).unwrap();
+        let structure_exp = PairTable::try_from(".((....).).").unwrap();
+        let ls_exp = LoopStructure::try_from((&seq[..], &structure_exp, &model)).unwrap();
         let energy_exp = ls_exp.energy();
         let add_neighbors_exp: Vec<_> = ls_exp.get_add_neighbors_per_loop()
             .iter()
@@ -487,8 +493,9 @@ mod tests {
         println!("Expected energy after extension:{}", energy_exp);
         assert_eq!(energy_2, energy_exp); //assert if energy after extension matches expected energy 
         assert_eq!(add_neighbors_2, add_neighbors_exp); //assert if neighbors match exptected neighbors
+
     }
-    
+
 
 }
 

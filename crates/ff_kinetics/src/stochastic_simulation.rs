@@ -145,23 +145,24 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
         R: Rng + ?Sized,
         F: FnMut(f64, f64, f64, &LoopStructure<'a, E>) -> bool,
     {
-        let mut t = 0.;
+        let mut t = 0.0;
 
-        for time in times {
+        for time in &times {
 
-            while t < time {
+            while t < *time {
                 let rsum = self.rate_tree.total_rate();
+                println!("Time {}, t={}, structure={}", time, t, self.current_structure());
 
                 // sample waiting time ~ Exp(flux)
                 let tinc = -rng.random::<f64>().ln() / rsum;
 
-                //if the next reaction takes linger than i, break
-                if t + tinc >= time {
-                    t = time; 
+                //if the next reaction takes longer than time, break
+                if t + tinc >= *time {
+                    t = *time; 
                     break;
                 }
 
-                // Callback bewore applying the waiting time.
+                // Callback before applying the waiting time.
                 // If callback return's false, then abort the simulation!
                 if !callback(t, tinc, rsum, &self.loopstructure) {
                     break;
@@ -208,15 +209,16 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
                     None => panic!("No reaction chosen despite positive flux"),
                 }
             }
+
+            //apply extension move
+            if t < *times.last().unwrap() {
+                let (loop_neighbors, pair_changes) = self.loopstructure.apply_ext_move();
+                self.update_loop_reactions(loop_neighbors);
+                self.update_pair_reactions(pair_changes);
+            }
         }
 
-        //apply extension mover until total sequence length is reached
-        let (loop_neighbors, pair_changes) = self.loopstructure.apply_ext_move();
-        self.update_loop_reactions(loop_neighbors);
-        self.update_pair_reactions(pair_changes);
-
-
-    }
+    } 
 
     /// Update all reactions to add a new pair within a specific loop. 
     fn update_loop_reactions(
@@ -293,9 +295,9 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
 
         let sequence = "GCGCAAAAGCGCUUUUGCGCAAAAGCGC";
-        let current_structure = "..";
-        let t_max: Vec<f64> = vec![0.01, 0.15, 0.21, 0.31, 0.35, 0.4, 0.5, 0.8, 0.9, 0.95, 1.1, 1.9, 2.6, 3.0, 3.5, 4.0, 6.0, 6.5, 7.0, 7.4, 7.8, 8.2, 8.7, 8.9, 9.0, 9.2, 10.2];
-        let max_t = *t_max.last().unwrap();
+        let current_structure = ".";
+        let times: Vec<f64> = vec![0.1, 1.5, 2.1, 3.1, 3.5, 4.0, 5.0, 8.0, 9.0, 9.5, 11.0, 19.0, 26.0, 30.0, 35.0, 40.0, 60.0, 65.0, 70.0, 74.0, 78.0, 82.0, 87.0, 89.0, 90.0, 100.0, 110.0, 120.0];
+        let max_t = *times.last().unwrap();
 
         let sequence = NucleotideVec::try_from(sequence).unwrap();
         let pairings = PairTable::try_from(current_structure)
@@ -306,18 +308,23 @@ mod tests {
         let mut simulator = LoopStructureSSA::from((loops, &rmodel));
 
         let mut time_steps = Vec::new();
-        let mut sequence_lengths = Vec::new();
+        let mut structure_lengths = Vec::new();
 
         let mut steps = 0;
 
         simulator.co_simulate(
             &mut rng, 
-            t_max,  
+            times,  
             |t, tinc, flux, ls| {
                 steps += 1;
                 time_steps.push(t);
-                let len = ls.loop_lookup().len();
-                sequence_lengths.push(len);
+                let current_length = ls.loop_lookup()
+                    .iter()
+                    .position(|x| x.is_none())
+                    .unwrap_or(ls.loop_lookup().len());
+        
+                structure_lengths.push(current_length);
+                
                 println!(
                     "Step {}: t={:.4}, Δt={:.4}, flux={:.3e}",
                     steps, t, tinc, flux
@@ -330,12 +337,12 @@ mod tests {
         
         assert!(*last_time_step <= max_t, "Simulation time should not exceed last time point in t_max");
         
-        println!("Sequence length:");
-        for l in &sequence_lengths {
+        println!("Structure length:");
+        for l in &structure_lengths {
             println!("{}", l);
         }
 
-        assert!(sequence_lengths.last().unwrap() <= &sequence.len(), "Sequence length should not exceed total sequence length"); 
+        assert!(structure_lengths.last().unwrap() <= &sequence.len(), "Sequence length should not exceed total sequence length"); 
         
     }
 
