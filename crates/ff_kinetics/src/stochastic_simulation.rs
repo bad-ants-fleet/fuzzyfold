@@ -134,7 +134,7 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
     }
 
 
-    /// Cotranscriptional simulation function.
+    /// Cotranscriptional simulation function
     pub fn co_simulate<R, F>(
         &mut self,
         rng: &mut R,
@@ -151,8 +151,7 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
 
             while t < *time {
                 let rsum = self.rate_tree.total_rate();
-                println!("Time {}, t={}, structure={}", time, t, self.current_structure());
-
+            
                 // sample waiting time ~ Exp(flux)
                 let tinc = -rng.random::<f64>().ln() / rsum;
 

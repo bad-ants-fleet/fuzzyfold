@@ -302,12 +302,10 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
             _ => panic!("should have been exterior loop"),
         };
 
-        println!("After extend: {:?}", new);
         let (_, new_en) = self.registry.update(index, new);
         self.energy += new_en - old_en;
 
         let loop_neighbors = self.registry.get_loop_neighbors(index);
-        println!("New neighbors: {} pairs possible", loop_neighbors.len());
         self.loop_neighbors.insert(index, loop_neighbors.clone());
 
         let (new, _) = self.registry.get(index);
