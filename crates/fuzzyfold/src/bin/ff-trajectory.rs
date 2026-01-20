@@ -5,8 +5,9 @@ use colored::*;
 
 use ff_structure::PairTable;
 use ff_energy::EnergyModel;
-use ff_kinetics::LoopStructure;
-use ff_kinetics::LoopStructureSSA;
+use ff_kinetics::AddDelMoves;
+use ff_kinetics::Walker;
+use ff_kinetics::SSA;
 
 use fuzzyfold::input_parsers::read_fasta_like_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
@@ -59,15 +60,15 @@ fn main() -> Result<()> {
         "mean-waiting".cyan(),
     );
 
-    let loops = LoopStructure::try_from((&sequence[..], &pairings, &emodel)).unwrap();
-    let mut simulator = LoopStructureSSA::from((loops, &rmodel));
-
+    let moves = AddDelMoves::try_from((&sequence[..], &pairings, &emodel)).unwrap();
+    let mut simulator = SSA::from((moves, &rmodel));
     if cli.silent { // Mostly for benchmarking anyway.
         if cli.num_steps == 0 { 
             simulator.simulate(&mut rng(), cli.t_end,
                 |_, _, _, _|  true);
             let ls = simulator.current_structure();
-            println!("{} {:8.2}", ls, ls.energy() as f64 / 100.);
+            let en = simulator.current_energy();
+            println!("{} {:8.2}", ls, en as f64 / 100.);
         } else {
             let mut steps = 0;
             simulator.simulate(&mut rng(), f64::MAX, |_, _, _, _| {
@@ -75,34 +76,35 @@ fn main() -> Result<()> {
                 steps < cli.num_steps 
             });
             let ls = simulator.current_structure();
-            println!("{} {:8.2}", ls, ls.energy() as f64 / 100.);
+            let en = simulator.current_energy();
+            println!("{} {:8.2}", ls, en as f64 / 100.);
         }
     } else if cli.num_steps == 0 { 
-        let callback = |t, tinc, flux, ls: &LoopStructure<'_, _>| {
-            println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
-                ls,
-                ls.energy() as f64 / 100.,
-                t,
-                tinc,
-                1.0 / flux,
-            );
-            true
-        };
-        simulator.simulate(&mut rng(), cli.t_end, callback);
+        simulator.simulate(&mut rng(), cli.t_end, 
+            |t, tinc, flux, w| {
+                println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
+                    w,
+                    w.current_energy() as f64 / 100.,
+                    t,
+                    tinc,
+                    1.0 / flux,
+                );
+                true
+            });
     } else {
         let mut steps = 0;
-        let callback = |t, tinc, flux, ls: &LoopStructure<'_, _>| {
-            println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
-                ls,
-                ls.energy() as f64 / 100.,
-                t,
-                tinc,
-                1.0 / flux,
-            );
-            steps += 1;
-            steps < cli.num_steps 
-        };
-        simulator.simulate(&mut rng(), f64::MAX, callback);
+        simulator.simulate(&mut rng(), f64::MAX, 
+            |t, tinc, flux, w| {
+                println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
+                    w,
+                    w.current_energy() as f64 / 100.,
+                    t,
+                    tinc,
+                    1.0 / flux,
+                );
+                steps += 1;
+                steps < cli.num_steps 
+            });
     }
 
     Ok(())

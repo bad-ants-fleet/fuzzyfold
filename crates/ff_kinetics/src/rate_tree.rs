@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 
-use crate::explore::Move;
+use crate::Move;
 
 #[derive(Clone, Debug)]
 struct MoveNode {

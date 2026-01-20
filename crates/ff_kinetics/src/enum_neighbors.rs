@@ -1,51 +1,24 @@
 use log::info;
 use rustc_hash::FxHashSet;
 
-use ff_structure::NAIDX;
 use ff_structure::DotBracket;
 use ff_structure::DotBracketVec;
 use ff_energy::EnergyModel;
 
-use crate::LoopStructure;
-
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
-pub enum Move {
-    Add {
-        i: NAIDX,
-        j: NAIDX,
-    },
-    Del {
-        i: NAIDX,
-        j: NAIDX,
-    },
-}
-
-impl Move {
-    pub fn inverse(self) -> Self {
-        match self {
-            Move::Add { i, j } => Move::Del { i, j },
-            Move::Del { i, j } => Move::Add { i, j },
-        }
-    }
-
-    pub fn ij(&self) -> (NAIDX, NAIDX) {
-        match self {
-            Move::Add { i, j } => (*i, *j),
-            Move::Del { i, j } => (*i, *j),
-        }
-    }
-}
+use crate::Move;
+use crate::Walker;
+use crate::AddDelMoves;
 
 pub trait ApplyMove {
-    fn apply_move(&mut self, mv: Move);
-    fn undo_move(&mut self, mv: Move) {
-        self.apply_move(mv.inverse());
+    fn apply_move(&mut self, mv: &Move);
+    fn undo_move(&mut self, mv: &Move) {
+        self.apply_move(&mv.inverse());
     }
 }
 
 impl ApplyMove for DotBracketVec {
-    fn apply_move(&mut self, mv: Move) {
-        match mv {
+    fn apply_move(&mut self, mv: &Move) {
+        match *mv {
             Move::Add { i, j } => {
                 self[i as usize] = DotBracket::Open;
                 self[j as usize] = DotBracket::Close;
@@ -54,22 +27,31 @@ impl ApplyMove for DotBracketVec {
                 self[i as usize] = DotBracket::Unpaired;
                 self[j as usize] = DotBracket::Unpaired;
             }
+            Move::ShiftJ { i, j, k } => {
+                self[j as usize] = DotBracket::Unpaired;
+                if i < k {
+                    self[i as usize] = DotBracket::Open;
+                    self[k as usize] = DotBracket::Close;
+                } else {
+                    self[k as usize] = DotBracket::Open;
+                    self[i as usize] = DotBracket::Close;
+                }
+            }
+            Move::ShiftI { i, j, k } => {
+                self[i as usize] = DotBracket::Unpaired;
+                if j < k {
+                    self[j as usize] = DotBracket::Open;
+                    self[k as usize] = DotBracket::Close;
+                } else {
+                    self[k as usize] = DotBracket::Open;
+                    self[j as usize] = DotBracket::Close;
+                }
+            }
+ 
         }
     }
 }
 
-impl<'a, E: EnergyModel> ApplyMove for LoopStructure<'a, E> { 
-    fn apply_move(&mut self, mv: Move) {
-        match mv {
-            Move::Add { i, j } => {
-                self.apply_add_move(i, j);
-            }
-            Move::Del { i, j } => {
-                self.apply_del_move(i, j);
-            }
-        }
-    }
-}
 
 #[derive(Debug)]
 struct Frame {
@@ -79,18 +61,9 @@ struct Frame {
     max_delta: i32,
 }
 
-impl<'a, E: EnergyModel> LoopStructure<'a, E> {
+impl<'a, E: EnergyModel> AddDelMoves<'a, E> {
     pub fn all_moves(&self) -> Vec<(Move, i32)> {
-        let mut result = Vec::new();
-
-        for (i, j, delta) in self.iter_add_moves() {
-            result.push((Move::Add { i, j }, delta));
-        }
-        for (i, j, delta) in self.iter_del_moves() {
-            result.push((Move::Del { i, j }, delta));
-        }
-
-        result
+        self.propose_moves().collect()
     }
 
     pub fn generate_neighbors<F>(&mut self, 
@@ -98,8 +71,8 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
         maxsteps: usize,
         mut callback: F,
     ) where F: FnMut(&DotBracketVec, i32) {
-        let root = DotBracketVec::from(&*self);
-        let mut path = Vec::new();
+        let root = self.current_structure();
+        let mut path: Vec<Move> = Vec::new();
 
         let mut seen = FxHashSet::default();
         seen.insert(root.clone());
@@ -116,13 +89,14 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
             let mut db = frame.structure.clone();
             if let Some(bp_move) = frame.bp_move {
                 while path.len() >= frame.depth {
-                    self.undo_move(path.pop().expect("popping"));
+                    let _ = self.apply_move(
+                        &path.pop().expect("popping").inverse());
                 }
-                self.apply_move(bp_move);
+                let _ = self.apply_move(&bp_move);
                 path.push(bp_move);
             }
-            debug_assert_eq!(DotBracketVec::from(&*self), db);
-            callback(&db, self.energy());
+            debug_assert_eq!(self.current_structure(), db);
+            callback(&db, self.current_energy());
 
             if path.len() == maxsteps {
                 info!("Reached maxsteps during neighbor generation.");
@@ -133,7 +107,7 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
                 if delta > frame.max_delta {
                     continue;
                 }
-                db.apply_move(bp_move);
+                db.apply_move(&bp_move);
                 if seen.insert(db.clone()) {
                     stack.push(Frame {
                         structure: db.clone(),
@@ -142,7 +116,7 @@ impl<'a, E: EnergyModel> LoopStructure<'a, E> {
                         max_delta: frame.max_delta - delta,
                     });
                 }
-                db.undo_move(bp_move);
+                db.undo_move(&bp_move);
             }
         }
     }

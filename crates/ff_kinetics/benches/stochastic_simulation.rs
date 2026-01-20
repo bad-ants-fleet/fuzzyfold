@@ -14,8 +14,8 @@ use ff_energy::NucleotideVec;
 use ff_energy::EnergyModel;
 use ff_energy::ViennaRNA;
 use ff_kinetics::Metropolis;
-use ff_kinetics::LoopStructure;
-use ff_kinetics::LoopStructureSSA;
+use ff_kinetics::AddDelMoves;
+use ff_kinetics::SSA;
 
 const INPUT_L50: &str = concat!(env!("CARGO_MANIFEST_DIR"), 
     "/benches/data/benchmark_random_structures_len50.vrna");
@@ -83,14 +83,14 @@ fn simulate_benchmark(c: &mut Criterion) {
                 || &inputs, 
                 |inputs| {
                     for (seq, pt) in inputs {
-                        let loops = LoopStructure::try_from((&seq[..], pt, &emodel))
-                            .expect("failed to build loop structure");
-                        let mut simulator = LoopStructureSSA::from((loops, &rmodel));
+                        let moves = AddDelMoves::try_from((&seq[..], pt, &emodel))
+                            .expect("failed to build loop table");
+                        let mut simulator = SSA::from((moves, &rmodel));
 
                         simulator.simulate(
                             &mut rng, 
                             black_box(10.0), 
-                            |_t, _ti, _fl, _ls| { true }
+                            |_t, _ti, _fl, _w| { true }
                         );
                     }
                 },

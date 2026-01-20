@@ -3,6 +3,7 @@ use clap::ValueEnum;
 use anyhow::bail;
 use anyhow::Result;
 
+use ff_kinetics::Move;
 use ff_kinetics::RateModel;
 use ff_kinetics::Kawasaki;
 use ff_kinetics::Metropolis;
@@ -15,10 +16,10 @@ pub enum RateModelImpl {
 
 impl RateModel for RateModelImpl {
     #[inline]
-    fn rate(&self, delta_e: i32) -> f64 {
+    fn rate(&self, mv: &Move, delta_e: i32) -> f64 {
         match self {
-            Self::Metropolis(m) => m.rate(delta_e),
-            Self::Kawasaki(k)   => k.rate(delta_e),
+            Self::Metropolis(m) => m.rate(mv, delta_e),
+            Self::Kawasaki(k)   => k.rate(mv, delta_e),
         }
     }
 }

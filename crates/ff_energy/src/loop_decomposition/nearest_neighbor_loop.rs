@@ -5,7 +5,7 @@
 //!
 
 use std::fmt;
-use std::ops::Range;
+use std::ops::RangeInclusive;
 use colored::*;
 
 use ff_structure::NAIDX;
@@ -155,41 +155,35 @@ impl NearestNeighborLoop {
     }
 
     /// Returns a list of ranges for unpaired nucleotides.
-    ///
-    /// NOTE: add1 feels a bit like a hack. It is used by the calling function
-    /// to ensure that the exterior loop always stops at the last unpaired
-    /// nucleotide.
-    fn unpaired_ranges(&self, add1:  usize) -> Vec<Range<usize>> {
+    pub fn inclusive_loop_ranges(&self) -> Vec<RangeInclusive<usize>> {
         match self {
-            Self::Hairpin { closing: (i, j) } => vec![
-                (*i as usize + 1)..(*j as usize)],
-            Self::Interior { closing: (i, j),  inner: (p, q) } => vec![
-                (*i as usize + 1)..(*p as usize), 
-                (*q as usize + 1)..(*j as usize)
-            ],
+            Self::Hairpin { closing: (i, j) } => 
+                vec![(*i as usize)..=(*j as usize)],
+            Self::Interior { closing: (i, j),  inner: (p, q) } => 
+                vec![(*i as usize)..=(*p as usize), 
+                     (*q as usize)..=(*j as usize)],
             Self::Multibranch { closing: (i, j), branches } => {
-                let mut result = vec![];
+                let mut result = Vec::with_capacity(branches.len() + 1);
                 let mut start = *i as usize;
                 for &(p, q) in branches {
-                    result.push((start + 1)..(p as usize));
+                    result.push((start)..=(p as usize));
                     start = q as usize;
                 }
-                result.push((start+1)..(*j as usize));
+                result.push((start)..=(*j as usize));
                 result
             }
             Self::Exterior { ends: (p5, p3), branches } => {
-                let mut result = Vec::new();
+                let mut result = Vec::with_capacity(branches.len() + 1);
                 let mut start = *p5 as usize;
                 for &(p, q) in branches {
-                    result.push(start..(p as usize));
-                    start = q as usize + 1;
+                    result.push(start..=(p as usize));
+                    start = q as usize;
                 }
-                result.push(start..(*p3 as usize + add1));
+                result.push(start..=(*p3 as usize));
                 result
             }
             Self::JointExterior { ends: (p5, p3), branches } => {
                 debug_assert!(!branches.is_empty());
-                // Preprocessing of branches.
                 // TODO: more efficient?
                 let mut branches = branches.clone();
                 branches.rotate_left(1);
@@ -200,33 +194,73 @@ impl NearestNeighborLoop {
                     if i > *p3 { break; }
                     branches.rotate_left(1);
                 }
-                let mut result = Vec::new();
+                let mut result = Vec::with_capacity(branches.len() + 1);
                 let mut start = *p5 as usize;
                 for (p, q) in branches {
-                    result.push(start..(p as usize));
-                    start = q as usize + 1;
+                    result.push(start..=(p as usize));
+                    start = q as usize;
                 }
-                result.push(start..(*p3 as usize + add1));
+                result.push(start..=(*p3 as usize));
                 result
             }
             Self::Disconnected { .. } => todo!("For now, get this explicitly for the disconnected components!"),
         }
     }
 
+    /// Returns all sequence indices that should point to this loop.
     pub fn unpaired_indices(&self) -> Vec<usize> {
-        self.unpaired_ranges(1)
-            .into_iter()
-            .flat_map(|r| r.collect::<Vec<_>>())
-            .collect()
+        let spans = self.inclusive_loop_ranges();
+        match self {
+            Self::Exterior { .. } | Self::JointExterior { .. } => {
+                let n = spans.len() - 1;
+                spans.into_iter()
+                    .enumerate()
+                    .flat_map(|(k, r)| {
+                        let start = if k == 0 { *r.start() } else { *r.start() + 1 };
+                        let end = if k == n { *r.end() + 1 } else { *r.end() };
+                        start..end
+                    })
+                .collect()
+
+            },
+            _ => {
+                spans
+                    .into_iter()
+                    .flat_map(|r| {
+                        let start = *r.start() + 1;
+                        let end   = *r.end();
+                        start..end
+                    })
+                    .collect()
+            }
+        }
     }
 
     /// Returns all sequence indices that should point to this loop.
     pub fn inclusive_unpaired_indices(&self) -> Vec<usize> {
-        self.unpaired_ranges(0)
-            .into_iter()
-            .map(|r| r.start..=r.end)
-            .flat_map(|r| r.collect::<Vec<_>>())
-            .collect()
+        let spans = self.inclusive_loop_ranges();
+        match self {
+            Self::Exterior { .. } | Self::JointExterior { .. } => {
+                spans.into_iter()
+                    .enumerate()
+                    .flat_map(|(k, r)| {
+                        let start = if k == 0 { *r.start() } else { *r.start() + 1 };
+                        start..=*r.end()
+                    })
+                .collect()
+
+            },
+            _ => {
+                spans
+                    .into_iter()
+                    .flat_map(|r| {
+                        let start = *r.start() + 1;
+                        let end   = *r.end();
+                        start..=end
+                    })
+                    .collect()
+            }
+        }
     }
 
     /// Split the given loop into two new loops at the indices i,j
@@ -254,7 +288,7 @@ impl NearestNeighborLoop {
                     (Self::Multibranch { closing: (*a, *b), branches: vec![(*p, *q), (i, j)] },
                      Self::Hairpin { closing: (i, j) })
                 } else {
-                    panic!("that really should not happen.");
+                    panic!("Splitting Interior loop at {} {} {} {}. That really should not happen.", i, j, p, q);
                 }
             }
 

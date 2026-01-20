@@ -10,7 +10,7 @@ use anyhow::Result;
 use fuzzyfold::structure::PairTable;
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
-use fuzzyfold::kinetics::LoopStructure;
+use fuzzyfold::kinetics::AddDelMoves;
 
 
 #[derive(Debug, Args)]
@@ -93,17 +93,18 @@ fn main() -> Result<()> {
         println!("{}", sequence);
     }
 
-    let mut lss = LoopStructure::try_from((&sequence[..], &pairings, &emodel)).unwrap();
+    let mut moves = AddDelMoves::try_from((&sequence[..], &pairings, &emodel))
+        .expect("failed to build loop table");
 
     if !cli.lmin.sorted {
-        lss.generate_neighbors(delta, distance, 
+        moves.generate_neighbors(delta, distance, 
             |db, en| { 
                 println!("{} {:.2}", db, en as f64 / 100.0);
             }
         );
     } else {
         let mut neighbors = Vec::new();
-        lss.generate_neighbors(delta, distance, 
+        moves.generate_neighbors(delta, distance, 
             |db, en| { 
                 neighbors.push((db.clone(), en)); }
         );

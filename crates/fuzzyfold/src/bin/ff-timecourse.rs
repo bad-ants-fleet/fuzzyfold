@@ -12,10 +12,10 @@ use indicatif::ProgressStyle;
 use serde_json::to_string_pretty;
 
 use ff_structure::PairTable;
-use ff_structure::DotBracketVec;
 use ff_energy::EnergyModel;
-use ff_kinetics::LoopStructure;
-use ff_kinetics::LoopStructureSSA;
+use ff_kinetics::AddDelMoves;
+use ff_kinetics::Walker;
+use ff_kinetics::SSA;
 use ff_kinetics::timeline::Timeline;
 use ff_kinetics::timeline_plotting::plot_occupancy_over_time;
 use ff_kinetics::MacrostateRegistry;
@@ -119,15 +119,15 @@ fn main() -> Result<()> {
                 let registry = Arc::clone(&shared_registry);
                 let mut timeline = Timeline::new(&times, registry);
 
-                let loops = LoopStructure::try_from((&sequence[..], &pairings, &emodel)).unwrap();
-                let mut simulator = LoopStructureSSA::from((loops, &rmodel));
+                let moves = AddDelMoves::try_from((&sequence[..], &pairings, &emodel)).unwrap();
+                let mut simulator = SSA::from((moves, &rmodel));
                 let mut t_idx = 0;
                 simulator.simulate(
                     &mut rng(),
                     cli.simulation.t_end,
-                    |t, tinc, _, ls| {
+                    |t, tinc, _, w| {
                         while t_idx < times.len() && t + tinc >= times[t_idx] {
-                            let structure = DotBracketVec::from(ls);
+                            let structure = w.current_structure();
                             timeline.assign_structure(t_idx, &structure);
                             t_idx += 1;
                         }

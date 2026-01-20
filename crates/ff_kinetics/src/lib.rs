@@ -2,15 +2,18 @@ pub mod timeline;
 pub mod timeline_io;
 pub mod timeline_plotting;
 pub mod rate_tree;
+pub mod enum_neighbors;
 
 mod rate_model;
-mod loop_structure;
 mod stochastic_simulation;
-mod explore;
 mod macrostates;
+mod base_pair_moves;
+mod walker;
+mod movesets;
 
 pub use rate_model::*;
-pub use loop_structure::*;
 pub use stochastic_simulation::*;
 pub use macrostates::*;
-pub use explore::*;
+pub use base_pair_moves::*;
+pub use walker::*;
+pub use movesets::*;
