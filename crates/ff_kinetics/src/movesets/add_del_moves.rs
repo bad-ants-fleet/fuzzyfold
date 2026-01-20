@@ -2,120 +2,14 @@ use std::fmt;
 use nohash_hasher::IntMap;
 
 use ff_structure::NAIDX;
-use ff_structure::DotBracket;
-use ff_structure::DotBracketVec;
 use ff_energy::Base;
 use ff_energy::EnergyModel;
 use ff_energy::LoopDecomposition;
-use ff_energy::NearestNeighborLoop;
 use crate::Move;
+use crate::movesets::LoopTable;
 
 type Moves = Vec<(Move, i32)>;
 type IJMoves = Vec<(NAIDX, NAIDX, i32)>;
-type LoopEntry = (NearestNeighborLoop, i32);
-
-/// Stores all information about the current loop decomposition.
-pub struct LoopTable<'a, E: EnergyModel> {
-    sequence: &'a [Base],
-    model: &'a E,
-    loops: Vec<LoopEntry>,
-    stale: Vec<usize>,
-    loop_lookup: Vec<usize>,
-    pair_lookup: IntMap<NAIDX, NAIDX>,
-    energy: i32,
-}
-
-impl<'a, E: EnergyModel> LoopTable<'a, E> {
-    pub fn energy(&self) -> i32 {
-        self.energy
-    }
-
-    pub fn pair_lookup(&self, idx: &NAIDX) -> NAIDX {
-        self.pair_lookup[idx]
-    }
-
-    pub fn geti(&self, i: usize) -> &LoopEntry {
-        &self.loops[self.loop_lookup[i]]
-    }
-
-    pub fn get(&self, idx: usize) -> &LoopEntry {
-        self.loops
-            .get(idx)
-            .expect("Invalid LoopCache index")
-    }
-
-    pub fn insert_loop(&mut self, nn_loop: NearestNeighborLoop, nn_energy: i32) -> usize {
-        if let Some(idx) = self.stale.pop() {
-            self.loops[idx] = (nn_loop, nn_energy);
-            idx
-        } else {
-            let idx = self.loops.len();
-            self.loops.push((nn_loop, nn_energy));
-            idx
-        }
-    }
-}
-
-impl<'a, E: EnergyModel> fmt::Display for LoopTable<'a, E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Convert sequence to string
-        let mut dbr = vec!['.'; self.loop_lookup.len()];
-        for (i, j) in &self.pair_lookup {
-            dbr[*i as usize] = '(';
-            dbr[*j as usize] = ')';
-        }
-        let dbr_str: String = dbr.into_iter().collect();
-        write!(f, "{}", dbr_str)
-    }
-}
-
-impl<'a, E: EnergyModel> fmt::Debug for LoopTable<'a, E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("LoopTable")
-            .field("loop_lookup", &self.loop_lookup)
-            .field("pair_lookup", &self.pair_lookup)
-            .finish()
-    }
-}
-
-impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
-for LoopTable<'a, E> {
-    type Error = String;
-
-    fn try_from((sequence, pairings, model): (&'a [Base], &T, &'a E)
-    ) -> Result<Self, Self::Error> {
-
-        let mut loops = Vec::new();
-        let mut loop_lookup: Vec<usize> = vec![0; sequence.len()];
-        let mut pair_lookup: IntMap<NAIDX, NAIDX>  = IntMap::default();
-        let mut energy = 0;
-
-        pairings.for_each_loop(|l| {
-            let loop_energy = model.energy_of_loop(sequence, l);
-            energy += loop_energy;
-
-            if let Some((i, j)) = l.closing() {
-                pair_lookup.insert(i as NAIDX, j as NAIDX); 
-            }
-
-            let loop_index = loops.len();
-            for k in l.inclusive_unpaired_indices() {
-                loop_lookup[k] = loop_index;
-            }
-            loops.push((l.to_owned(), loop_energy));
-        });
-
-        Ok(LoopTable {
-            sequence,
-            model,
-            loops,
-            stale: Vec::new(),
-            loop_lookup,
-            pair_lookup,
-            energy,
-        })
-    }
-}
 
 pub struct AddDelMoves<'a, E: EnergyModel> {
     loop_table: LoopTable<'a, E>,
@@ -146,7 +40,7 @@ impl<'a, E: EnergyModel> AddDelMoves<'a, E> {
 
     fn init_del_neighbors(&mut self) {
         let ltab = &self.loop_table;
-        for (&i, &j) in ltab.pair_lookup.iter() {
+        for (&i, &j) in ltab.pairs() {
             let delta = self.eval_del_move(i, j);
             self.del_neighbors.insert(i, delta);
         }
@@ -173,7 +67,7 @@ impl<'a, E: EnergyModel> AddDelMoves<'a, E> {
         let (outer, o_en) = ltab.geti(i as usize);
         let (inner, i_en) = ltab.geti(j as usize);
         let combo = outer.join_loop(inner);
-        let combo_energy = ltab.model.energy_of_loop(ltab.sequence, &combo);
+        let combo_energy = ltab.energy_of_loop(&combo);
         combo_energy - (o_en + i_en)
     }
 
@@ -193,15 +87,15 @@ impl<'a, E: EnergyModel> AddDelMoves<'a, E> {
         let mut neighbors = Vec::new(); 
         for (idx_i, &i) in unpaired.iter().enumerate() {
             for &j in &unpaired[idx_i + 1..] {
-                if j <= i + ltab.model.min_hairpin_size() {
+                if j <= i + ltab.min_hairpin_size() {
                     continue;
                 }
-                if ltab.model.can_pair(ltab.sequence[i], ltab.sequence[j]) {
+                if ltab.can_pair(i, j) {
                     let i = i as NAIDX;
                     let j = j as NAIDX;
                     let (outer, inner) = combo.split_loop(i, j);
-                    let outer_energy = ltab.model.energy_of_loop(ltab.sequence, &outer);
-                    let inner_energy = ltab.model.energy_of_loop(ltab.sequence, &inner);
+                    let outer_energy = ltab.energy_of_loop(&outer);
+                    let inner_energy = ltab.energy_of_loop(&inner);
                     // How does the free energy change if the move is applied.
                     let delta = (outer_energy + inner_energy) - energy;
                     neighbors.push((i, j, delta)); 
@@ -216,27 +110,22 @@ impl<'a, E: EnergyModel> AddDelMoves<'a, E> {
         let delta = self.del_neighbors.remove(&i).expect("Missing pair_list entry.");
 
         let ltab = &mut self.loop_table;
-        if j != ltab.pair_lookup.remove(&i).expect("Missing pair_list entry.") {
+        if j != ltab.delete_pair(&i) {
             panic!("Inconsistent pair-list entry.");
         }
-        let o_index = ltab.loop_lookup[i as usize];
-        let i_index = ltab.loop_lookup[j as usize];
+        let o_index = ltab.loop_lookup(i as usize);
+        let i_index = ltab.loop_lookup(j as usize);
 
         let (outer, o_en) = ltab.get(o_index);
         let (inner, i_en) = ltab.get(i_index);
         let combo = outer.join_loop(inner);
         let combo_energy = (o_en + i_en) + delta;
-        debug_assert_eq!(combo_energy, 
-            ltab.model.energy_of_loop(ltab.sequence, &combo));
-
-        for k in combo.inclusive_unpaired_indices() {
-            debug_assert!(ltab.loop_lookup[k] == o_index || ltab.loop_lookup[k] == i_index);
-            ltab.loop_lookup[k] = o_index;
-        }
+        debug_assert_eq!(combo_energy, ltab.energy_of_loop(&combo));
 
         let cpairs = &combo.pairs();
 
         ltab.loops[o_index] = (combo, combo_energy);
+        ltab.update_lookup(o_index);
         ltab.stale.push(i_index);
         ltab.energy += delta;
  
@@ -257,8 +146,8 @@ impl<'a, E: EnergyModel> AddDelMoves<'a, E> {
     {
         let ltab = &mut self.loop_table;
 
-        let c_index = ltab.loop_lookup[i as usize];
-        debug_assert_eq!(c_index, ltab.loop_lookup[j as usize], "Missing loop_lookup entry for j.");
+        let c_index = ltab.loop_lookup(i as usize);
+        debug_assert_eq!(c_index, ltab.loop_lookup(j as usize), "Missing loop_lookup entry for j.");
 
         let (combo, c_en) = ltab.get(c_index).clone();
         let old_add_moves = self.add_neighbors.remove(&c_index).expect("Old combo moves")
@@ -271,22 +160,16 @@ impl<'a, E: EnergyModel> AddDelMoves<'a, E> {
 
         let (outer, inner) = combo.split_loop(i, j);
         
-        let o_en = ltab.model.energy_of_loop(ltab.sequence, &outer);
+        let o_en = ltab.energy_of_loop(&outer);
         ltab.loops[c_index] = (outer, o_en);
-        let i_en = ltab.model.energy_of_loop(ltab.sequence, &inner);
+        let i_en = ltab.energy_of_loop(&inner);
         let i_index = ltab.insert_loop(inner, i_en);
 
         let delta = (o_en + i_en) - c_en;
         ltab.energy += delta;
-        ltab.pair_lookup.insert(i, j);
-        let (outer, _) = ltab.get(c_index);
-        for k in outer.inclusive_unpaired_indices() {
-            ltab.loop_lookup[k] = c_index;
-        }
-        let (inner, _) = ltab.get(i_index);
-        for k in inner.inclusive_unpaired_indices() {
-            ltab.loop_lookup[k] = i_index;
-        }
+        ltab.insert_pair(i, j);
+        ltab.update_lookup(c_index);
+        ltab.update_lookup(i_index);
         let outer_add_moves = self.get_add_neighbors_per_loop(c_index);
         let inner_add_moves = self.get_add_neighbors_per_loop(i_index);
 
@@ -319,97 +202,15 @@ impl<'a, E: EnergyModel> From<LoopTable<'a, E>> for AddDelMoves<'a, E> {
     }
 }
 
-impl<'a, E: EnergyModel> From<&LoopTable<'a, E>> for DotBracketVec {
-    fn from(ltab: &LoopTable<'a, E>) -> Self {
-        // Use the same logic as your Display impl, but avoid allocating a String unnecessarily
-        let mut vec = vec![DotBracket::Unpaired; ltab.loop_lookup.len()];
-        for (i, j) in &ltab.pair_lookup {
-            vec[*i as usize] = DotBracket::Open;
-            vec[*j as usize] = DotBracket::Close;
-        }
-        DotBracketVec(vec)
-    }
-}
-
 impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
 for AddDelMoves<'a, E> {
     type Error = String;
 
     fn try_from((sequence, pairings, model): (&'a [Base], &T, &'a E)
     ) -> Result<Self, Self::Error> {
-
-        let mut loops = Vec::new();
-        let mut loop_lookup: Vec<usize> = vec![0; sequence.len()];
-        let mut pair_lookup: IntMap<NAIDX, NAIDX>  = IntMap::default();
-        let mut energy = 0;
-
-        pairings.for_each_loop(|l| {
-            let loop_energy = model.energy_of_loop(sequence, l);
-            energy += loop_energy;
-
-            if let Some((i, j)) = l.closing() {
-                pair_lookup.insert(i as NAIDX, j as NAIDX); 
-            }
-
-            let loop_index = loops.len();
-            for k in l.inclusive_unpaired_indices() {
-                loop_lookup[k] = loop_index;
-            }
-            loops.push((l.to_owned(), loop_energy));
-        });
-
-        Ok(AddDelMoves::from(LoopTable {
-            sequence,
-            model,
-            loops,
-            stale: Vec::new(),
-            loop_lookup,
-            pair_lookup,
-            energy,
-        }))
+        Ok(AddDelMoves::from(LoopTable::try_from((sequence, pairings, model))?))
     }
 }
-
-
-
-//impl<'a, E: EnergyModel> LoopCache<'a, E> {
-//
-//    fn get_shift_loop_neighbors(&self, index: usize, ll: &[usize]) -> Vec<(Move, i32)> {
-//        let (combo, combo_energy) = self.get(index);
-//        let mut neighbors = Vec::new(); 
-//
-//        match combo {
-//            NearestNeighborLoop::Hairpin { closing: (i, j) } => {
-//                let ui = *i as usize;
-//                let uj = *j as usize;
-//                let (outer, outer_energy) = self.get(ll[ui]); 
-//                let shift_combo = outer.join_loop(combo);
-//                let energy = combo_energy + outer_energy;
-//
-//                for k in ui+1..uj {
-//                    if k > ui + self.model.min_hairpin_size() && 
-//                        self.model.can_pair(self.sequence[ui], self.sequence[k]) {
-//                            let (s_outer, s_inner) = shift_combo.split_loop(*i, k as NAIDX);
-//                            let s_outer_energy = self.model.energy_of_loop(self.sequence, &s_outer);
-//                            let s_inner_energy = self.model.energy_of_loop(self.sequence, &s_inner);
-//                            let delta = (s_outer_energy + s_inner_energy) - energy;
-//                            neighbors.push((Move::ShiftI { i: *i, j: *j, k: k as NAIDX }, delta));
-//                    }
-//                    if k < uj - self.model.min_hairpin_size() && 
-//                        self.model.can_pair(self.sequence[k], self.sequence[uj]) {
-//                            let (s_outer, s_inner) = shift_combo.split_loop(k as NAIDX, *j);
-//                            let s_outer_energy = self.model.energy_of_loop(self.sequence, &s_outer);
-//                            let s_inner_energy = self.model.energy_of_loop(self.sequence, &s_inner);
-//                            let delta = (s_outer_energy + s_inner_energy) - energy;
-//                            neighbors.push((Move::ShiftJ { i: *i, j: *j, k: k as NAIDX }, delta));
-//                    }
-//                }
-//            }
-//            _ => {warn!("not implemented")},
-//        }
-//        neighbors
-//    }
-//}
 
 #[cfg(test)]
 mod tests {
