@@ -131,7 +131,7 @@ impl NearestNeighborLoop {
     ) -> Self {
         match closing {
             None => match ends {
-                Some((i, j)) if i < j => Self::Exterior { branches, ends: (i, j) },
+                Some((i, j)) if i <= j => Self::Exterior { branches, ends: (i, j) },
                 Some((i, j)) if j < i => Self::JointExterior { branches, ends: (i, j) },
                 _ => panic!("Expected end annotation in exterior loop."),
             },
