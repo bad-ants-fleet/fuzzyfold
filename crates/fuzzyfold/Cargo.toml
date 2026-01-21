@@ -34,8 +34,12 @@ name = "ff-trajectory"
 path = "src/bin/ff-trajectory.rs"
 
 [[bin]]
-name = "ff-trajectory_co_simulate"
-path = "src/bin/ff-trajectory_co_simulate.rs"
+name = "ff-co_trajectory"
+path = "src/bin/ff-co_trajectory.rs"
+
+[[bin]]
+name = "ff-timecourse_cotranscriptional_folding"
+path = "src/bin/ff-timecourse_cotranscriptional_folding.rs"
 
 [dependencies]
 ff_structure.workspace = true
