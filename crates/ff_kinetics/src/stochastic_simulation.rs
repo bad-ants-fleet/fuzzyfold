@@ -75,22 +75,37 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
             let mv = self.rate_tree.select_by_threshold(threshold).expect("Must select a move!");
             let (old, new) = self.walker.apply_move(&mv);
 
-            //println!("from: {:?} to: {:?} ", mv, mv.inverse());
-            if !self.rate_tree.dirty_replace(&mv, &mv.inverse()) {
-                panic!("Dirty rate replacement failed.");
-            }
+            let mut del = old.iter();
+            let mut add = new.iter();
 
-            for (mv, _) in old {
-                //println!("remove: {:?}", mv);
-                self.rate_tree.remove(mv);
-            }
+            let mut cur_del = del.next();
+            let mut cur_add = add.next();
 
-            for (mv, delta) in new {
-                let k = self.ratemodel.rate(&mv, delta);
-                if !self.rate_tree.update_rate(&mv, k) {
-                    //println!("insert: {:?} -> {}", mv, k);
-                    self.rate_tree.insert(mv, k);
-                } 
+            while cur_del.is_some() || cur_add.is_some() {
+                match (cur_del, cur_add) {
+                    (Some((omv, _)), Some((nmv, delta))) => {
+                        let k = self.ratemodel.rate(nmv, *delta);
+                        if self.rate_tree.update_rate(nmv, k) {
+                            cur_add = add.next();
+                        } else {
+                            self.rate_tree.replace(omv, nmv, k);
+                            cur_add = add.next();
+                            cur_del = del.next();
+                        }
+                    }
+                    (Some((omv, _)), None) => {
+                        self.rate_tree.remove(*omv);
+                        cur_del = del.next();
+                    }
+                    (None, Some((nmv, delta))) => {
+                        let k = self.ratemodel.rate(nmv, *delta);
+                        if !self.rate_tree.update_rate(nmv, k) {
+                            self.rate_tree.insert(*nmv, k);
+                        }
+                        cur_add = add.next();
+                    }
+                    (None, None) => unreachable!(),
+                }
             }
         }
     }

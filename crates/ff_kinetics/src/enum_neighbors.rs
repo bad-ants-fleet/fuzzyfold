@@ -27,7 +27,7 @@ impl ApplyMove for DotBracketVec {
                 self[i as usize] = DotBracket::Unpaired;
                 self[j as usize] = DotBracket::Unpaired;
             }
-            Move::ShiftJ { i, j, k } => {
+            Move::ShiftIK { i, j, k } => {
                 self[j as usize] = DotBracket::Unpaired;
                 if i < k {
                     self[i as usize] = DotBracket::Open;
@@ -37,7 +37,7 @@ impl ApplyMove for DotBracketVec {
                     self[i as usize] = DotBracket::Close;
                 }
             }
-            Move::ShiftI { i, j, k } => {
+            Move::ShiftJK { i, j, k } => {
                 self[i as usize] = DotBracket::Unpaired;
                 if j < k {
                     self[j as usize] = DotBracket::Open;

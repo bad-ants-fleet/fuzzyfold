@@ -139,7 +139,7 @@ impl<'a, E: EnergyModel> AddDelMoves<'a, E> {
         self.add_neighbors.insert(o_index, update_add_moves);
         self.add_neighbors.remove(&i_index).expect("at least empty list.");
 
-        (Vec::new(), new_moves)
+        (vec![(Move::Del { i, j }, delta)], new_moves)
     }
 
     pub fn apply_add_move(&mut self, i: NAIDX, j: NAIDX) -> (Moves, Moves) 
@@ -152,10 +152,8 @@ impl<'a, E: EnergyModel> AddDelMoves<'a, E> {
         let (combo, c_en) = ltab.get(c_index).clone();
         let old_add_moves = self.add_neighbors.remove(&c_index).expect("Old combo moves")
             .into_iter()
-            .filter(|&(p, q, _)| {
-                !(q < i || j < p || (i < p && q < j) || (p < i && j < q))
-            })
             .map(|(i, j, d)| (Move::Add { i, j }, d))
+            .filter(|(amv, _)| amv.conflicts((i, j)))
             .collect();
 
         let (outer, inner) = combo.split_loop(i, j);
@@ -271,6 +269,41 @@ mod tests {
         println!("{}: {:?}", adm2.current_energy(), nb2);
         assert_eq!(nb1, nb2);
     }
+
+    #[test]
+    fn test_development_bug02() {
+        let model = ViennaRNA::default();
+        let sequence = NucleotideVec::from_lossy("GUACACGUCG");
+        let pairings =       PairTable::try_from("..........").unwrap();
+
+        let mut adm = AddDelMoves::try_from((&sequence[..], &pairings, &model)).unwrap();
+        let en1 = adm.current_energy();
+        let nb1: Vec<_> = adm.propose_moves().collect();
+        for (mv, d) in nb1 {
+            println!("pp {:?} {}", mv, d);
+        }
+
+        let (del, add) = adm.apply_move(&Move::Add { i: 0, j: 8 });
+        println!("Applied add");
+        for (mv, d) in del {
+            println!("rm {:?} {}", mv, d);
+        }
+        for (mv, d) in add {
+            println!("up {:?} {}", mv, d);
+        }
+
+        let (del, add) = adm.apply_move(&Move::Del { i: 0, j: 8 });
+        println!("Applied del");
+        for (mv, d) in del {
+            println!("rm {:?} {}", mv, d);
+        }
+        for (mv, d) in add {
+            println!("up {:?} {}", mv, d);
+        }
+        assert_eq!(en1, adm.current_energy());
+    }
+
+
 
 }
 

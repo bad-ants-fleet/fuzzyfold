@@ -143,13 +143,15 @@ impl RateTree {
         }
     }
 
-    pub fn dirty_replace(&mut self, old_mv: &Move, new_mv: &Move) -> bool {
+    pub fn replace(&mut self, old_mv: &Move, new_mv: &Move, new_rate: f64) -> bool {
         let idx = match self.pos_map.remove(old_mv) {
             Some(i) => i,
             None => return false,
         };
         self.pos_map.insert(*new_mv, idx);
         self.entries[idx].mv = *new_mv;
+        self.entries[idx].rate = new_rate;
+        self.update_partial_sums(idx);
         true
     }
 

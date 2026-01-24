@@ -15,6 +15,7 @@ use ff_energy::EnergyModel;
 use ff_energy::ViennaRNA;
 use ff_kinetics::Metropolis;
 use ff_kinetics::AddDelMoves;
+use ff_kinetics::AddDelShiftMoves;
 use ff_kinetics::SSA;
 
 const INPUT_L50: &str = concat!(env!("CARGO_MANIFEST_DIR"), 
@@ -101,6 +102,38 @@ fn simulate_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, simulate_benchmark);
+fn simulate_shift_benchmark(c: &mut Criterion) {
+    let emodel = ViennaRNA::default();
+    let rmodel = Metropolis::new(emodel.temperature(), 1.0);
+    let mut group = c.benchmark_group("Seeded stochastic simulations with shift moves.");
+    group.measurement_time(std::time::Duration::from_secs(50)); 
+
+    for case in CASES {
+        let inputs = load_raw_inputs(case.path); 
+        let mut rng = StdRng::seed_from_u64(42);
+        group.bench_function(format!("simulate_shift_{}", case.name), |b| {
+            b.iter_batched(
+                || &inputs, 
+                |inputs| {
+                    for (seq, pt) in inputs {
+                        let moves = AddDelShiftMoves::try_from((&seq[..], pt, &emodel))
+                            .expect("failed to build loop table");
+                        let mut simulator = SSA::from((moves, &rmodel));
+
+                        simulator.simulate(
+                            &mut rng, 
+                            black_box(10.0), 
+                            |_t, _ti, _fl, _w| { true }
+                        );
+                    }
+                },
+                BatchSize::LargeInput,
+            )
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, simulate_benchmark, simulate_shift_benchmark);
 criterion_main!(benches);
 
