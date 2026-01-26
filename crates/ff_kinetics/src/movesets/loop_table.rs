@@ -1,4 +1,5 @@
 use std::fmt;
+use ff_energy::NucleotideVec;
 use nohash_hasher::IntMap;
 
 use ff_structure::DotBracket;
@@ -15,14 +16,32 @@ type LoopEntry = (NearestNeighborLoop, i32);
 pub struct LoopTable<'a, E: EnergyModel> {
     sequence: &'a [Base],
     model: &'a E,
-    pub loops: Vec<LoopEntry>,
-    pub stale: Vec<usize>,
+    loops: Vec<LoopEntry>,
+    stale: Vec<usize>,
     loop_lookup: Vec<usize>,
     pair_lookup: IntMap<NAIDX, NAIDX>,
-    pub energy: i32,
+    energy: i32,
+}
+
+impl<'a, E: EnergyModel> Clone for LoopTable<'a, E> {
+    fn clone(&self) -> Self {
+        Self {
+            sequence: self.sequence,
+            model: self.model,
+            loops: self.loops.clone(),
+            stale: self.stale.clone(),
+            loop_lookup: self.loop_lookup.clone(),
+            pair_lookup: self.pair_lookup.clone(),
+            energy: self.energy,
+        }
+    }
 }
 
 impl<'a, E: EnergyModel> LoopTable<'a, E> {
+    pub fn loops_len(&self) -> usize {
+        self.loops.len()
+    }
+
     pub fn lookup_len(&self) -> usize {
         self.loop_lookup.len()
     }
@@ -80,13 +99,27 @@ impl<'a, E: EnergyModel> LoopTable<'a, E> {
             .expect("Invalid LoopCache index")
     }
 
-    pub fn insert_loop(&mut self, nn_loop: NearestNeighborLoop, nn_energy: i32) -> usize {
-        if let Some(idx) = self.stale.pop() {
-            self.loops[idx] = (nn_loop, nn_energy);
+    pub fn mark_stale(&mut self, idx: usize) {
+        self.energy -= self.loops[idx].1;
+        self.stale.push(idx);
+    }
+
+    pub fn insert_loopentry(
+        &mut self, 
+        index: Option<usize>, 
+        entry: LoopEntry,
+    ) -> usize {
+        self.energy += entry.1;
+        if let Some(idx) = index { 
+            self.energy -= self.loops[idx].1;
+            self.loops[idx] = entry;
+            idx
+        } else if let Some(idx) = self.stale.pop() {
+            self.loops[idx] = entry;
             idx
         } else {
             let idx = self.loops.len();
-            self.loops.push((nn_loop, nn_energy));
+            self.loops.push(entry);
             idx
         }
     }
@@ -126,11 +159,11 @@ impl<'a, E: EnergyModel> From<&LoopTable<'a, E>> for DotBracketVec {
     }
 }
 
-impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
+impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a NucleotideVec, &T, &'a E)> 
 for LoopTable<'a, E> {
     type Error = String;
 
-    fn try_from((sequence, pairings, model): (&'a [Base], &T, &'a E)
+    fn try_from((sequence, pairings, model): (&'a NucleotideVec, &T, &'a E)
     ) -> Result<Self, Self::Error> {
 
         let mut loops = Vec::new();

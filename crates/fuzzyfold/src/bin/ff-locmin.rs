@@ -93,7 +93,7 @@ fn main() -> Result<()> {
         println!("{}", sequence);
     }
 
-    let mut moves = AddDelMoves::try_from((&sequence[..], &pairings, &emodel))
+    let mut moves = AddDelMoves::try_from((&sequence, &pairings, &emodel))
         .expect("failed to build loop table");
 
     if !cli.lmin.sorted {

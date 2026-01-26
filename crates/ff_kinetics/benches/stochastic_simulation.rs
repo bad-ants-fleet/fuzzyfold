@@ -84,7 +84,7 @@ fn simulate_benchmark(c: &mut Criterion) {
                 || &inputs, 
                 |inputs| {
                     for (seq, pt) in inputs {
-                        let moves = AddDelMoves::try_from((&seq[..], pt, &emodel))
+                        let moves = AddDelMoves::try_from((seq, pt, &emodel))
                             .expect("failed to build loop table");
                         let mut simulator = SSA::from((moves, &rmodel));
 
@@ -116,7 +116,7 @@ fn simulate_shift_benchmark(c: &mut Criterion) {
                 || &inputs, 
                 |inputs| {
                     for (seq, pt) in inputs {
-                        let moves = AddDelShiftMoves::try_from((&seq[..], pt, &emodel))
+                        let moves = AddDelShiftMoves::try_from((seq, pt, &emodel))
                             .expect("failed to build loop table");
                         let mut simulator = SSA::from((moves, &rmodel));
 

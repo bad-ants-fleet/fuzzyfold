@@ -58,7 +58,7 @@ pub fn gen_neighbors(c: &mut Criterion) {
                 |inputs| {
                     let mut count = 0usize;
                     for (seq, pt) in inputs {
-                        let mut moves = AddDelMoves::try_from((&seq[..], pt, &emodel))
+                        let mut moves = AddDelMoves::try_from((seq, pt, &emodel))
                             .expect("failed to build loop table");
                         moves.generate_neighbors(0, 5, |_, _| {
                             count += 1;

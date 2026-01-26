@@ -77,10 +77,8 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
 
             let mut del = old.iter();
             let mut add = new.iter();
-
             let mut cur_del = del.next();
             let mut cur_add = add.next();
-
             while cur_del.is_some() || cur_add.is_some() {
                 match (cur_del, cur_add) {
                     (Some((omv, _)), Some((nmv, delta))) => {
@@ -137,7 +135,7 @@ mod tests {
         let sequence = NucleotideVec::try_from(sequence).unwrap();
         let pairings = PairTable::try_from(pairings).unwrap();
 
-        let ltab1 = LoopTable::try_from((&sequence[..], &pairings, &emodel)).unwrap();
+        let ltab1 = LoopTable::try_from((&sequence, &pairings, &emodel)).unwrap();
         let adm1 = AddDelMoves::from(ltab1);
 
         let mut simulator = SSA::from((adm1, &rmodel));

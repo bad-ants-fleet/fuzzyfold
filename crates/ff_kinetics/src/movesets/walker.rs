@@ -49,9 +49,7 @@ impl<'a, E: EnergyModel> Walker for AddDelMoves<'a, E> {
 
         let add_moves = self.add_neighbors()
             .values()
-            .flat_map(|moves| moves.iter())
-            .map(|&(i, j, d)| (Move::Add { i, j }, d)
-            );
+            .flat_map(|moves| moves.iter().cloned());
         let del_moves = self.del_neighbors()
             .iter()
             .map(move |(&i, &delta_e)| {
