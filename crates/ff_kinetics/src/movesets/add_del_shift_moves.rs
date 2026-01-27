@@ -52,7 +52,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let (outer, inner) = combo.split_loop(i, j);
         let outer_energy = ltab.energy_of_loop(&outer);
         let inner_energy = ltab.energy_of_loop(&inner);
-        ((outer_energy + inner_energy) - combo_energy)//.max(0)
+        ((outer_energy + inner_energy) - combo_energy).max(0)
     }
 
     /// Returns how the free energy changes if the move is applied.
@@ -65,7 +65,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let (inner, i_en) = ltab.geti(j as usize);
         let combo = outer.join_loop(inner);
         let combo_energy = ltab.energy_of_loop(&combo);
-        combo_energy - (o_en + i_en)//.max(0)
+        (combo_energy - (o_en + i_en)).max(0)
     }
 
     fn get_shift_activation_energy(&self,
@@ -81,8 +81,8 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let s_outer_energy = self.loop_table.energy_of_loop(&s_outer);
         let s_inner_energy = self.loop_table.energy_of_loop(&s_inner);
 
-        //(s_inner_energy - inner_energy).max(s_outer_energy - outer_energy).max(0)
-        ((s_outer_energy + s_inner_energy) - (outer_energy + inner_energy))//.max(0)
+        (s_inner_energy - inner_energy).max(s_outer_energy - outer_energy).max(0)
+        //((s_outer_energy + s_inner_energy) - (outer_energy + inner_energy)).max(0)
     }
  
     fn init_add_neighbors(&mut self) {
@@ -237,8 +237,8 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
         let o_index = ltab.loop_lookup(i as usize);
         let i_index = ltab.loop_lookup(j as usize);
-        let (outer, o_en) = ltab.get(o_index);
-        let (inner, i_en) = ltab.get(i_index);
+        let (outer, _) = ltab.get(o_index);
+        let (inner, _) = ltab.get(i_index);
 
         let delta = self.del_neighbors.remove(&i)
             .expect("Missing del neighbor.");
@@ -395,8 +395,8 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
             .chain(std::iter::once((Move::Del { i, j }, delta)))
             .collect();
 
-        let (outer, o_en) = ltab.get(o_index);
-        let (inner, i_en) = ltab.get(i_index);
+        let (outer, _) = ltab.get(o_index);
+        let (inner, _) = ltab.get(i_index);
         let combo = outer.join_loop(inner);
         let combo_pairs = &combo.pairs();
         let c_en = ltab.energy_of_loop(&combo);
