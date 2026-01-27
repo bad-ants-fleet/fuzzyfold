@@ -14,20 +14,25 @@ pub enum RateModelKind {
 
 #[derive(Debug, Args)]
 pub struct RateModelArguments {
-    /// Rate constant for chosen model (must be > 0).
-    #[arg(long, default_value_t = 1.0)]
+    /// Rate constant for add/delete moves.
+    #[arg(long, default_value_t = 1e6)]
     pub k0: f64,
 
+    /// Rate constant for shift moves.
+    #[arg(long, default_value_t = 1e4)]
+    pub ks: f64,
+
+    /// The rate model (Arrhenius/Metropolis vs Kawasaki)
     #[arg(long, value_enum, default_value = "metropolis")]
     pub model: RateModelKind,
 }
 
 impl RateModelArguments {
     pub fn build_metropolis_model(&self, temperature: f64) -> Metropolis {
-        Metropolis::new(temperature, self.k0)
+        Metropolis::new(temperature, self.k0, self.ks)
     }
     pub fn build_kawasaki_model(&self, temperature: f64) -> Kawasaki {
-        Kawasaki::new(temperature, self.k0)
+        Kawasaki::new(temperature, self.k0, self.ks)
     }
 }
 

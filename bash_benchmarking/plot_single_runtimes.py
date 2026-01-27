@@ -3,7 +3,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-tag = "FF_silent_kawasaki"
+tag = "FF_silent_metropolis_shift"
 
 # Load VKF benchmark files
 files = {
@@ -12,7 +12,7 @@ files = {
     1000:   f"simulate_benchmark_{tag}_t1000.csv",
     10000:  f"simulate_benchmark_{tag}_t10000.csv",
     100000: f"simulate_benchmark_{tag}_t100000.csv",
-    1000000:f"simulate_benchmark_{tag}_t1000000.csv",
+    #1000000:f"simulate_benchmark_{tag}_t1000000.csv",
 }
 
 dfs = []
@@ -63,6 +63,6 @@ plt.ylim(5e-3, 2e3)
 plt.xlim(5e0, 2e6)
 plt.xlabel("Simulation time (--t-end)")
 plt.ylabel("Wall-clock runtime [s]")
-plt.title(f"Runtime {tag} (100 repeats)")
+plt.title(f"{tag} (100 repeats)")
 plt.legend(ncol=2, fontsize=8)
-plt.savefig(f"FF_{tag}.pdf")
+plt.savefig(f"{tag}.pdf")

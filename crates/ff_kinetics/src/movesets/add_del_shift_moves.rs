@@ -52,7 +52,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let (outer, inner) = combo.split_loop(i, j);
         let outer_energy = ltab.energy_of_loop(&outer);
         let inner_energy = ltab.energy_of_loop(&inner);
-        ((outer_energy + inner_energy) - combo_energy).max(0)
+        (outer_energy + inner_energy) - combo_energy
     }
 
     /// Returns how the free energy changes if the move is applied.
@@ -65,7 +65,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let (inner, i_en) = ltab.geti(j as usize);
         let combo = outer.join_loop(inner);
         let combo_energy = ltab.energy_of_loop(&combo);
-        (combo_energy - (o_en + i_en)).max(0)
+        combo_energy - (o_en + i_en)
     }
 
     fn get_shift_activation_energy(&self,
@@ -81,7 +81,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let s_outer_energy = self.loop_table.energy_of_loop(&s_outer);
         let s_inner_energy = self.loop_table.energy_of_loop(&s_inner);
 
-        (s_inner_energy - inner_energy).max(s_outer_energy - outer_energy).max(0)
+        (s_inner_energy - inner_energy).max(s_outer_energy - outer_energy)
         //((s_outer_energy + s_inner_energy) - (outer_energy + inner_energy)).max(0)
     }
  
@@ -139,19 +139,19 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
         match init {
             NearestNeighborLoop::Hairpin { closing: (i, j) } => {
-                //if *i as usize + ltab.min_hairpin_size() < *j as usize {
+                if *i as usize + ltab.min_hairpin_size() < *j as usize {
                     self.shift_loops_insert(*i, *j, &mut loopdict);
                     self.shift_iter(*i as usize + 1, *j as usize, &loopdict, &mut neighbors);
-                //}
+                }
             }
             NearestNeighborLoop::Interior { closing: (i, j), inner: (p, q) } => {
-                //if *p - *i > 1 || *j - *q > 1 {
+                if *p - *i > 1 || *j - *q > 1 {
                     self.shift_loops_insert(*i, *j, &mut loopdict);
                     self.shift_loops_insert(*p, *q, &mut loopdict);
 
                     self.shift_iter(*i as usize + 1, *p as usize, &loopdict, &mut neighbors);
                     self.shift_iter(*q as usize + 1, *j as usize, &loopdict, &mut neighbors);
-                //}
+                }
             },
             NearestNeighborLoop::Multibranch { closing: (i, j), branches } => {
                 self.shift_loops_insert(*i, *j, &mut loopdict);
@@ -237,8 +237,8 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
         let o_index = ltab.loop_lookup(i as usize);
         let i_index = ltab.loop_lookup(j as usize);
-        let (outer, _) = ltab.get(o_index);
-        let (inner, _) = ltab.get(i_index);
+        let (outer, o_en) = ltab.get(o_index);
+        let (inner, i_en) = ltab.get(i_index);
 
         let delta = self.del_neighbors.remove(&i)
             .expect("Missing del neighbor.");
@@ -257,7 +257,8 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
         let combo = outer.join_loop(inner);
         let combo_pairs = &combo.pairs();
-        let c_en = ltab.energy_of_loop(&combo);
+        let c_en = o_en + i_en + delta;
+        debug_assert_eq!(c_en, ltab.energy_of_loop(&combo));
 
         // Update the loop table with all new data.
         let c_index = ltab.insert_loopentry(Some(o_index), (combo, c_en));
@@ -395,11 +396,12 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
             .chain(std::iter::once((Move::Del { i, j }, delta)))
             .collect();
 
-        let (outer, _) = ltab.get(o_index);
-        let (inner, _) = ltab.get(i_index);
+        let (outer, o_en) = ltab.get(o_index);
+        let (inner, i_en) = ltab.get(i_index);
         let combo = outer.join_loop(inner);
         let combo_pairs = &combo.pairs();
-        let c_en = ltab.energy_of_loop(&combo);
+        let c_en = o_en + i_en + delta;
+        debug_assert_eq!(c_en, ltab.energy_of_loop(&combo));
         let (new_outer, new_inner) = combo.split_loop(p, q);
         let new_o_en = ltab.energy_of_loop(&new_outer);
         let new_i_en = ltab.energy_of_loop(&new_inner);

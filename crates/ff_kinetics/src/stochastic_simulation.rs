@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn test_simple_ssa_simulation() {
         let emodel = ViennaRNA::default();
-        let rmodel = Metropolis::new(emodel.temperature(), 1.0);
+        let rmodel = Metropolis::new(emodel.temperature(), 1.0, 1.0);
         let mut rng = StdRng::seed_from_u64(42);
 
         let sequence = "CAAAG";
