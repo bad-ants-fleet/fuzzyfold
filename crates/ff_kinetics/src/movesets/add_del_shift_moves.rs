@@ -11,7 +11,6 @@ use crate::movesets::LoopTable;
 
 type Pair = (NAIDX, NAIDX);
 type Moves = Vec<(Move, i32)>;
-type LoopEntry = (NearestNeighborLoop, i32);
 
 pub struct AddDelShiftMoves<'a, E: EnergyModel> {
     loop_table: LoopTable<'a, E>,
@@ -53,7 +52,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let (outer, inner) = combo.split_loop(i, j);
         let outer_energy = ltab.energy_of_loop(&outer);
         let inner_energy = ltab.energy_of_loop(&inner);
-        ((outer_energy + inner_energy) - combo_energy).max(0)
+        ((outer_energy + inner_energy) - combo_energy)//.max(0)
     }
 
     /// Returns how the free energy changes if the move is applied.
@@ -66,34 +65,24 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let (inner, i_en) = ltab.geti(j as usize);
         let combo = outer.join_loop(inner);
         let combo_energy = ltab.energy_of_loop(&combo);
-        combo_energy - (o_en + i_en).max(0)
+        combo_energy - (o_en + i_en)//.max(0)
     }
 
     fn get_shift_activation_energy(&self,
-        merge: &NearestNeighborLoop,
-        merge_energy: i32,
-        center: &NearestNeighborLoop,
-        center_energy: i32,
-        combo: &NearestNeighborLoop,
-        combo_energy: i32,
-        i: NAIDX,
-        j: NAIDX,
+        (pi, pj): (NAIDX, NAIDX),
+        combo: &NearestNeighborLoop, 
+        (i, j): (NAIDX, NAIDX),
     ) -> i32 {
+        let ltab = &self.loop_table;
+        let (_, outer_energy) = ltab.geti(pi as usize);
+        let (_, inner_energy) = ltab.geti(pj as usize); 
+
         let (s_outer, s_inner) = combo.split_loop(i, j);
         let s_outer_energy = self.loop_table.energy_of_loop(&s_outer);
         let s_inner_energy = self.loop_table.energy_of_loop(&s_inner);
-        if merge.closing() == combo.closing() {
-            (s_inner_energy - center_energy)
-                .max(s_outer_energy - merge_energy)
-                .max(0)
 
-        } else {
-            debug_assert_eq!(s_outer.closing(), combo.closing());
-            (s_outer_energy - center_energy)
-                .max(s_inner_energy - merge_energy)
-                .max(0)
-        }
-        //((s_outer_energy + s_inner_energy) - combo_energy).max(0)
+        //(s_inner_energy - inner_energy).max(s_outer_energy - outer_energy).max(0)
+        ((s_outer_energy + s_inner_energy) - (outer_energy + inner_energy))//.max(0)
     }
  
     fn init_add_neighbors(&mut self) {
@@ -143,28 +132,31 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
     fn get_shift_neighbors_per_loop(&self, index: usize) -> Moves {
         let ltab = &self.loop_table;
-        let (combo, combo_energy) = ltab.get(index);
+        let (init, _) = ltab.get(index);
 
-        let mut loopdict: IntMap<NAIDX, (Pair, LoopEntry, LoopEntry, LoopEntry)> = IntMap::default();
+        let mut loopdict: IntMap<NAIDX, (Pair, NearestNeighborLoop)> = IntMap::default();
         let mut neighbors = Vec::new(); 
 
-        match combo {
-            //TODO early exit!
+        match init {
             NearestNeighborLoop::Hairpin { closing: (i, j) } => {
-                self.shift_loops_insert(*i, *j, *i as usize, (combo, combo_energy), &mut loopdict);
-                self.shift_iter(*i as usize + 1, *j as usize, &loopdict, &mut neighbors);
+                //if *i as usize + ltab.min_hairpin_size() < *j as usize {
+                    self.shift_loops_insert(*i, *j, &mut loopdict);
+                    self.shift_iter(*i as usize + 1, *j as usize, &loopdict, &mut neighbors);
+                //}
             }
             NearestNeighborLoop::Interior { closing: (i, j), inner: (p, q) } => {
-                self.shift_loops_insert(*i, *j, *i as usize, (combo, combo_energy), &mut loopdict);
-                self.shift_loops_insert(*p, *q, *q as usize, (combo, combo_energy), &mut loopdict);
+                //if *p - *i > 1 || *j - *q > 1 {
+                    self.shift_loops_insert(*i, *j, &mut loopdict);
+                    self.shift_loops_insert(*p, *q, &mut loopdict);
 
-                self.shift_iter(*i as usize + 1, *p as usize, &loopdict, &mut neighbors);
-                self.shift_iter(*q as usize + 1, *j as usize, &loopdict, &mut neighbors);
+                    self.shift_iter(*i as usize + 1, *p as usize, &loopdict, &mut neighbors);
+                    self.shift_iter(*q as usize + 1, *j as usize, &loopdict, &mut neighbors);
+                //}
             },
             NearestNeighborLoop::Multibranch { closing: (i, j), branches } => {
-                self.shift_loops_insert(*i, *j, *i as usize, (combo, combo_energy), &mut loopdict);
+                self.shift_loops_insert(*i, *j, &mut loopdict);
                 for &(p, q) in branches {
-                    self.shift_loops_insert(p, q, q as usize, (combo, combo_energy), &mut loopdict);
+                    self.shift_loops_insert(p, q, &mut loopdict);
                 }
 
                 let mut start = *i as usize;
@@ -176,7 +168,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
             },
             NearestNeighborLoop::Exterior { ends: (p5, p3), branches } => {
                 for &(p, q) in branches {
-                    self.shift_loops_insert(p, q, q as usize, (combo, combo_energy), &mut loopdict);
+                    self.shift_loops_insert(p, q, &mut loopdict);
                 }
                 let mut start = *p5 as usize;
                 for &(p, q) in branches {
@@ -196,34 +188,23 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         &self,
         i: NAIDX,
         j: NAIDX,
-        l: usize,
-        (center, center_energy): (&NearestNeighborLoop, &i32),
-        loopdict: &mut IntMap<NAIDX, (Pair, LoopEntry, LoopEntry, LoopEntry)>,
+        loopdict: &mut IntMap<NAIDX, (Pair, NearestNeighborLoop)>,
     ) {
         let ltab = &self.loop_table;
-        let (merge, merge_energy) = ltab.geti(l); 
-        let combo = if l == i as usize {
-            merge.join_loop(center) 
-        } else { 
-            center.join_loop(merge)
-        };
-        let combo_energy = center_energy + merge_energy;
-        loopdict.insert(i, ((i, j), 
-                (merge.clone(), *merge_energy), 
-                (center.clone(), *center_energy), 
-                (combo.clone(), combo_energy))
-            );
-        loopdict.insert(j, ((i, j), 
-                (merge.clone(), *merge_energy), 
-                (center.clone(), *center_energy), 
-                (combo, combo_energy)));
+        let (outer, _) = ltab.geti(i as usize);
+        let (inner, _) = ltab.geti(j as usize); 
+        let combo = outer.join_loop(inner);
+        //let combo_energy = ltab.energy_of_loop(&combo);
+
+        loopdict.insert(i, ((i, j), combo.clone()));
+        loopdict.insert(j, ((i, j), combo));
     }
 
     fn shift_iter(
         &self,
         p5a: usize,
         p3: usize,
-        loopdict: &IntMap<NAIDX, (Pair, LoopEntry, LoopEntry, LoopEntry)>,
+        loopdict: &IntMap<NAIDX, (Pair, NearestNeighborLoop)>,
         neighbors: &mut Moves,
     ) {
         let ltab = &self.loop_table;
@@ -231,19 +212,14 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let u5 = p5 as NAIDX;
         let u3 = p3 as NAIDX;
         for k in p5a..p3 {
-            for (&p, ((pi, pj), (merge, merge_energy), (center, center_energy),
-                    (combo, combo_energy))) in loopdict.iter() {
+            for (&p, ((pi, pj), combo)) in loopdict.iter() {
                 if (p == u5 && k <= p5 + ltab.min_hairpin_size()) || 
                     (p == u3 && k + ltab.min_hairpin_size() >= p3) {
                         continue;
                 } else if ltab.can_pair(k, p as usize) {
                     let nk = k as NAIDX;
                     let (i, j) = if p < nk { (p, nk) } else { (nk, p) };
-                    let delta = self.get_shift_activation_energy(
-                        merge, *merge_energy,
-                        center, *center_energy,
-                        combo, *combo_energy, i, j
-                    );
+                    let delta = self.get_shift_activation_energy((*pi, *pj), combo, (i, j));
                     let mv = if p == *pi {
                         Move::ShiftIK { i: *pi, j: *pj, k: nk }
                     } else {
