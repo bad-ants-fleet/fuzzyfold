@@ -23,25 +23,6 @@ pub struct AddDelShiftMoves<'a, E: EnergyModel> {
     shift_neighbors: IntMap<usize, Moves>,
 }
 
-impl<'a, E: EnergyModel> Clone for AddDelShiftMoves<'a, E> {
-    fn clone(&self) -> Self {
-        Self {
-            loop_table: self.loop_table.clone(),   // clones refs + vectors
-            add_neighbors: self.add_neighbors.clone(),
-            del_neighbors: self.del_neighbors.clone(),
-            shift_neighbors: self.shift_neighbors.clone(),
-        }
-    }
-}
-
-
-
-impl<'a, E: EnergyModel> fmt::Display for AddDelShiftMoves<'a, E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.loop_table)
-    }
-}
-
 impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
     pub fn loop_table(&self) -> &LoopTable<'a, E> {
         &self.loop_table
@@ -51,32 +32,70 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         &self.add_neighbors
     }
 
-    pub fn shift_neighbors(&self) -> &IntMap<usize, Moves> {
-        &self.shift_neighbors
-    }
-
     pub fn del_neighbors(&self) -> &IntMap<NAIDX, i32> {
         &self.del_neighbors
     }
 
-    fn init_del_neighbors(&mut self) {
+    pub fn shift_neighbors(&self) -> &IntMap<usize, Moves> {
+        &self.shift_neighbors
+    }
+
+    /// Activation energy -> for add moves it is delta-E
+    /// We should be able to change this for alternative 
+    /// rate models, but do not break detailed balance.
+    fn get_add_activation_energy(&self, 
+        index: usize,
+        i: NAIDX, 
+        j: NAIDX,
+    ) -> i32 {
         let ltab = &self.loop_table;
-        for (&i, &j) in ltab.pairs() {
-            let delta = self.eval_del_move(i, j);
-            self.del_neighbors.insert(i, delta);
-        }
+        let (combo, combo_energy) = ltab.get(index);
+        let (outer, inner) = combo.split_loop(i, j);
+        let outer_energy = ltab.energy_of_loop(&outer);
+        let inner_energy = ltab.energy_of_loop(&inner);
+        ((outer_energy + inner_energy) - combo_energy).max(0)
     }
 
     /// Returns how the free energy changes if the move is applied.
-    fn eval_del_move(&self, i: NAIDX, j: NAIDX) -> i32 {
+    fn get_del_activation_energy(&self, 
+        i: NAIDX, 
+        j: NAIDX,
+    ) -> i32 {
         let ltab = &self.loop_table;
         let (outer, o_en) = ltab.geti(i as usize);
         let (inner, i_en) = ltab.geti(j as usize);
         let combo = outer.join_loop(inner);
         let combo_energy = ltab.energy_of_loop(&combo);
-        combo_energy - (o_en + i_en)
+        combo_energy - (o_en + i_en).max(0)
     }
 
+    fn get_shift_activation_energy(&self,
+        merge: &NearestNeighborLoop,
+        merge_energy: i32,
+        center: &NearestNeighborLoop,
+        center_energy: i32,
+        combo: &NearestNeighborLoop,
+        combo_energy: i32,
+        i: NAIDX,
+        j: NAIDX,
+    ) -> i32 {
+        let (s_outer, s_inner) = combo.split_loop(i, j);
+        let s_outer_energy = self.loop_table.energy_of_loop(&s_outer);
+        let s_inner_energy = self.loop_table.energy_of_loop(&s_inner);
+        if merge.closing() == combo.closing() {
+            (s_inner_energy - center_energy)
+                .max(s_outer_energy - merge_energy)
+                .max(0)
+
+        } else {
+            debug_assert_eq!(s_outer.closing(), combo.closing());
+            (s_outer_energy - center_energy)
+                .max(s_inner_energy - merge_energy)
+                .max(0)
+        }
+        //((s_outer_energy + s_inner_energy) - combo_energy).max(0)
+    }
+ 
     fn init_add_neighbors(&mut self) {
         let ltab = &self.loop_table;
         for lli in 0..ltab.loops_len() {
@@ -85,11 +104,26 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         }
     }
 
+    fn init_del_neighbors(&mut self) {
+        let ltab = &self.loop_table;
+        for (&i, &j) in ltab.pairs() {
+            let delta = self.get_del_activation_energy(i, j);
+            self.del_neighbors.insert(i, delta);
+        }
+    }
+
+    fn init_shift_neighbors(&mut self) {
+        let ltab = &self.loop_table;
+        for lli in 0..ltab.loops_len() {
+            let neighbors = self.get_shift_neighbors_per_loop(lli);
+            self.shift_neighbors.insert(lli, neighbors);
+        }
+    }
+
     fn get_add_neighbors_per_loop(&self, index: usize) -> Moves {
         let ltab = &self.loop_table;
-        let (combo, energy) = ltab.get(index);
+        let (combo, _) = ltab.get(index);
         let unpaired = combo.unpaired_indices();
-
         let mut neighbors = Vec::new(); 
         for (idx_i, &i) in unpaired.iter().enumerate() {
             for &j in &unpaired[idx_i + 1..] {
@@ -99,31 +133,19 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
                 if ltab.can_pair(i, j) {
                     let i = i as NAIDX;
                     let j = j as NAIDX;
-                    let (outer, inner) = combo.split_loop(i, j);
-                    let outer_energy = ltab.energy_of_loop(&outer);
-                    let inner_energy = ltab.energy_of_loop(&inner);
-                    // How does the free energy change if the move is applied.
-                    let delta = (outer_energy + inner_energy) - energy;
-                    neighbors.push((Move::Add { i, j }, delta)); 
+                    let barrier = self.get_add_activation_energy(index, i, j);
+                    neighbors.push((Move::Add { i, j }, barrier)); 
                 }
             }
         }
         neighbors
-    }
- 
-    fn init_shift_neighbors(&mut self) {
-        let ltab = &self.loop_table;
-        for lli in 0..ltab.loops_len() {
-            let neighbors = self.get_shift_neighbors_per_loop(lli);
-            self.shift_neighbors.insert(lli, neighbors);
-        }
     }
 
     fn get_shift_neighbors_per_loop(&self, index: usize) -> Moves {
         let ltab = &self.loop_table;
         let (combo, combo_energy) = ltab.get(index);
 
-        let mut loopdict: IntMap<NAIDX, (Pair, LoopEntry)> = IntMap::default();
+        let mut loopdict: IntMap<NAIDX, (Pair, LoopEntry, LoopEntry, LoopEntry)> = IntMap::default();
         let mut neighbors = Vec::new(); 
 
         match combo {
@@ -176,25 +198,32 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         j: NAIDX,
         l: usize,
         (center, center_energy): (&NearestNeighborLoop, &i32),
-        loopdict: &mut IntMap<NAIDX, (Pair, LoopEntry)>,
+        loopdict: &mut IntMap<NAIDX, (Pair, LoopEntry, LoopEntry, LoopEntry)>,
     ) {
         let ltab = &self.loop_table;
-        let (shift, shift_energy) = ltab.geti(l); 
+        let (merge, merge_energy) = ltab.geti(l); 
         let combo = if l == i as usize {
-            shift.join_loop(center) 
+            merge.join_loop(center) 
         } else { 
-            center.join_loop(shift)
+            center.join_loop(merge)
         };
-        let combo_energy = center_energy + shift_energy;
-        loopdict.insert(i, ((i, j), (combo.clone(), combo_energy)));
-        loopdict.insert(j, ((i, j), (combo, combo_energy)));
+        let combo_energy = center_energy + merge_energy;
+        loopdict.insert(i, ((i, j), 
+                (merge.clone(), *merge_energy), 
+                (center.clone(), *center_energy), 
+                (combo.clone(), combo_energy))
+            );
+        loopdict.insert(j, ((i, j), 
+                (merge.clone(), *merge_energy), 
+                (center.clone(), *center_energy), 
+                (combo, combo_energy)));
     }
 
     fn shift_iter(
         &self,
         p5a: usize,
         p3: usize,
-        loopdict: &IntMap<NAIDX, (Pair, LoopEntry)>,
+        loopdict: &IntMap<NAIDX, (Pair, LoopEntry, LoopEntry, LoopEntry)>,
         neighbors: &mut Moves,
     ) {
         let ltab = &self.loop_table;
@@ -202,15 +231,18 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let u5 = p5 as NAIDX;
         let u3 = p3 as NAIDX;
         for k in p5a..p3 {
-            for (&p, ((pi, pj), (shift_combo_loop, shift_combo_energy))) in loopdict.iter() {
+            for (&p, ((pi, pj), (merge, merge_energy), (center, center_energy),
+                    (combo, combo_energy))) in loopdict.iter() {
                 if (p == u5 && k <= p5 + ltab.min_hairpin_size()) || 
                     (p == u3 && k + ltab.min_hairpin_size() >= p3) {
                         continue;
                 } else if ltab.can_pair(k, p as usize) {
                     let nk = k as NAIDX;
                     let (i, j) = if p < nk { (p, nk) } else { (nk, p) };
-                    let delta = self.shift_delta(
-                        shift_combo_loop, *shift_combo_energy, i, j
+                    let delta = self.get_shift_activation_energy(
+                        merge, *merge_energy,
+                        center, *center_energy,
+                        combo, *combo_energy, i, j
                     );
                     let mv = if p == *pi {
                         Move::ShiftIK { i: *pi, j: *pj, k: nk }
@@ -221,19 +253,6 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
                 }
             }
         }
-    }
-
-    #[inline(always)]
-    fn shift_delta(&self,
-        combo: &NearestNeighborLoop,
-        combo_energy: i32,
-        split_a: NAIDX,
-        split_b: NAIDX,
-    ) -> i32 {
-        let (s_outer, s_inner) = combo.split_loop(split_a, split_b);
-        let s_outer_energy = self.loop_table.energy_of_loop(&s_outer);
-        let s_inner_energy = self.loop_table.energy_of_loop(&s_inner);
-        (s_outer_energy + s_inner_energy) - combo_energy
     }
 
     pub fn apply_del_move(&mut self, i: NAIDX, j: NAIDX) -> (Moves, Moves) 
@@ -262,8 +281,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
         let combo = outer.join_loop(inner);
         let combo_pairs = &combo.pairs();
-        let c_en = (o_en + i_en) + delta;
-        debug_assert_eq!(c_en, ltab.energy_of_loop(&combo));
+        let c_en = ltab.energy_of_loop(&combo);
 
         // Update the loop table with all new data.
         let c_index = ltab.insert_loopentry(Some(o_index), (combo, c_en));
@@ -282,7 +300,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
         let mut new_moves = Vec::with_capacity(cap);
         for &(i, j) in combo_pairs {
-            let delta = self.eval_del_move(i, j);
+            let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
         }
@@ -341,7 +359,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
         let mut new_moves = Vec::with_capacity(cap);
         for &(i, j) in combo_pairs {
-            let delta = self.eval_del_move(i, j);
+            let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
         }
@@ -405,8 +423,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         let (inner, i_en) = ltab.get(i_index);
         let combo = outer.join_loop(inner);
         let combo_pairs = &combo.pairs();
-        let c_en = (o_en + i_en) + delta;
-        debug_assert_eq!(c_en, ltab.energy_of_loop(&combo));
+        let c_en = ltab.energy_of_loop(&combo);
         let (new_outer, new_inner) = combo.split_loop(p, q);
         let new_o_en = ltab.energy_of_loop(&new_outer);
         let new_i_en = ltab.energy_of_loop(&new_inner);
@@ -435,7 +452,7 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
         let mut new_moves = Vec::with_capacity(cap);
         for &(i, j) in combo_pairs {
-            let delta = self.eval_del_move(i, j);
+            let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
         }
@@ -457,6 +474,23 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         (old_moves, new_moves)
     }
 
+}
+
+impl<'a, E: EnergyModel> Clone for AddDelShiftMoves<'a, E> {
+    fn clone(&self) -> Self {
+        Self {
+            loop_table: self.loop_table.clone(),   // clones refs + vectors
+            add_neighbors: self.add_neighbors.clone(),
+            del_neighbors: self.del_neighbors.clone(),
+            shift_neighbors: self.shift_neighbors.clone(),
+        }
+    }
+}
+
+impl<'a, E: EnergyModel> fmt::Display for AddDelShiftMoves<'a, E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.loop_table)
+    }
 }
 
 impl<'a, E: EnergyModel> From<LoopTable<'a, E>> for AddDelShiftMoves<'a, E> {
