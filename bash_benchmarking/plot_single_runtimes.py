@@ -3,7 +3,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-tag = "FF_silent_metropolis_shift"
+tag = "FF_metropolis"
 
 # Load VKF benchmark files
 files = {
@@ -12,7 +12,7 @@ files = {
     1000:   f"simulate_benchmark_{tag}_t1000.csv",
     10000:  f"simulate_benchmark_{tag}_t10000.csv",
     100000: f"simulate_benchmark_{tag}_t100000.csv",
-    #1000000:f"simulate_benchmark_{tag}_t1000000.csv",
+    1000000:f"simulate_benchmark_{tag}_t1000000.csv",
 }
 
 dfs = []
