@@ -1,21 +1,19 @@
-use clap::Parser;
-use anyhow::Result;
-use colored::*;
-use serde_json::to_string_pretty;
 use std::fs;
 use std::sync::Arc;
 use std::path::Path;
 use std::path::PathBuf;
 use rayon::prelude::*;
+use rand::rng;
+use clap::Parser;
+use anyhow::Result;
+use colored::*;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
-use rand::rng;
+use serde_json::to_string_pretty;
 
 use ff_structure::PairTable;
-use ff_structure::DotBracket;
 use ff_structure::DotBracketVec;
 use ff_energy::EnergyModel;
-use ff_kinetics::Metropolis;
 use ff_kinetics::LoopStructure;
 use ff_kinetics::LoopStructureSSA;
 use ff_kinetics::timeline_pairlists::Timeline;
@@ -50,11 +48,19 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "Simulation parameters")]
     simulation: TimelineParameters,
 
+    #[command(flatten, next_help_heading = "Energy model parameters")]
+    energy: EnergyModelArguments,
+
     #[command(flatten, next_help_heading = "Kinetic model parameters")]
     kinetics: RateModelArguments,
 
-    #[command(flatten, next_help_heading = "Energy model parameters")]
-    energy: EnergyModelArguments,
+     ///Pausing sites 
+    #[arg(long, value_delimiter = ',')]
+    t_p: Option<Vec<f64>>,
+
+    ///Pausing sites positions  
+    #[arg(long, value_delimiter = ',')]
+    p_pos: Option<Vec<usize>>,
 }
 
 fn main() -> Result<()> {
@@ -63,10 +69,15 @@ fn main() -> Result<()> {
 
     // --- Build simulator ---
     let emodel = cli.energy.build_model();
-    let rmodel = Metropolis::new(emodel.temperature(), cli.kinetics.k0);
+    let rmodel = cli.kinetics.build_model(emodel.temperature());
 
-    let (header, sequence, _structure) = read_fasta_like_input(&cli.input)?;
-    
+    let (header, sequence, mut structure) = read_fasta_like_input(&cli.input)?;
+    if structure.len() >= sequence.len() {
+        structure = DotBracketVec::try_from(".")?;
+        println!("Input structure is full-length");
+    }
+    let pairings = PairTable::try_from(&structure)?;
+
     let name = if let Some(h) = header {
         println!("{}", h.yellow());
         h.strip_prefix('>')
@@ -91,36 +102,34 @@ fn main() -> Result<()> {
     let t_log = cli.simulation.t_log; //timepoints for posttranscriptional folding 
     let t_end = cli.simulation.t_end; //simulation stop time (Here: posttranscriptional stop time) (Only posttranscriptional time or total time??)
     
-    let mut times = vec![0.0];
+    let mut times_tl = vec![0.0];
 
     // Linear segments: append `t_lin` evenly spaced points
     
     let mut len = 1;
 
     while len < sequence_len {
-        let start = *times.last().unwrap();
+        let start = *times_tl.last().unwrap();
         let step = t_ext / t_lin as f64;
         for i in 1..= t_lin {
-            times.push(start + i as f64 * step);
+            times_tl.push(start + i as f64 * step);
         }
         len += 1;
     }
 
     // Logarithmic tail
-    let start = *times.last().unwrap();
+    let start = *times_tl.last().unwrap();
     let log_start = start.ln();
     let log_end = (start + t_end).ln();
     for i in 1..t_log {
         let frac = i as f64 / t_log as f64;
         let value = (log_start + frac * (log_end - log_start)).exp();
-        times.push(value);
+        times_tl.push(value);
     }
-    times.push(start + t_end);
-
+    times_tl.push(start + t_end);
 
     let mut registry = MacrostateRegistryPL::from((&sequence, &emodel));
-    //let mut registry = MacrostateRegistry::from((&sequence, &emodel));
-    let _ = registry.insert_files(&cli.macrostates);
+    registry.insert_files(&cli.macrostates)?;
 
     println!("Macrostates:\n{}", registry.iter()
         .map(|(_, m)| format!(" - {} {:6.2}", m.name(), m.ensemble_energy().unwrap_or(0.0)))
@@ -132,15 +141,64 @@ fn main() -> Result<()> {
     let mut master = if let Some(path) = &cli.timeline {
         if Path::new(path).exists() {
             println!("Loading existing timeline from: {}", path.display());
-            Timeline::from_file(path, &times, Arc::clone(&shared_registry))?
+            Timeline::from_file(path, &times_tl, Arc::clone(&shared_registry))?
         } else {
             println!("A new timeline file will be created: {}", 
                 path.display());
-            Timeline::new(&times, Arc::clone(&shared_registry))
+            Timeline::new(&times_tl, Arc::clone(&shared_registry))
         }
     } else {
-        Timeline::new(&times, Arc::clone(&shared_registry))
+        Timeline::new(&times_tl, Arc::clone(&shared_registry))
     };
+
+   
+    //build times vector 
+    let mut times: Vec<f64> = Vec::new();
+    let mut cotrans_time = 0.0;
+
+    let start = structure.len();
+    println!("Start: {}", start);
+    println!("Times vector: {:?}", times);
+    let mut idx = 0;
+
+    if let Some(pause_times) = &cli.t_p {
+       if let Some(pause_positions) = &cli.p_pos {
+            let mut pos = start;
+            cotrans_time += t_ext;
+            times.push(t_ext);
+            pos += 1;
+            for &p in pause_positions {
+                while pos < p {
+                    times.push(times.last().unwrap() + t_ext);
+                    cotrans_time += t_ext;
+                    pos += 1;
+                }
+                if pos == p {
+                    times.push(times.last().unwrap() + pause_times[idx]);
+                    cotrans_time += pause_times[idx];
+                    idx += 1;
+                    pos += 1;
+                }
+            }
+            while pos < (sequence.len()) {
+                times.push(times.last().unwrap() + t_ext);
+                cotrans_time += t_ext;
+                pos += 1;
+            }
+           
+            times.push(times.last().unwrap() + t_end);
+            
+       }
+    } else {
+
+        times.push(t_ext);
+        for _ in (start + 1)..(sequence.len()) {
+            cotrans_time += t_ext;
+            times.push(times.last().unwrap() + t_ext);
+        }
+        times.push(times.last().unwrap() + t_end);
+    }
+
 
     println!("Simulation progress:");
     let pb = ProgressBar::new(cli.num_sims as u64);
@@ -157,91 +215,18 @@ fn main() -> Result<()> {
             || pb.clone(), // each thread gets a clone
             |pb, _| {
                 let registry = Arc::clone(&shared_registry);
-                let mut timeline = Timeline::new(&times, registry);
+                let mut timeline = Timeline::new(&times_tl, registry);
 
-                let mut t = 0.0;
-
-                // start with len=1
-                let mut current_len = 1;
-                let mut current_struct = DotBracketVec(vec![DotBracket::Unpaired]); //initialize current structure with length 1
-                let mut current_seq = &sequence[..current_len];
-
+                let loops = LoopStructure::try_from((&sequence[..], &pairings, &emodel)).unwrap();
+                let mut simulator = LoopStructureSSA::from((loops, &rmodel));
+                
                 let mut t_idx = 0;
 
-
-                while current_len < sequence.len() { //repeat until end of transcription
-
-                    current_seq = &sequence[..current_len];
-
-                    let pairings = PairTable::try_from(&current_struct).unwrap(); //build PairTable
-                    let loops = LoopStructure::try_from((&current_seq[..], &pairings, &emodel)).unwrap(); //build loop structure 
-
-                    // --- Check if code panics, because no possible transitions for current seequence, skip simulation in this case ---
-                    
-                    let add_pair = loops // can a base pair be added?
-                        .get_add_neighbors_per_loop()
-                        .iter()
-                        .any(|(_, add_neighbors) | !add_neighbors.is_empty());
-
-                    let del_pair = !loops.get_del_neighbors().is_empty(); //can a base pair be deleted?
-
-                    if !add_pair && !del_pair { // no possible transitions => continue without simulation and extend structure and sequence
-                        for i in t_idx..(t_idx + t_lin){
-                            timeline.assign_structure(i, &current_struct);
-                        }
-                        t_idx += t_lin;
-                        t = t + t_ext;
-                        current_len += 1;
-                        current_struct.0.push(DotBracket::Unpaired);
-                        continue;
-                    }
-
-                    let mut simulator = LoopStructureSSA::from((loops, &rmodel)); //build simulator from loop structure and rate model
-                    
-                    let mut final_struct = current_struct.clone();
-                  
-                    let idx = t_idx + t_lin;
-
-                    simulator.simulate(
-                        &mut rng(), //random number 
-                        t_ext,
-                        |t_sim, tinc, _flux, ls| {
-                            while t_idx < idx + t_lin + 1 && t + t_sim + tinc >= times[t_idx] {
-                                let structure = DotBracketVec::from(ls);
-                                timeline.assign_structure(t_idx, &structure);
-                                t_idx += 1;
-                            }
-                            final_struct = DotBracketVec::from(ls);
-                            true
-                        },
-                    );
-
-                    current_struct = final_struct.clone();
-                    t = t + t_ext; //update t
-
-                    // ---Append sequence with next nucleotide---
-                    current_len += 1; 
-                    current_seq = &sequence[..current_len];
-                    current_struct.0.push(DotBracket::Unpaired);
-
-                }
-
-
-                // ---Postranscriptional folding---
-
-
-                let pairings = PairTable::try_from(&current_struct).unwrap();//build PairTable
-                let loops = LoopStructure::try_from((&current_seq[..], &pairings, &emodel)).unwrap(); //build loop structure
-
-                let mut simulator = LoopStructureSSA::from((loops, &rmodel)); //build simulator from loop structure and rate model
-                
-                let cofolding_time = (sequence.len() -1) as f64 * t_ext;
-
-                simulator.simulate(
+                simulator.co_simulate(
                     &mut rng(),
-                    cofolding_time + t_end,
-                    |t_sim, tinc, _, ls| {
-                        while t_idx < times.len() && t + t_sim + tinc >= times[t_idx] {
+                    times.clone(),
+                    |t, tinc, _, ls| {
+                        while t_idx < times_tl.len() && t + tinc >= times_tl[t_idx] {
                             let structure = DotBracketVec::from(ls);
                             timeline.assign_structure(t_idx, &structure);
                             t_idx += 1;
@@ -249,11 +234,11 @@ fn main() -> Result<()> {
                         true
                     },
                 );
+
                 pb.inc(1);
                 timeline
-            }
+            },
         ).collect();
-
     pb.finish_with_message("All simulations complete!");
 
     // Master timeline
@@ -261,12 +246,8 @@ fn main() -> Result<()> {
         master.merge(timeline);
     }
 
-    let t_final = master.points.last().unwrap().time;
-
-    let cofolding_time = (sequence.len() -1) as f64 * cli.simulation.t_ext; 
-
     println!("Final Timeline:\n{}", master);
-    plot_occupancy_over_time(&master, &format!("ff_{}.svg", name), cofolding_time, t_final);
+    plot_occupancy_over_time(&master, &format!("ff_{}.svg", name), cotrans_time, *times.last().unwrap());
 
     if let Some(path) = cli.timeline {
         let serial = master.to_serializable();
@@ -274,9 +255,11 @@ fn main() -> Result<()> {
         fs::write(path, json)?;
     }
 
-    for i in times {
-        println!("{}", i);
-    }
+    //println!("times length {}, values: {:?}", times.len(), times);
+    //println!("times_tl length {}, values {:?}", times_tl.len(), times_tl, );
 
     Ok(())
 }
+
+
+

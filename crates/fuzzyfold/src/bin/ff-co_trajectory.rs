@@ -37,7 +37,6 @@ pub struct Cli {
     #[arg(long, default_value_t = 1.0)]
     t_end: f64,
 
-
     #[command(flatten, next_help_heading = "Energy model parameters")]
     energy: EnergyModelArguments,
 
@@ -52,13 +51,18 @@ fn main() -> Result<()> {
     let emodel = cli.energy.build_model();
     let rmodel = cli.kinetics.build_model(emodel.temperature());
 
-    let (header, sequence, structure) = read_fasta_like_input(&cli.input)?;
+    let (header, sequence, mut structure) = read_fasta_like_input(&cli.input)?;
+    if structure.len() >= sequence.len() {
+        structure = DotBracketVec::try_from(".")?;
+        println!("Input structure was full-length");
+    }
     let pairings = PairTable::try_from(&structure)?;
     if let Some(h) = header {
         println!("{}", h.yellow())
     }
-    println!("{} {:>8} {:>14} {:>14} {:>15}",
+    println!("{} {} {:>8} {:>14} {:>14} {:>15}",
         sequence,
+        "current length".blue(),
         "energy".green(),
         "arrival-time".cyan(),
         "waiting-time".cyan(),
@@ -71,7 +75,10 @@ fn main() -> Result<()> {
 
     //build times vector 
     let mut times: Vec<f64> = Vec::new();
+
     let start = structure.len();
+    println!("Start: {}", start);
+    println!("Times vector: {:?}", times);
     let mut idx = 0;
 
     if let Some(pause_times) = &cli.t_p {
@@ -90,36 +97,35 @@ fn main() -> Result<()> {
                     pos += 1;
                 }
             }
-            while pos < (sequence.len() -1) {
+            while pos < (sequence.len()) {
                 times.push(times.last().unwrap() + cli.t_ext);
                 pos += 1;
             }
-            if pos == (sequence.len() - 1) {
-                times.push(times.last().unwrap() + cli.t_end);
-            }
+           
+            times.push(times.last().unwrap() + cli.t_end);
+            
        }
     } else {
 
         times.push(cli.t_ext);
-        for _ in (start + 1)..(sequence.len() - 1) {
+        for _ in (start + 1)..(sequence.len()) {
             times.push(times.last().unwrap() + cli.t_ext);
         }
         times.push(times.last().unwrap() + cli.t_end);
     }
 
-    let mut steps = 0;
 
     simulator.co_simulate(
         &mut rng(), 
         times, 
         |t, tinc, flux, ls| {
             println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
-                ls,
+                DotBracketVec::from(ls),
                 ls.energy() as f64 / 100.,
                 t,
                 tinc,
                 1.0 / flux,
-            );
+                );
             true
         },
     );
