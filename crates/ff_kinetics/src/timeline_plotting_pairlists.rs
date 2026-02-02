@@ -2,7 +2,7 @@ use ff_energy::EnergyModel;
 use plotters::prelude::*;
 use plotters::style::Palette99;
 
-use crate::timeline_pairsets::Timeline;
+use crate::timeline_pairlists::Timeline;
 
 pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
     timeline: &Timeline<'a, E>, 
@@ -12,7 +12,7 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
 ) {
     assert!(t_lin > 0.0 && t_log > t_lin, "Require 0 < t_lin < t_log");
 
-    let title = format!("ff-simulate ({} simulations)", timeline.points[0].counter);
+    let title = format!("ff-co_simulate ({} simulations)", timeline.points[0].counter);
 
     // Image size; tweak as you like
     //let root = BitMapBackend::new(filename, (1024, 480)).into_drawing_area();
@@ -27,7 +27,7 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
 
 
     // Split into two panels: 18% for linear (left), 82% for log (right)
-    let (left, right) = root.split_horizontally(200);
+    let (left, right) = root.split_horizontally(512);
 
     // ---- Left: linear panel ----
     let mut chart_left = ChartBuilder::on(&left)
@@ -79,12 +79,6 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
         .light_line_style(RGBColor(220, 220, 220))
         .label_style(("sans-serif", 18))
         .draw().unwrap();
-
-    // repeat separator at x = t_lin (left edge of this panel)
-    chart_right.draw_series(std::iter::once(PathElement::new(
-        vec![(t_lin, 0.0), (t_lin, 1.0)],
-        BLACK.mix(0.7),
-    ))).unwrap();
 
 
     // Build data per structure
@@ -139,6 +133,19 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
         .position(SeriesLabelPosition::UpperRight)
             .label_font(("sans-serif", 16).into_font())   // <-- legend font size
         .draw().unwrap();
+
+    // draw separator at x = t_lin (right edge of this panel)
+    chart_left.draw_series(std::iter::once(PathElement::new(
+        vec![(t_lin, 0.0), (t_lin, 1.0)],
+        BLACK.mix(1.0),
+    ))).unwrap();
+
+    // repeat separator at x = t_lin (left edge of this panel)
+    chart_right.draw_series(std::iter::once(PathElement::new(
+        vec![(t_lin, 0.0), (t_lin, 1.0)],
+        BLACK.mix(1.0),
+    ))).unwrap();
+
     
     root.present().unwrap(); // write the PNG
 }

@@ -151,6 +151,10 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
 
             while t < *time {
                 let rsum = self.rate_tree.total_rate();
+                if rsum == 0.0 {
+                    t = *time; 
+                    break;
+                }
             
                 // sample waiting time ~ Exp(flux)
                 let tinc = -rng.random::<f64>().ln() / rsum;
@@ -210,11 +214,13 @@ impl<'a, E: EnergyModel, K: RateModel> LoopStructureSSA<'a, E, K> {
             }
 
             //apply extension move
+            
             if t < *times.last().unwrap() {
                 let (loop_neighbors, pair_changes) = self.loopstructure.apply_ext_move();
                 self.update_loop_reactions(loop_neighbors);
                 self.update_pair_reactions(pair_changes);
             }
+            callback(t, 0.0, self.rate_tree.total_rate(), &self.loopstructure);
         }
 
     } 
@@ -304,12 +310,15 @@ mod tests {
         let loops = LoopStructure::try_from((&sequence[..], &pairings, &emodel))
             .expect("failed to build loop structure");
 
+
         let mut simulator = LoopStructureSSA::from((loops, &rmodel));
 
         let mut time_steps = Vec::new();
         let mut structure_lengths = Vec::new();
 
         let mut steps = 0;
+
+        
 
         simulator.co_simulate(
             &mut rng, 

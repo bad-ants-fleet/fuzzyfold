@@ -152,6 +152,8 @@ impl<'a, E: EnergyModel> Clone for LoopStructure<'a, E> {
     }
 }
 
+    
+
 impl<'a, E: EnergyModel> fmt::Debug for LoopStructure<'a, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LoopStructure")
@@ -179,6 +181,16 @@ impl<'a, E: EnergyModel> fmt::Display for LoopStructure<'a, E> {
 impl<'a, E: EnergyModel> LoopStructure<'a, E> {
     /// Return all add neighbors, including an index that 
     /// is necessary to access the actual loop via loop_lookup.
+    
+    pub fn get_current_len(&self) -> usize {
+        
+        self.loop_lookup()
+            .iter()
+            .position(|x| x.is_none())
+            .unwrap_or(self.loop_lookup().len())
+
+    }
+    
     pub fn get_add_neighbors_per_loop(&self) -> &IntMap<usize, MoveEnergies> {
         &self.loop_neighbors
     }
@@ -327,7 +339,7 @@ impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
         let mut energy = 0;
 
         // Decomposing the structure into loops and initializing
-        // loop_list, pair_list, and loop_lookup. 
+        // loop_list, pair_list, and loop_lookup.
         pairings.for_each_loop(|l| {
             let (lli, en) = registry.insert_loop(l.to_owned());
             if let Some((i, j)) = l.closing() {
@@ -365,11 +377,20 @@ impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a [Base], &T, &'a E)> 
 impl<'a, E: EnergyModel> From<&LoopStructure<'a, E>> for DotBracketVec {
     fn from(ls: &LoopStructure<'a, E>) -> Self {
         // Use the same logic as your Display impl, but avoid allocating a String unnecessarily
+        let current_len = ls.get_current_len();
+        let mut vec = vec![DotBracket::Unpaired; current_len];
+        for (i, j) in &ls.pair_list {
+            if (*i as usize) < current_len && (*j as usize) < current_len {
+                vec[*i as usize] = DotBracket::Open;
+                vec[*j as usize] = DotBracket::Close;
+            }
+        }
+        /* 
         let mut vec = vec![DotBracket::Unpaired; ls.registry.sequence.len()];
         for (i, j) in &ls.pair_list {
             vec[*i as usize] = DotBracket::Open;
             vec[*j as usize] = DotBracket::Close;
-        }
+        }*/
         DotBracketVec(vec)
     }
 }
