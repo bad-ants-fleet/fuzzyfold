@@ -75,13 +75,15 @@ impl<'a, E: EnergyModel> Walker for AddDelShiftMoves<'a, E> {
     fn len(&self) -> usize {
         self.del_neighbors().len() 
             + self.add_neighbors().values().map(|v| v.len()).sum::<usize>()
-            + self.shift_neighbors().values().map(|v| v.len()).sum::<usize>()
+            + self.three_way_shift_neighbors().len()
+            + self.four_way_shift_neighbors().len()
     }
 
     fn is_empty(&self) -> bool {
         self.del_neighbors().is_empty() 
             && self.add_neighbors().is_empty()
-            && self.shift_neighbors().is_empty()
+            && self.three_way_shift_neighbors().is_empty()
+            && self.four_way_shift_neighbors().is_empty()
     }
 
     fn current_structure(&self) -> DotBracketVec {
@@ -103,10 +105,13 @@ impl<'a, E: EnergyModel> Walker for AddDelShiftMoves<'a, E> {
             .map(move |(&i, &delta_e)| {
                 (Move::Del { i, j: ltab.pair_lookup(&i) }, delta_e)
             });
-        let shift_moves = self.shift_neighbors()
+        let tw_shift_moves = self.three_way_shift_neighbors().map()
             .values()
             .flat_map(|moves| moves.iter().copied());
-        add_moves.chain(del_moves).chain(shift_moves)
+        let fw_shift_moves = self.four_way_shift_neighbors().map()
+            .values()
+            .flat_map(|moves| moves.iter().copied());
+        add_moves.chain(del_moves).chain(tw_shift_moves).chain(fw_shift_moves)
     }
 
     fn apply_move(&mut self, mv: &Move) -> (Moves, Moves) {
@@ -117,11 +122,17 @@ impl<'a, E: EnergyModel> Walker for AddDelShiftMoves<'a, E> {
             Move::Del { i, j } => { 
                 self.apply_del_move(*i, *j)
             },
-            mv @ Move::ShiftIK { i, j, k } => { 
-                self.apply_shift_move(mv, *i, *j, *k, mv.added_pair())
+            mv @ Move::ShiftIK { k, .. } => { 
+                self.apply_three_way_shift_move(mv, *k)
             },
-            mv @ Move::ShiftJK { i, j, k } => { 
-                self.apply_shift_move(mv, *i, *j, *k, mv.added_pair())
+            mv @ Move::ShiftJK { k, .. } => { 
+                self.apply_three_way_shift_move(mv, *k)
+            },
+            mv @ Move::ShiftIKLJ { .. } => { 
+                self.apply_four_way_shift_move(mv)
+            },
+            mv @ Move::ShiftILJK { .. } => { 
+                self.apply_four_way_shift_move(mv)
             },
         }
     }

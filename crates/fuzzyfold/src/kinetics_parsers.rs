@@ -19,8 +19,12 @@ pub struct RateModelArguments {
     pub k0: f64,
 
     /// Rate constant for shift moves.
-    #[arg(long, default_value_t = 1e4)]
-    pub ks: f64,
+    #[arg(long, default_value_t = 1e6)]
+    pub k3ws: f64,
+
+    /// Rate constant for shift moves.
+    #[arg(long, default_value_t = 1e6)]
+    pub k4ws: f64,
 
     /// The rate model (Arrhenius/Metropolis vs Kawasaki)
     #[arg(long, value_enum, default_value = "metropolis")]
@@ -29,17 +33,17 @@ pub struct RateModelArguments {
 
 impl RateModelArguments {
     pub fn build_metropolis_model(&self, temperature: f64) -> Metropolis {
-        Metropolis::new(temperature, self.k0, self.ks)
+        Metropolis::new(temperature, self.k0, self.k3ws, self.k4ws)
     }
     pub fn build_kawasaki_model(&self, temperature: f64) -> Kawasaki {
-        Kawasaki::new(temperature, self.k0, self.ks)
+        Kawasaki::new(temperature, self.k0, self.k3ws, self.k4ws)
     }
 }
 
 #[derive(Debug, Args)]
 pub struct TimelineParameters {
     /// The last time point of the linear scale.
-    #[arg(long, default_value_t = 1e-5)]
+    #[arg(long, default_value_t = 1e-7)]
     pub t_ext: f64,
 
     /// Simulation stop time.
@@ -47,11 +51,11 @@ pub struct TimelineParameters {
     pub t_end: f64,
 
     /// Number of time points on the linear scale: [0..t-ext]
-    #[arg(long, default_value_t = 1)]
+    #[arg(long, default_value_t = 10)]
     pub t_lin: usize,
 
     /// Number of time points on the logarithmic scale: [t-ext..t-end]
-    #[arg(long, default_value_t = 20)]
+    #[arg(long, default_value_t = 100)]
     pub t_log: usize,
 }
 

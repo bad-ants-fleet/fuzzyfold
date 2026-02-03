@@ -12,22 +12,27 @@ pub trait RateModel {
 pub struct Metropolis {
     kt: f64, // k_B * T in kcal/mol
     k0: f64,
-    ks: f64,
+    k3ws: f64,
+    k4ws: f64,
 }
 
 impl Metropolis {
-    pub fn new(celsius: f64, k0: f64, ks: f64) -> Self {
+    pub fn new(celsius: f64, k0: f64, k3ws: f64, k4ws: f64) -> Self {
         if k0 <= 0. {
             panic!("k0 must be positive!");
         }
-        if ks <= 0. {
-            panic!("ks must be positive!");
+        if k3ws <= 0. {
+            panic!("k3ws must be positive!");
+        }
+        if k4ws <= 0. {
+            panic!("k4ws must be positive!");
         }
         let t_kelvin = celsius + K0;
         Self { 
             kt: KB * t_kelvin,
             k0,
-            ks,
+            k3ws,
+            k4ws,
         }
     }
 }
@@ -35,18 +40,25 @@ impl Metropolis {
 impl RateModel for Metropolis {
     fn rate(&self, mv: &Move, delta_e: i32) -> f64 {
         match &mv {
-            Move::ShiftIK { .. } | Move::ShiftJK { .. } => {
-                if delta_e <= 0 {
-                    self.ks
-                } else {
-                    self.ks * ((-delta_e as f64 / 100.) / self.kt).exp()
-                }
-            },
             Move::Add { .. } | Move::Del { .. } => {
                 if delta_e <= 0 {
                     self.k0
                 } else {
                     self.k0 * ((-delta_e as f64 / 100.) / self.kt).exp()
+                }
+            },
+            Move::ShiftIK { .. } | Move::ShiftJK { .. } => {
+                if delta_e <= 0 {
+                    self.k3ws
+                } else {
+                    self.k3ws * ((-delta_e as f64 / 100.) / self.kt).exp()
+                }
+            },
+            Move::ShiftIKLJ { .. } | Move::ShiftILJK { .. } => {
+                if delta_e <= 0 {
+                    self.k4ws
+                } else {
+                    self.k4ws * ((-delta_e as f64 / 100.) / self.kt).exp()
                 }
             },
         }
@@ -57,22 +69,27 @@ impl RateModel for Metropolis {
 pub struct Kawasaki {
     beta: f64, // 2 * k_B * T in kcal/mol
     k0: f64,
-    ks: f64,
+    k3ws: f64,
+    k4ws: f64,
 }
 
 impl Kawasaki {
-    pub fn new(celsius: f64, k0: f64, ks: f64) -> Self {
+    pub fn new(celsius: f64, k0: f64, k3ws: f64, k4ws: f64) -> Self {
         if k0 <= 0. {
             panic!("k0 must be positive!");
         }
-        if ks <= 0. {
-            panic!("ks must be positive!");
+        if k3ws <= 0. {
+            panic!("k3ws must be positive!");
+        }
+        if k4ws <= 0. {
+            panic!("k4ws must be positive!");
         }
         let t_kelvin = celsius + K0;
         Self { 
             beta: KB * t_kelvin * 2.0,
             k0,
-            ks,
+            k3ws,
+            k4ws,
         }
     }
 }
@@ -80,11 +97,14 @@ impl Kawasaki {
 impl RateModel for Kawasaki {
     fn rate(&self, mv: &Move, delta_e: i32) -> f64 {
         match &mv {
-            Move::ShiftIK { .. } | Move::ShiftJK { .. } => {
-                self.ks * ((-delta_e as f64 / 100.) / self.beta).exp()
-            },
             Move::Add { .. } | Move::Del { .. } => {
                 self.k0 * ((-delta_e as f64 / 100.) / self.beta).exp()
+            },
+            Move::ShiftIK { .. } | Move::ShiftJK { .. } => {
+                self.k3ws * ((-delta_e as f64 / 100.) / self.beta).exp()
+            },
+            Move::ShiftILJK { .. } | Move::ShiftIKLJ { .. } => {
+                self.k4ws * ((-delta_e as f64 / 100.) / self.beta).exp()
             },
         }
 

@@ -47,7 +47,18 @@ impl ApplyMove for DotBracketVec {
                     self[j as usize] = DotBracket::Close;
                 }
             }
- 
+            Move::ShiftIKLJ { i, j, k, l } => {
+                self[i as usize] = DotBracket::Open;
+                self[k as usize] = DotBracket::Close;
+                self[l as usize] = DotBracket::Open;
+                self[j as usize] = DotBracket::Close;
+            } 
+            Move::ShiftILJK { i, j, k, l } => {
+                self[i as usize] = DotBracket::Open;
+                self[j as usize] = DotBracket::Open;
+                self[k as usize] = DotBracket::Close;
+                self[l as usize] = DotBracket::Close;
+            }
         }
     }
 }
