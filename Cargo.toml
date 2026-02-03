@@ -23,6 +23,7 @@ ff_structure = { path = "./crates/ff_structure", version = "0.3.0" }
 ff_kinetics  = { path = "./crates/ff_kinetics", version = "0.3.0" }
 
 # shared crates
+ahash = "0.8"
 colored = "3.0.0"
 criterion = "0.7.0"
 env_logger = "0.11.8"

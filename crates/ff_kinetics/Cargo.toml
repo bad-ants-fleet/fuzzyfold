@@ -15,6 +15,7 @@ categories.workspace = true
 ff_structure.workspace = true
 ff_energy.workspace = true
 
+ahash.workspace = true
 criterion.workspace = true
 log.workspace = true
 nohash-hasher.workspace = true
@@ -24,6 +25,7 @@ rand.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
 
 [[bench]]
 name = "explore"

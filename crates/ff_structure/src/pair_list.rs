@@ -1,4 +1,4 @@
-//! Pair and PairSet definitions. 
+//! Pair and PairList definitions. 
 //!
 //! Compact integer-based representation of base pairs, can 
 //! be used as alternative to PairTable representations.
@@ -6,13 +6,13 @@
 //! A `Pair` is defined by two 16-bit indices (`NAIDX`) packed into a
 //! 32-bit integer key (`P1KEY`) for efficient set and map storage.
 //!
-//! We currently do not povide the conversions from PairSet to 
+//! We currently do not povide the conversions from PairList to 
 //! PairTable, mainly because at this stage it is not clear if
-//! PairSets may be used in the future to include pseudoknots. 
+//! PairSet may be used in the future to include pseudoknots. 
 //! 
 
 use std::fmt;
-use nohash_hasher::IntSet;
+use std::ops::Deref;
 
 use crate::PairTable;
 use crate::NAIDX;
@@ -20,7 +20,7 @@ use crate::P1KEY;
 
 
 /// A base pair (i, j) with i < j.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pair {
     i: NAIDX,
     j: NAIDX,
@@ -59,18 +59,16 @@ impl Pair {
 }
 
 /// A collection of base pairs represented as compact integer keys.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PairSet {
-    length: usize,
-    pairs: IntSet<P1KEY>,
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct PairList {
+    pairs: Vec<(NAIDX, NAIDX)>,
 }
 
-impl PairSet {
+impl PairList {
     /// Create an empty pair set for a given sequence length.
-    pub fn new(length: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            length,
-            pairs: IntSet::default(),
+            pairs: Vec::new()
         }
     }
 
@@ -86,60 +84,56 @@ impl PairSet {
 
     /// Insert a new pair; returns true if it was newly inserted.
     pub fn insert(&mut self, pair: Pair) -> bool {
-        debug_assert!((pair.j() as usize) < self.length);
-        self.pairs.insert(pair.key())
+        let entry = (pair.i(), pair.j());
+        if self.pairs.contains(&entry) {
+            return false
+        }else {
+            self.pairs.push(entry);
+            true
+        }
     }
 
     /// Check if a pair exists in the set.
     pub fn contains(&self, pair: &Pair) -> bool {
-        self.pairs.contains(&pair.key())
+        self.pairs.contains(&(pair.i(), pair.j()))
     }
 
-    /// Iterator over all pairs in arbitrary order.
-    pub fn iter(&self) -> impl Iterator<Item = Pair> + '_ {
-        self.pairs.iter().map(|&k| Pair::from_key(k))
-    }
+}
 
-    /// Return all pairs as a Vec (for deterministic inspection).
-    pub fn to_vec(&self) -> Vec<Pair> {
-        let mut v: Vec<_> = self.iter().collect();
-        v.sort_unstable_by_key(|p| (p.i(), p.j()));
-        v
-    }
-
-    /// Underlying sequence length (from the originating `PairTable`).
-    pub fn length(&self) -> usize {
-        self.length
+impl Deref for PairList {
+    type Target = Vec<(NAIDX, NAIDX)>;
+    fn deref(&self) -> &Self::Target {
+        &self.pairs
     }
 }
 
-impl From<&PairTable> for PairSet {
+
+impl From<&PairTable> for PairList {
     fn from(pt: &PairTable) -> Self {
-        let mut pairs = IntSet::default();
+        let mut pairs = Vec::new();
         for (i, &j_opt) in pt.iter().enumerate() {
             let i = i as NAIDX;
             if let Some(j) = j_opt {
                 if i < j {
-                    pairs.insert(Pair::new(i, j).key());
+                    pairs.push((i,j));
                 }
             }
         }
         Self {
-            length: pt.len(),
             pairs,
         }
     }
 }
 
-impl fmt::Display for PairSet {
+impl fmt::Display for PairList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;
-        for pair in self.to_vec() {
+        for &(i,j) in &self.pairs {
             if !first {
                 write!(f, ",")?;
             }
             // Only here we show 1-based values for readability.
-            write!(f, "({},{})", pair.i(), pair.j())?;
+            write!(f, "({},{})", i, j)?;
             first = false;
         }
         Ok(())
@@ -161,12 +155,10 @@ mod tests {
     #[test]
     fn test_pair_list_from_pair_table() {
         let pt = PairTable::try_from("((..))").unwrap();
-        let pl = PairSet::from(&pt);
+        let pl = PairList::from(&pt);
 
         let expected = vec![Pair::new(0, 5), Pair::new(1, 4)];
-        assert_eq!(pl.length(), 6);
-        assert_eq!(pl.to_vec(), expected);
-
+        
         for p in &expected {
             assert!(pl.contains(p));
         }
@@ -176,7 +168,8 @@ mod tests {
     #[test]
     fn test_display() {
         let pt = PairTable::try_from("((..))").unwrap();
-        let pl = PairSet::from(&pt);
+        let pl = PairList::from(&pt);
+        println!("PairList:{}", pl);
         let s = format!("{}", pl);
         assert!(s.contains("(0,5)"));
         assert!(s.contains("(1,4)"));
