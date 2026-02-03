@@ -72,7 +72,7 @@ fn load_raw_inputs(path: &str) -> Vec<(NucleotideVec, PairTable)> {
 
 fn simulate_benchmark(c: &mut Criterion) {
     let emodel = ViennaRNA::default();
-    let rmodel = Metropolis::new(emodel.temperature(), 1.0, 1.0, 1.0);
+    let rmodel = Metropolis::new(emodel.temperature(), 1.0, None, None);
     let mut group = c.benchmark_group("Seeded stochastic simulations.");
     group.measurement_time(std::time::Duration::from_secs(50)); 
 
@@ -104,7 +104,7 @@ fn simulate_benchmark(c: &mut Criterion) {
 
 fn simulate_shift_benchmark(c: &mut Criterion) {
     let emodel = ViennaRNA::default();
-    let rmodel = Metropolis::new(emodel.temperature(), 1.0, 1.0, 1.0);
+    let rmodel = Metropolis::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
     let mut group = c.benchmark_group("Seeded stochastic simulations with shift moves.");
     group.measurement_time(std::time::Duration::from_secs(50)); 
 

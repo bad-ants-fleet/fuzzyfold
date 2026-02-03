@@ -23,7 +23,9 @@ From<(W, &'a K)> for SSA<'a, W, K>
 
         for (mv, delta) in walker.propose_moves() {
             let k = ratemodel.rate(&mv, delta);
-            rate_tree.init_insert(mv, k);
+            if k > 0.0 {
+                rate_tree.init_insert(mv, k);
+            }
         }
         rate_tree.init_partial_sums();
 
@@ -83,7 +85,7 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
                 match (cur_del, cur_add) {
                     (Some((omv, _)), Some((nmv, delta))) => {
                         let k = self.ratemodel.rate(nmv, *delta);
-                        if self.rate_tree.update_rate(nmv, k) {
+                        if k == 0.0 || self.rate_tree.update_rate(nmv, k) {
                             cur_add = add.next();
                         } else {
                             self.rate_tree.replace(omv, nmv, k);
@@ -97,7 +99,7 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
                     }
                     (None, Some((nmv, delta))) => {
                         let k = self.ratemodel.rate(nmv, *delta);
-                        if !self.rate_tree.update_rate(nmv, k) {
+                        if k > 0. && !self.rate_tree.update_rate(nmv, k) {
                             self.rate_tree.insert(*nmv, k);
                         }
                         cur_add = add.next();
@@ -126,7 +128,7 @@ mod tests {
     #[test]
     fn test_simple_ssa_simulation() {
         let emodel = ViennaRNA::default();
-        let rmodel = Metropolis::new(emodel.temperature(), 1.0, 1.0, 1.0);
+        let rmodel = Metropolis::new(emodel.temperature(), 1.0, None, None);
         let mut rng = StdRng::seed_from_u64(42);
 
         let sequence = "CAAAG";

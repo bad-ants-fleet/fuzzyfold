@@ -17,22 +17,16 @@ pub struct Metropolis {
 }
 
 impl Metropolis {
-    pub fn new(celsius: f64, k0: f64, k3ws: f64, k4ws: f64) -> Self {
-        if k0 <= 0. {
-            panic!("k0 must be positive!");
-        }
-        if k3ws <= 0. {
-            panic!("k3ws must be positive!");
-        }
-        if k4ws <= 0. {
-            panic!("k4ws must be positive!");
+    pub fn new(celsius: f64, k0: f64, k3ws: Option<f64>, k4ws: Option<f64>) -> Self {
+        if k0 < 0. {
+            panic!("k0 must not be negative!");
         }
         let t_kelvin = celsius + K0;
         Self { 
             kt: KB * t_kelvin,
             k0,
-            k3ws,
-            k4ws,
+            k3ws: k3ws.unwrap_or(0.0),
+            k4ws: k4ws.unwrap_or(0.0),
         }
     }
 }
@@ -74,22 +68,16 @@ pub struct Kawasaki {
 }
 
 impl Kawasaki {
-    pub fn new(celsius: f64, k0: f64, k3ws: f64, k4ws: f64) -> Self {
-        if k0 <= 0. {
-            panic!("k0 must be positive!");
-        }
-        if k3ws <= 0. {
-            panic!("k3ws must be positive!");
-        }
-        if k4ws <= 0. {
-            panic!("k4ws must be positive!");
+    pub fn new(celsius: f64, k0: f64, k3ws: Option<f64>, k4ws: Option<f64>) -> Self {
+        if k0 < 0. {
+            panic!("k0 must not be negative!");
         }
         let t_kelvin = celsius + K0;
         Self { 
             beta: KB * t_kelvin * 2.0,
             k0,
-            k3ws,
-            k4ws,
+            k3ws: k3ws.unwrap_or(0.0),
+            k4ws: k4ws.unwrap_or(0.0),
         }
     }
 }

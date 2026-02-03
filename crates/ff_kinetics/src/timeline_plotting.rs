@@ -1,4 +1,5 @@
 use ff_energy::EnergyModel;
+use std::path::Path;
 use plotters::prelude::*;
 use plotters::style::Palette99;
 
@@ -6,7 +7,7 @@ use crate::timeline::Timeline;
 
 pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
     timeline: &Timeline<'a, E>, 
-    filename: &str,
+    filename: impl AsRef<Path>,
     t_lin: f64,
     t_log: f64,
 ) {
@@ -16,7 +17,7 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
 
     // Image size; tweak as you like
     //let root = BitMapBackend::new(filename, (1024, 480)).into_drawing_area();
-    let root = SVGBackend::new(filename, (1024, 480)).into_drawing_area();
+    let root = SVGBackend::new(filename.as_ref(), (1024, 480)).into_drawing_area();
     root.fill(&WHITE).unwrap();
     root.titled(&title, ("sans-serif", 28)).unwrap();
     root.draw_text(

@@ -52,6 +52,7 @@ impl RateTree {
     }
     
     pub fn init_insert(&mut self, mv: Move, rate: f64) {
+        debug_assert!(rate > 0.0);
         let idx = self.entries.len();
 
         self.entries.push(MoveNode {
@@ -121,6 +122,7 @@ impl RateTree {
     }
 
     pub fn insert(&mut self, mv: Move, rate: f64) {
+        debug_assert!(rate > 0.0);
         let idx = self.entries.len();
 
         self.entries.push(MoveNode {
@@ -134,6 +136,7 @@ impl RateTree {
     }
 
     pub fn update_rate(&mut self, mv: &Move, new_rate: f64) -> bool {
+        debug_assert!(new_rate > 0.0);
         if let Some(&idx) = self.pos_map.get(mv) {
             self.entries[idx].rate = new_rate;
             self.update_partial_sums(idx);
@@ -144,6 +147,7 @@ impl RateTree {
     }
 
     pub fn replace(&mut self, old_mv: &Move, new_mv: &Move, new_rate: f64) -> bool {
+        debug_assert!(new_rate > 0.0);
         let idx = match self.pos_map.remove(old_mv) {
             Some(i) => i,
             None => return false,

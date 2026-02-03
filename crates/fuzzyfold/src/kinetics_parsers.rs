@@ -3,9 +3,6 @@ use clap::ValueEnum;
 use anyhow::bail;
 use anyhow::Result;
 
-use ff_kinetics::Kawasaki;
-use ff_kinetics::Metropolis;
-
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum RateModelKind {
     Metropolis,
@@ -18,26 +15,17 @@ pub struct RateModelArguments {
     #[arg(long, default_value_t = 1e6)]
     pub k0: f64,
 
-    /// Rate constant for shift moves.
-    #[arg(long, default_value_t = 1e6)]
-    pub k3ws: f64,
+    /// Rate constant for three-way shift moves.
+    #[arg(long)]
+    pub k3ws: Option<f64>,
 
-    /// Rate constant for shift moves.
-    #[arg(long, default_value_t = 1e6)]
-    pub k4ws: f64,
+    /// Rate constant for four-way shift moves.
+    #[arg(long)]
+    pub k4ws: Option<f64>,
 
     /// The rate model (Arrhenius/Metropolis vs Kawasaki)
     #[arg(long, value_enum, default_value = "metropolis")]
     pub model: RateModelKind,
-}
-
-impl RateModelArguments {
-    pub fn build_metropolis_model(&self, temperature: f64) -> Metropolis {
-        Metropolis::new(temperature, self.k0, self.k3ws, self.k4ws)
-    }
-    pub fn build_kawasaki_model(&self, temperature: f64) -> Kawasaki {
-        Kawasaki::new(temperature, self.k0, self.k3ws, self.k4ws)
-    }
 }
 
 #[derive(Debug, Args)]
