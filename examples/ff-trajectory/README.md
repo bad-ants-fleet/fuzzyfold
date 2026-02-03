@@ -4,7 +4,7 @@
 
 The program `ff-trajectory` simulates **individual folding trajectories** of
 nucleic acid sequences, showing how secondary structures evolve over time.
-Each trajectory is represented as a sequence of structures with associated
+Each trajectory is shown as a sequence of structures with associated
 energies and transition times.
 
 ---
@@ -33,18 +33,20 @@ UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 You can run the trajectory simulation for either case as follows:
 
 ```bash
-cat dld3.in | ff-trajectory --t-end 50
+cat dld3.in | ff-trajectory --k0 1.0 --t-end 50
 ```
 
 or
 
 ```bash
-cat dld3_lm3.in | ff-trajectory --t-end 50
+cat dld3_lm3.in | ff-trajectory --k0 1.0 --t-end 50
 ```
 
-The simulation continues until **time = 50** arbitrary time units. (See rate
-model details for conversion to wall-clock time.) All visited structures are
-printed with their energies and transition times.
+The simulation continues until **time = 50** arbitrary time units. Removing the
+`--k0 1.0` option gives an approximate conversion to wall-clock time. Note 
+that there are more options to turn on different move sets and switch
+rate models! All visited structures are printed with their energies and
+transition times.
 
 ---
 
@@ -53,22 +55,16 @@ printed with their energies and transition times.
 For a quick test, you can generate a random RNA sequence and simulate its trajectory in one command:
 
 ```bash
-ff-randseq -l 50 | ff-trajectory --t-end 50
+ff-randseq -l 50 | ff-trajectory 
 ```
 
-or, when running from the repository:
-
-```bash
-cargo run --bin ff-randseq -- -l 50 | cargo run --bin ff-trajectory -- --t-end 50
-```
-
-This creates a random 50-nt sequence and follows its stochastic folding trajectory until 50 seconds.
+This creates a random 50-nt sequence and generates a stochastic folding trajectory for one second.
 
 ---
 
 ## Example output
 
-An example asimulation output is shown below:
+An example simulation output is shown below:
 
 ```
 GCGUUUCCAGGGUUUAGACGGACGGGUGUGACUCGCCCAGCCCCGACCUC   energy   arrival-time   waiting-time    mean-waiting

@@ -56,26 +56,20 @@ Note that the starting structure from `dld3_lm3.fa` is part of this macro-state.
 
 ## Simulation setup
 
-> **Note:** Ensure the `fuzzyfold` package is installed.  
-> When working directly from the Git repository, use  
-> ```bash
-> cargo run --bin ff-timecourse -- [options]
-> ```  
-> instead of calling `ff-timecourse` directly.
-
 To simulate 100 trajectories starting in a specific lm3 conformation:
 
 ```bash
-cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --k0 1e6 --t-log 100 --t-ext 1e-7 --t-end 0.1 -n 100
+cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --t-end 0.1 -n 100 --output dld3_lm3 
 ```
 
 or equivalently:
 
 ```bash
-ff-timecourse --macrostates dld3*.ms --k0 1e6 --t-log 100 --t-ext 1e-7 --t-end 0.1 -n 100 < dld3_lm3.fa
+ff-timecourse --macrostates dld3*.ms --t-end 0.1 -n 100 --output dld3_lm3_t0.1 < dld3_lm3.fa
 ```
 
-To familiarize yourself with timeline parameters such as `--t-log`, `--t-ext`, and `--t-end`:
+To familiarize yourself with the default timeline parameters `--t-lin`, `--t-log`,
+and `--t-ext` for output analysis, see:
 
 ```bash
 ff-timecourse --help
@@ -87,7 +81,7 @@ completed.  The time course is also plotted automatically as an SVG file,
 where the plot name is derived from the input file. For example:
 
 ```
-ff_dld3.svg
+dld3_lm3_t0.1.svg
 ```
 
 ---
@@ -97,14 +91,17 @@ ff_dld3.svg
 To reduce statistical noise in ensemble dynamics, you may want to perform
 **many more trajectories**, potentially for longer time periods.  You can
 *accumulate results incrementally* by reloading existing timelines.
+In fact, this happens **automatically**, if a `*.tln` file exists that 
+matches your `--output name`. Note, timelines can only be merged, if the 
+timeline parameters do not change between calls!
 
 For example:
 
 ```bash
-cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --k0 1e6 --t-log 100 --t-ext 1e-7 --t-end 1 -n 100 --timeline my_dld3.tln
+cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --t-end 1 -n 100 --output dld3_t100.tln
 ```
 
-This command creates `my_dld3.tln`, which stores the results from 100
+This command creates `dld3_t100.tln`, which stores the results from 100
 simulations.  Running the same command again will automatically reload the
 file, add another 100 simulations, and update the stored timeline accordingly.
 
@@ -113,5 +110,5 @@ restarting from scratch.
 
 An example output file from $10^5$ aggregated simulations of 1-second runs may look like this:
 
-![Timecourse plot](example_dld3.svg)
+![Timecourse plot](example_dld3_t100.svg)
 

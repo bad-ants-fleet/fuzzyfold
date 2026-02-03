@@ -15,17 +15,17 @@ pub struct RateModelArguments {
     #[arg(long, default_value_t = 1e6)]
     pub k0: f64,
 
-    /// Rate constant for three-way shift moves.
+    /// Rate constant for three-way shift moves (optional, default = off).
     #[arg(long)]
     pub k3ws: Option<f64>,
 
-    /// Rate constant for four-way shift moves.
+    /// Rate constant for four-way shift moves (optional, default = off).
     #[arg(long)]
     pub k4ws: Option<f64>,
 
-    /// The rate model (Arrhenius/Metropolis vs Kawasaki)
+    /// Select a rate model.
     #[arg(long, value_enum, default_value = "metropolis")]
-    pub model: RateModelKind,
+    pub rate_model: RateModelKind,
 }
 
 #[derive(Debug, Args)]

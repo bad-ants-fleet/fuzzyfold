@@ -120,16 +120,16 @@ impl FourWayNeighbors {
         let o1_en = ltab.energy_of_loop(&o1);
         let o2_en = ltab.energy_of_loop(&o2);
 
-        (o1_en + o2_en - it_en).max(ir_en - m1_en - m2_en)
+        (o1_en + o2_en - it_en)
+            .max(ir_en - m1_en - m2_en)
+            .max((ir_en + o1_en + o2_en) - (it_en + m1_en + m2_en))
     }
 
     pub fn remove(
         &mut self, 
         index: &usize, 
-    ) -> Moves {
-        self.map
-            .remove(index)
-            .expect("M;issing three-way neighbors at index: {index}")
+    ) -> Option<Moves> {
+        self.map.remove(index)
     }
 
 }

@@ -117,7 +117,9 @@ impl ThreeWayNeighbors {
         let s_inner_en = ltab.energy_of_loop(&s_inner);
         let s_outer_en = ltab.energy_of_loop(&s_outer);
 
-        (s_inner_en - inner_en).max(s_outer_en - outer_en)
+        (s_inner_en - inner_en)
+            .max(s_outer_en - outer_en)
+            .max((s_inner_en + s_outer_en) - (inner_en + outer_en))
     }
 
     fn get_loops<E: EnergyModel>(
@@ -158,10 +160,9 @@ impl ThreeWayNeighbors {
     pub fn remove(
         &mut self, 
         index: &usize, 
-    ) -> Moves {
+    ) -> Option<Moves> {
         self.map
             .remove(index)
-            .expect("Missing three-way neighbors at index: {index}")
     }
 
 }

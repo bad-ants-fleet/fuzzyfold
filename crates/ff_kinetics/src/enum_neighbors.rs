@@ -7,7 +7,7 @@ use ff_energy::EnergyModel;
 
 use crate::Move;
 use crate::Walker;
-use crate::AddDelMoves;
+use crate::AddDelShiftMoves;
 
 pub trait ApplyMove {
     fn apply_move(&mut self, mv: &Move);
@@ -72,7 +72,7 @@ struct Frame {
     max_delta: i32,
 }
 
-impl<'a, E: EnergyModel> AddDelMoves<'a, E> {
+impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
     pub fn all_moves(&self) -> Vec<(Move, i32)> {
         self.propose_moves().collect()
     }

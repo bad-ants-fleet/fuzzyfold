@@ -7,10 +7,11 @@ use clap::ArgAction;
 use clap::ArgGroup;
 use anyhow::Result;
 
+use ff_kinetics::ShiftConfig;
 use fuzzyfold::structure::PairTable;
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
-use fuzzyfold::kinetics::AddDelMoves;
+use fuzzyfold::kinetics::AddDelShiftMoves;
 
 
 #[derive(Debug, Args)]
@@ -25,15 +26,23 @@ pub struct LocminInput {
     #[arg(value_name = "INPUT", default_value = "-")]
     pub input: String,
 
-    /// give delta energy
+    /// Specify energy delta for enumeration.
     #[arg(short, long)]
     pub delta: Option<f64>,
 
-    /// Input file (FASTA-like), or "-" for stdin
+    /// Specify maximum distance to starting structure.
     #[arg(short, long)]
     pub maxdist: Option<usize>,
 
-    /// give delta energy
+    /// Enable three-way shift moves.
+    #[arg(long)]
+    pub three_way_shifts: bool, 
+
+    /// Enable four-way shift moves.
+    #[arg(long)]
+    pub four_way_shifts: bool, 
+
+    /// Retrurn an energetically sorted list.
     #[arg(short, long)]
     pub sorted: bool, 
 
@@ -93,8 +102,10 @@ fn main() -> Result<()> {
         println!("{}", sequence);
     }
 
-    let mut moves = AddDelMoves::try_from((&sequence, &pairings, &emodel))
-        .expect("failed to build loop table");
+    let mut moves = AddDelShiftMoves::try_from((&sequence, &pairings, &emodel, ShiftConfig {
+        three_way: cli.lmin.three_way_shifts,
+        four_way: cli.lmin.four_way_shifts,
+    })).expect("failed to build loop table");
 
     if !cli.lmin.sorted {
         moves.generate_neighbors(delta, distance, 
