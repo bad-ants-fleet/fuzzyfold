@@ -7,27 +7,23 @@ use ff_energy::NucleotideVec;
 use ff_energy::LoopDecomposition;
 
 use crate::Move;
-use crate::movesets::LoopTable;
+use crate::movesets::loop_table::LoopTable;
 use crate::movesets::three_way_shifts::ThreeWayNeighbors;
 use crate::movesets::four_way_shifts::FourWayNeighbors;
+use crate::shift_policy::ShiftPolicy;
 
 type Moves = Vec<(Move, i32)>;
 
-#[derive(Debug, Clone, Copy)]
-pub struct ShiftConfig {
-    pub three_way: bool,
-    pub four_way: bool,
-}
-
-pub struct AddDelShiftMoves<'a, E: EnergyModel> {
+pub struct LoopNeighbors<'a, E: EnergyModel, P: ShiftPolicy> {
     loop_table: LoopTable<'a, E>,
     add_neighbors: IntMap<usize, Moves>,
     del_neighbors: IntMap<NAIDX, i32>, 
-    three_way_shift_neighbors: Option<ThreeWayNeighbors>,
-    four_way_shift_neighbors: Option<FourWayNeighbors>,
+    three_way_shift_neighbors: ThreeWayNeighbors,
+    four_way_shift_neighbors: FourWayNeighbors,
+    _policy: P,
 }
 
-impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
+impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
     pub fn loop_table(&self) -> &LoopTable<'a, E> {
         &self.loop_table
     }
@@ -40,11 +36,11 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         &self.del_neighbors
     }
 
-    pub fn three_way_shift_neighbors(&self) -> &Option<ThreeWayNeighbors> {
+    pub fn three_way_shift_neighbors(&self) -> &ThreeWayNeighbors {
         &self.three_way_shift_neighbors
     }
 
-    pub fn four_way_shift_neighbors(&self) -> &Option<FourWayNeighbors> {
+    pub fn four_way_shift_neighbors(&self) -> &FourWayNeighbors {
         &self.four_way_shift_neighbors
     }
 
@@ -70,11 +66,11 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         j: NAIDX,
     ) -> i32 {
         let ltab = &self.loop_table;
-        let (outer, o_en) = ltab.geti(i as usize);
-        let (inner, i_en) = ltab.geti(j as usize);
+        let (outer, outer_en) = ltab.geti(i as usize);
+        let (inner, inner_en) = ltab.geti(j as usize);
         let combo = outer.join_loop(inner);
         let combo_energy = ltab.energy_of_loop(&combo);
-        combo_energy - (o_en + i_en)
+        combo_energy - (outer_en + inner_en)
     }
 
     fn init_del_neighbors(&mut self) {
@@ -85,16 +81,62 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         }
     }
 
+    #[inline(always)]
+    fn maybe_remove_three_way(&mut self, idx: &usize) -> Moves {
+        if P::three_way() {
+            self.three_way_shift_neighbors.remove(idx)
+                .expect("Missing three-way shift neighbors.")
+        } else {
+            Vec::new()
+        }
+    }
+
+    #[inline(always)]
+    fn maybe_remove_four_way(&mut self, idx: &usize) -> Moves {
+        if P::four_way() {
+            self.four_way_shift_neighbors.remove(idx)
+                .expect("Missing four-way shift neighbors.")
+        } else {
+            Vec::new()
+        }
+    }
+
+    #[inline(always)]
+    fn maybe_three_way(&mut self, idx: usize) -> Moves {
+        if P::three_way() {
+            self.three_way_shift_neighbors
+                .compute_neighbors(&self.loop_table, idx)
+                .clone()
+        } else {
+            Vec::new()
+        }
+    }
+
+    #[inline(always)]
+    fn maybe_four_way(&mut self, idx: usize) -> Moves {
+        if P::four_way() {
+            self.four_way_shift_neighbors
+                .compute_neighbors(&self.loop_table, idx)
+                .clone()
+        } else {
+            Vec::new()
+        }
+    }
+
     fn init_loop_neighbors(&mut self) {
-        let ltab = &self.loop_table;
-        for lli in 0..ltab.loops_len() {
+        for lli in 0..self.loop_table.loops_len() {
             self.get_add_neighbors_per_loop(lli);
-            let ltab = &self.loop_table;
-            if let Some(tw) = &mut self.three_way_shift_neighbors {
-                tw.compute_neighbors(ltab, lli);
+
+            if P::three_way() {
+                let ltab = &self.loop_table;
+                self.three_way_shift_neighbors
+                    .compute_neighbors(ltab, lli);
             }
-            if let Some(fw) = &mut self.four_way_shift_neighbors {
-                fw.compute_neighbors(ltab, lli);
+
+            if P::four_way() {
+                let ltab = &self.loop_table;
+                self.four_way_shift_neighbors
+                    .compute_neighbors(ltab, lli);
             }
         }
     }
@@ -123,74 +165,57 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
     pub fn apply_del_move(&mut self, i: NAIDX, j: NAIDX) -> (Moves, Moves) 
     {
-        let ltab = &mut self.loop_table;
-        let o_index = ltab.loop_lookup(i as usize);
-        let i_index = ltab.loop_lookup(j as usize);
-        let (outer, o_en) = ltab.get(o_index);
-        let (inner, i_en) = ltab.get(i_index);
+        let o_index = self.loop_table.loop_lookup(i as usize);
+        let i_index = self.loop_table.loop_lookup(j as usize);
 
-        let delta = self.del_neighbors
-            .remove(&i)
+        // Remove all old neighbors related to deletion.
+        let delta = self.del_neighbors.remove(&i)
             .expect("Missing old del move.");
-        // those are deleted because we don't reuse the index later!
-        // All of these moves will be valid in the future, but their 
-        // energy evaluation changes.
-        let _ = self.add_neighbors
-            .remove(&i_index)
-            .expect("Missing old add moves");
+        let _ = self.add_neighbors.remove(&i_index)
+            .expect("Missing old add moves from stale index");
+        let old_tw_shift_outer = self.maybe_remove_three_way(&o_index);
+        let old_tw_shift_inner = self.maybe_remove_three_way(&i_index);
+        let old_fw_shift_outer = self.maybe_remove_four_way(&o_index);
+        let old_fw_shift_inner = self.maybe_remove_four_way(&i_index);
 
-        let old_tw_shift_outer = self.three_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&o_index));
-        let old_tw_shift_inner = self.three_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&i_index));
-        let old_fw_shift_outer = self.four_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&o_index));
-        let old_fw_shift_inner = self.four_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&i_index));
-
+        // Filter for all moves that cannot be regenerated. That is, 
+        // they depend on the presence of the removed pair.
         let old_moves: Moves =
-            [
-            old_tw_shift_outer,
-            old_tw_shift_inner,
-            old_fw_shift_outer,
-            old_fw_shift_inner,
-            ]
-            .into_iter()
-            .flatten()      // Option<Moves> → Moves
-            .flatten()      // Moves → (Move, i32)
+            [old_tw_shift_outer,
+             old_tw_shift_inner,
+             old_fw_shift_outer,
+             old_fw_shift_inner].into_iter()
+            .flatten()
             .filter(move |(mv, _)| mv.conflicts((i, j)))
             .chain(std::iter::once((Move::Del { i, j }, delta)))
             .collect();
 
+        // Update the LoopTable.
+        let (outer, o_en) = self.loop_table.get(o_index);
+        let (inner, i_en) = self.loop_table.get(i_index);
         let combo = outer.join_loop(inner);
         let combo_pairs = combo.pairs().to_vec();
         let c_en = o_en + i_en + delta;
-        debug_assert_eq!(c_en, ltab.energy_of_loop(&combo));
+        debug_assert_eq!(c_en, self.loop_table.energy_of_loop(&combo));
 
-        // Update the loop table with all new data.
-        let c_index = ltab.insert_loopentry(Some(o_index), (combo, c_en));
-        ltab.mark_stale(i_index);
-        ltab.update_lookup(c_index);
-        if j != ltab.delete_pair(&i) {
+        let c_index = self.loop_table
+            .insert_loopentry(Some(o_index), (combo, c_en));
+        self.loop_table.mark_stale(i_index);
+        self.loop_table.update_lookup(c_index);
+        if j != self.loop_table.delete_pair(&i) {
             panic!("Inconsistent pair-list entry.");
         }
 
-        // Those include the neighbors
-        let new_add_moves: Moves = self.get_add_neighbors_per_loop(c_index).clone();
-
-        let ltab = &self.loop_table;
-        let new_tw_shift_moves: Moves = self
-            .three_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, c_index).clone())
-            .unwrap_or_default();
-        let new_fw_shift_moves: Moves = self
-            .four_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, c_index).clone())
-            .unwrap_or_default();
+        // Generate the new neighbors.
+        let new_add_moves = self.get_add_neighbors_per_loop(c_index).clone();
+        let new_tw_shift_moves = self.maybe_three_way(c_index);
+        let new_fw_shift_moves = self.maybe_four_way(c_index);
         let cap = new_add_moves.len() 
             + new_tw_shift_moves.len()
             + new_fw_shift_moves.len()
-            + combo_pairs.len() + 1;
+            + combo_pairs.len();
+
+        // Update existing neighbors.
         let mut new_moves = Vec::with_capacity(cap);
         for (i, j) in combo_pairs {
             let delta = self.get_del_activation_energy(i, j);
@@ -206,92 +231,71 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
 
     pub fn apply_add_move(&mut self, i: NAIDX, j: NAIDX) -> (Moves, Moves) 
     {
-        let ltab = &mut self.loop_table;
+        // Get the original "combo" loop index
+        let c_index = self.loop_table.loop_lookup(i as usize);
+        debug_assert_eq!(c_index, self.loop_table.loop_lookup(j as usize), 
+            "Missing loop_lookup entry for j.");
 
-        // Get the original "combo" loop & the conflicting moves.
-        let c_index = ltab.loop_lookup(i as usize);
-        debug_assert_eq!(c_index, ltab.loop_lookup(j as usize), "Missing loop_lookup entry for j.");
-        let (combo, c_en) = ltab.get(c_index);
-        let combo_pairs = &combo.pairs();
-
-
-        let old_add_moves = self.add_neighbors.remove(&c_index);
-        let old_tw_shift = self.three_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&c_index));
-        let old_fw_shift = self.four_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&c_index));
-
+        // Remove all old neighbors related to addition.
+        let old_add_moves = self.add_neighbors.remove(&c_index)
+            .expect("Missing old add moves.");
+        let old_tw_shift = self.maybe_remove_three_way(&c_index);
+        let old_fw_shift = self.maybe_remove_four_way(&c_index);
+        // Filter for all moves that cannot be regenerated. That is, 
+        // they cross the newly added pair.
         let old_moves: Moves =
-            [
-            old_add_moves,
-            old_tw_shift,
-            old_fw_shift,
-            ]
-            .into_iter()
-            .flatten()      // Option<Moves> → Moves
-            .flatten()      // Moves → (Move, i32)
+            [old_add_moves,
+             old_tw_shift,
+             old_fw_shift].into_iter()
+            .flatten()
             .filter(move |(mv, _)| mv.conflicts((i, j)))
             .collect();
 
-        // Calculate the energies for the new loops (again...).
+        // Update the LoopTable.
+        let (combo, c_en) = self.loop_table.get(c_index);
+        let combo_pairs = combo.pairs().to_vec();
         let (outer, inner) = combo.split_loop(i, j);
-        let o_en = ltab.energy_of_loop(&outer);
-        let i_en = ltab.energy_of_loop(&inner);
-        let delta = (o_en + i_en) - c_en;
+        let o_en = self.loop_table.energy_of_loop(&outer);
+        let i_en = self.loop_table.energy_of_loop(&inner);
+        let delta = (o_en + i_en) - c_en; 
 
-        // Update the loop table with all new data.
-        ltab.insert_pair(i, j);
-        let o_index = ltab.insert_loopentry(Some(c_index), (outer, o_en));
-        let i_index = ltab.insert_loopentry(None, (inner, i_en));
-        ltab.update_lookup(o_index);
-        ltab.update_lookup(i_index);
+        self.loop_table.insert_pair(i, j);
+        let o_index = self.loop_table.insert_loopentry(Some(c_index), (outer, o_en));
+        let i_index = self.loop_table.insert_loopentry(None, (inner, i_en));
+        self.loop_table.update_lookup(o_index);
+        self.loop_table.update_lookup(i_index);
 
+        // Generate the new neighbors.
         let outer_add_moves = self.get_add_neighbors_per_loop(o_index).clone();
         let inner_add_moves = self.get_add_neighbors_per_loop(i_index).clone();
+        let outer_tw_shift_moves = self.maybe_three_way(o_index);
+        let inner_tw_shift_moves = self.maybe_three_way(i_index);
+        let outer_fw_shift_moves = self.maybe_four_way(o_index);
+        let inner_fw_shift_moves = self.maybe_four_way(i_index);
 
-        let ltab = &self.loop_table;
-        let tw_shift_moves_outer: Moves = self
-            .three_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, o_index).clone())
-            .unwrap_or_default();
-        let tw_shift_moves_inner: Moves = self
-            .three_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, i_index).clone())
-            .unwrap_or_default();
-        let fw_shift_moves_outer: Moves = self
-            .four_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, o_index).clone())
-            .unwrap_or_default();
-        let fw_shift_moves_inner: Moves = self
-            .four_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, i_index).clone())
-            .unwrap_or_default();
         let cap = outer_add_moves.len() 
             + inner_add_moves.len() 
             + outer_add_moves.len()
-            + tw_shift_moves_inner.len()
-            + tw_shift_moves_outer.len() 
-            + fw_shift_moves_inner.len()
-            + fw_shift_moves_outer.len() 
+            + inner_tw_shift_moves.len()
+            + outer_tw_shift_moves.len() 
+            + inner_fw_shift_moves.len()
+            + outer_fw_shift_moves.len() 
             + combo_pairs.len() + 1;
 
         let mut new_moves = Vec::with_capacity(cap);
-        for &(i, j) in combo_pairs {
+        for (i, j) in combo_pairs {
             let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
         }
         self.del_neighbors.insert(i, -delta);
         new_moves.push((Move::Del{ i, j }, -delta));
-        new_moves.extend([
-            &outer_add_moves,
-            &inner_add_moves,
-            &tw_shift_moves_outer,
-            &tw_shift_moves_inner,
-            &fw_shift_moves_outer,
-            &fw_shift_moves_inner,
-        ].into_iter() 
-        .flat_map(|v| v.iter().cloned()));
+        new_moves.extend(outer_add_moves);
+        new_moves.extend(inner_add_moves);
+        new_moves.extend(outer_tw_shift_moves);
+        new_moves.extend(inner_tw_shift_moves);
+        new_moves.extend(outer_fw_shift_moves);
+        new_moves.extend(inner_fw_shift_moves);
 
         (old_moves, new_moves)
     }
@@ -301,106 +305,94 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         mv: &Move, 
         k: NAIDX,
     ) -> (Moves, Moves) {
-        let ltab = &mut self.loop_table;
+
         let (i, j) = mv.deleted_pair();
         let (p, q) = mv.added_pair();
 
-        let o_index = ltab.loop_lookup(i as usize);
-        let i_index = ltab.loop_lookup(j as usize);
-        let k_index = ltab.loop_lookup(k as usize);
+        let o_index = self.loop_table.loop_lookup(i as usize);
+        let i_index = self.loop_table.loop_lookup(j as usize);
+        let k_index = self.loop_table.loop_lookup(k as usize);
         debug_assert!(o_index == k_index || i_index == k_index);
 
+        // Remove all old neighbors related to shift.
         let delta = self.del_neighbors.remove(&i)
             .expect("Missing del neighbor.");
+        let old_add_init = self.add_neighbors.remove(&k_index)
+            .expect("Missing old add moves from k_index.");
+        let old_tw_shift_outer = self.three_way_shift_neighbors.remove(&o_index)
+                .expect("Missing three-way shift neighbors.");
+        let old_tw_shift_inner =  self.three_way_shift_neighbors.remove(&i_index)
+                .expect("Missing three-way shift neighbors.");
+        let old_fw_shift_outer = self.maybe_remove_four_way(&o_index);
+        let old_fw_shift_inner = self.maybe_remove_four_way(&i_index);
 
-        let old_add_init = self.add_neighbors.remove(&k_index);
-        let old_tw_shift_outer = self.three_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&o_index));
-        let old_tw_shift_inner = self.three_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&i_index));
-        let old_fw_shift_outer = self.four_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&o_index));
-        let old_fw_shift_inner = self.four_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&i_index));
-
-        let old_moves: Moves = old_add_init.into_iter()
-            .flatten()
+        // Filter for all moves that cannot be regenerated. That is, 
+        // they depend on the presence of the removed pair.
+        let old_moves: Moves =
+            old_add_init.into_iter()
             .filter(|(mv, _)| mv.conflicts((p, q)))
-            .chain(old_tw_shift_outer.into_iter().flatten()) 
-            .chain(old_tw_shift_inner.into_iter().flatten())
-            .chain(old_fw_shift_outer.into_iter().flatten())
-            .chain(old_fw_shift_inner.into_iter().flatten())
+            .chain(old_tw_shift_outer) 
+            .chain(old_tw_shift_inner)
+            .chain(old_fw_shift_outer)
+            .chain(old_fw_shift_inner)
             .filter(|(mv, _)| mv.conflicts((p, q)) || mv.conflicts((i, j)))
             .chain(std::iter::once((Move::Del { i, j }, delta)))
             .collect();
 
-        let (outer, o_en) = ltab.get(o_index);
-        let (inner, i_en) = ltab.get(i_index);
+        let (outer, o_en) = self.loop_table.get(o_index);
+        let (inner, i_en) = self.loop_table.get(i_index);
+
         let combo = outer.join_loop(inner);
-        let combo_pairs = &combo.pairs();
-        let c_en = o_en + i_en + delta;
-        debug_assert_eq!(c_en, ltab.energy_of_loop(&combo));
+        let combo_pairs = combo.pairs().to_vec();
         let (new_outer, new_inner) = combo.split_loop(p, q);
-        let new_o_en = ltab.energy_of_loop(&new_outer);
-        let new_i_en = ltab.energy_of_loop(&new_inner);
+        let new_o_en = self.loop_table.energy_of_loop(&new_outer);
+        let new_i_en = self.loop_table.energy_of_loop(&new_inner);
+
+        // This is a bit annoying for del_delta. 
+        let c_en = o_en + i_en + delta;
+        debug_assert_eq!(c_en, self.loop_table.energy_of_loop(&combo));
         let del_delta = c_en - (new_o_en + new_i_en);
 
-        let _ = ltab.insert_loopentry(Some(o_index), (new_outer, new_o_en));
-        let _ = ltab.insert_loopentry(Some(i_index), (new_inner, new_i_en));
-        ltab.update_lookup(o_index);
-        ltab.update_lookup(i_index);
-        if j != ltab.delete_pair(&i) {
+        let _ = self.loop_table.insert_loopentry(Some(o_index), (new_outer, new_o_en));
+        let _ = self.loop_table.insert_loopentry(Some(i_index), (new_inner, new_i_en));
+        self.loop_table.update_lookup(o_index);
+        self.loop_table.update_lookup(i_index);
+        if j != self.loop_table.delete_pair(&i) {
             panic!("Inconsistent pair-list entry.");
         }
-        ltab.insert_pair(p, q);
+        self.loop_table.insert_pair(p, q);
 
+        // Generate the new neighbors.
         let outer_add_moves = self.get_add_neighbors_per_loop(o_index).clone();
         let inner_add_moves = self.get_add_neighbors_per_loop(i_index).clone();
+        let outer_tw_shift_moves = self.maybe_three_way(o_index); //NOTE: definitely!
+        let inner_tw_shift_moves = self.maybe_three_way(i_index); //NOTE: definitely!
+        let outer_fw_shift_moves = self.maybe_four_way(o_index);
+        let inner_fw_shift_moves = self.maybe_four_way(i_index);
 
-        let ltab = &self.loop_table;
-        let tw_shift_moves_outer: Moves = self
-            .three_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, o_index).clone())
-            .unwrap_or_default();
-        let tw_shift_moves_inner: Moves = self
-            .three_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, i_index).clone())
-            .unwrap_or_default();
-        let fw_shift_moves_outer: Moves = self
-            .four_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, o_index).clone())
-            .unwrap_or_default();
-        let fw_shift_moves_inner: Moves = self
-            .four_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, i_index).clone())
-            .unwrap_or_default();
         let cap = outer_add_moves.len() 
             + inner_add_moves.len() 
             + outer_add_moves.len()
-            + tw_shift_moves_inner.len()
-            + tw_shift_moves_outer.len() 
-            + fw_shift_moves_inner.len()
-            + fw_shift_moves_outer.len() 
+            + inner_tw_shift_moves.len()
+            + outer_tw_shift_moves.len() 
+            + inner_fw_shift_moves.len()
+            + outer_fw_shift_moves.len() 
             + combo_pairs.len() + 1;
 
         let mut new_moves = Vec::with_capacity(cap);
-        for &(i, j) in combo_pairs {
+        for (i, j) in combo_pairs {
             let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
         }
-        new_moves.extend([
-            &outer_add_moves,
-            &inner_add_moves,
-            &tw_shift_moves_outer,
-            &tw_shift_moves_inner,
-            &fw_shift_moves_outer,
-            &fw_shift_moves_inner,
-        ].into_iter() 
-        .flat_map(|v| v.iter().cloned()));
-        new_moves.push((Move::Del { i: p, j: q }, del_delta));
-
         self.del_neighbors.insert(p, del_delta);
+        new_moves.push((Move::Del { i: p, j: q }, del_delta));
+        new_moves.extend(outer_add_moves);
+        new_moves.extend(inner_add_moves);
+        new_moves.extend(outer_tw_shift_moves);
+        new_moves.extend(inner_tw_shift_moves);
+        new_moves.extend(outer_fw_shift_moves);
+        new_moves.extend(inner_fw_shift_moves);
 
         (old_moves, new_moves)
     }
@@ -409,116 +401,93 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
         &mut self, 
         mv: &Move, 
     ) -> (Moves, Moves) {
-        let ltab = &mut self.loop_table;
-
         let ((i, j), (k, l)) = mv.deleted_pairs();
+
+        let (center_idx, merge1_idx, merge2_idx, inside, outer1, outer2) = 
+            self.four_way_shift_neighbors.get_loops(&self.loop_table, mv);
+
+        // Remove all old neighbors related to shift.
         let deld1 = self.del_neighbors.remove(&i).expect("Missing del neighbor.");
         let deld2 = self.del_neighbors.remove(&k).expect("Missing del neighbor.");
+        let old_add_center = self.add_neighbors.remove(&center_idx)
+            .expect("Missing old add moves");
+        let old_add_merge1 = self.add_neighbors.remove(&merge1_idx)
+            .expect("Missing old add moves");
+        let old_add_merge2 = self.add_neighbors.remove(&merge2_idx)
+            .expect("Missing old add moves");
+        let old_tw_shift_center = self.maybe_remove_three_way(&center_idx);
+        let old_tw_shift_merge1 = self.maybe_remove_three_way(&merge1_idx);
+        let old_tw_shift_merge2 = self.maybe_remove_three_way(&merge2_idx);
+        let old_fw_shift_center = self.maybe_remove_four_way(&center_idx); // definitely
+        let old_fw_shift_merge1 = self.maybe_remove_four_way(&merge1_idx); // definitely
+        let old_fw_shift_merge2 = self.maybe_remove_four_way(&merge2_idx); // definitely
 
-        let (it_idx, m1_idx, m2_idx, inner0, outer1, outer2) = 
-            self.four_way_shift_neighbors.as_ref().expect("applying four way!")
-            .get_loops(ltab, mv);
-
-        let old_add_init = self.add_neighbors.remove(&it_idx);
-        let old_add_merge1 = self.add_neighbors.remove(&m1_idx);
-        let old_add_merge2 = self.add_neighbors.remove(&m2_idx);
-        let old_tw_shift_init = self.three_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&it_idx));
-        let old_tw_shift_merge1 = self.three_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&m1_idx));
-        let old_tw_shift_merge2 = self.three_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&m2_idx));
-        let old_fw_shift_init = self.four_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&it_idx));
-        let old_fw_shift_merge1 = self.four_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&m1_idx));
-        let old_fw_shift_merge2 = self.four_way_shift_neighbors.as_mut()
-            .and_then(|map| map.remove(&m2_idx));
-
+        // Filter for all moves that cannot be regenerated. That is, 
+        // they depend on the presence of the added pairs.
         let ((p, q), (m, n)) = mv.added_pairs();
-        let old_moves: Moves = old_add_init.into_iter()
+        let old_moves: Moves = old_add_center.into_iter()
             .chain(old_add_merge1) 
             .chain(old_add_merge2) 
-            .chain(old_tw_shift_init) 
+            .chain(old_tw_shift_center) 
             .chain(old_tw_shift_merge1) 
             .chain(old_tw_shift_merge2) 
-            .chain(old_fw_shift_init) 
+            .chain(old_fw_shift_center) 
             .chain(old_fw_shift_merge1) 
             .chain(old_fw_shift_merge2) 
-            .flatten()
             .filter(|(mv, _)| mv.conflicts((p, q)) || mv.conflicts((m, n)))
             .chain(std::iter::once((Move::Del { i, j }, deld1)))
             .chain(std::iter::once((Move::Del { i: k, j: l }, deld2)))
             .collect();
 
-        let inner0_pairs = inner0.pairs().to_vec();
+        let inside_pairs = inside.pairs().to_vec();
         let outer1_pairs = outer1.pairs().to_vec();
         let outer2_pairs = outer2.pairs().to_vec();
-        let inner0_en = ltab.energy_of_loop(&inner0);  
-        let outer1_en = ltab.energy_of_loop(&outer1);
-        let outer2_en = ltab.energy_of_loop(&outer2);
+        let inside_en = self.loop_table.energy_of_loop(&inside);  
+        let outer1_en = self.loop_table.energy_of_loop(&outer1);
+        let outer2_en = self.loop_table.energy_of_loop(&outer2);
 
-        let in_idx = ltab.insert_loopentry(Some(it_idx), (inner0, inner0_en));
-        let o1_idx = ltab.insert_loopentry(Some(m1_idx), (outer1, outer1_en));
-        let o2_idx = ltab.insert_loopentry(Some(m2_idx), (outer2, outer2_en));
-        ltab.update_lookup(in_idx);
-        ltab.update_lookup(o1_idx);
-        ltab.update_lookup(o2_idx);
-        if j != ltab.delete_pair(&i) {
+        let in_idx = self.loop_table.insert_loopentry(Some(center_idx), (inside, inside_en));
+        let o1_idx = self.loop_table.insert_loopentry(Some(merge1_idx), (outer1, outer1_en));
+        let o2_idx = self.loop_table.insert_loopentry(Some(merge2_idx), (outer2, outer2_en));
+        self.loop_table.update_lookup(in_idx);
+        self.loop_table.update_lookup(o1_idx);
+        self.loop_table.update_lookup(o2_idx);
+        if j != self.loop_table.delete_pair(&i) {
             panic!("Inconsistent pair-list entry.");
         }
-        if l != ltab.delete_pair(&k) {
+        if l != self.loop_table.delete_pair(&k) {
             panic!("Inconsistent pair-list entry.");
         }
-        ltab.insert_pair(p, q);
-        ltab.insert_pair(m, n);
+        self.loop_table.insert_pair(p, q);
+        self.loop_table.insert_pair(m, n);
 
-        let inner0_add_moves = self.get_add_neighbors_per_loop(in_idx).clone();
+        // Generate the new neighbors.
+        let inside_add_moves = self.get_add_neighbors_per_loop(in_idx).clone();
         let outer1_add_moves = self.get_add_neighbors_per_loop(o1_idx).clone();
         let outer2_add_moves = self.get_add_neighbors_per_loop(o2_idx).clone();
 
+        let inside_tw_shift_moves = self.maybe_three_way(in_idx);
+        let outer1_tw_shift_moves = self.maybe_three_way(o1_idx);
+        let outer2_tw_shift_moves = self.maybe_three_way(o2_idx);
+        let inside_fw_shift_moves = self.maybe_four_way(in_idx); // definitely
+        let outer1_fw_shift_moves = self.maybe_four_way(o1_idx); // definitely
+        let outer2_fw_shift_moves = self.maybe_four_way(o2_idx); // definitely
 
-        let ltab = &self.loop_table;
-        let tw_shift_moves_inner0: Moves = self
-            .three_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, in_idx).clone())
-            .unwrap_or_default();
-        let tw_shift_moves_outer1: Moves = self
-            .three_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, o1_idx).clone())
-            .unwrap_or_default();
-        let tw_shift_moves_outer2: Moves = self
-            .three_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, o2_idx).clone())
-            .unwrap_or_default();
-        let fw_shift_moves_inner0: Moves = self
-            .four_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, in_idx).clone())
-            .unwrap_or_default();
-        let fw_shift_moves_outer1: Moves = self
-            .four_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, o1_idx).clone())
-            .unwrap_or_default();
-        let fw_shift_moves_outer2: Moves = self
-            .four_way_shift_neighbors.as_mut()
-            .map(|map| map.compute_neighbors(ltab, o2_idx).clone())
-            .unwrap_or_default();
-
-       let cap = inner0_add_moves.len() 
+        let cap = inside_add_moves.len() 
             + outer1_add_moves.len()
             + outer2_add_moves.len()
-            + tw_shift_moves_inner0.len()
-            + tw_shift_moves_outer1.len()
-            + tw_shift_moves_outer2.len()
-            + fw_shift_moves_inner0.len()
-            + fw_shift_moves_outer1.len()
-            + fw_shift_moves_outer2.len()
-            + inner0_pairs.len() 
+            + inside_tw_shift_moves.len()
+            + outer1_tw_shift_moves.len()
+            + outer2_tw_shift_moves.len()
+            + inside_fw_shift_moves.len()
+            + outer1_fw_shift_moves.len()
+            + outer2_fw_shift_moves.len()
+            + inside_pairs.len() 
             + outer1_pairs.len()
             + outer2_pairs.len();
 
         let mut new_moves = Vec::with_capacity(cap);
-        for (i, j) in inner0_pairs {
+        for (i, j) in inside_pairs {
             let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
@@ -539,53 +508,50 @@ impl<'a, E: EnergyModel> AddDelShiftMoves<'a, E> {
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
         }
-        new_moves.extend([
-            &inner0_add_moves,
-            &outer1_add_moves,
-            &outer2_add_moves,
-            &tw_shift_moves_inner0,
-            &tw_shift_moves_outer1,
-            &tw_shift_moves_outer2,
-            &fw_shift_moves_inner0,
-            &fw_shift_moves_outer1,
-            &fw_shift_moves_outer2,
-        ].into_iter() 
-        .flat_map(|v| v.iter().cloned()));
+        new_moves.extend(inside_add_moves);
+        new_moves.extend(outer1_add_moves);
+        new_moves.extend(outer2_add_moves);
+        new_moves.extend(inside_tw_shift_moves);
+        new_moves.extend(outer1_tw_shift_moves);
+        new_moves.extend(outer2_tw_shift_moves);
+        new_moves.extend(inside_fw_shift_moves);
+        new_moves.extend(outer1_fw_shift_moves);
+        new_moves.extend(outer2_fw_shift_moves);
 
         (old_moves, new_moves)
     }
 }
 
-impl<'a, E: EnergyModel> Clone for AddDelShiftMoves<'a, E> {
+impl<'a, E: EnergyModel, P: ShiftPolicy> Clone for LoopNeighbors<'a, E, P> {
     fn clone(&self) -> Self {
         Self {
-            loop_table: self.loop_table.clone(),   // clones refs + vectors
+            loop_table: self.loop_table.clone(),
             add_neighbors: self.add_neighbors.clone(),
             del_neighbors: self.del_neighbors.clone(),
             three_way_shift_neighbors: self.three_way_shift_neighbors.clone(),
             four_way_shift_neighbors: self.four_way_shift_neighbors.clone(),
+            _policy: self._policy,
         }
     }
 }
 
-impl<'a, E: EnergyModel> fmt::Display for AddDelShiftMoves<'a, E> {
+impl<'a, E: EnergyModel, P: ShiftPolicy> fmt::Display for LoopNeighbors<'a, E, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.loop_table)
     }
 }
 
-impl<'a, E: EnergyModel> From<(LoopTable<'a, E>, ShiftConfig)>
-    for AddDelShiftMoves<'a, E>
+impl<'a, E: EnergyModel, P: ShiftPolicy> From<(LoopTable<'a, E>, P)>
+    for LoopNeighbors<'a, E, P>
 {
-    fn from((loop_table, cfg): (LoopTable<'a, E>, ShiftConfig)) -> Self {
-        let mut moves = AddDelShiftMoves {
+    fn from((loop_table, policy): (LoopTable<'a, E>, P)) -> Self {
+        let mut moves = LoopNeighbors {
             loop_table,
             add_neighbors: IntMap::default(),
             del_neighbors: IntMap::default(),
-            three_way_shift_neighbors: cfg.three_way
-                .then(ThreeWayNeighbors::default),
-            four_way_shift_neighbors: cfg.four_way
-                .then(FourWayNeighbors::default),
+            three_way_shift_neighbors: ThreeWayNeighbors::default(),
+            four_way_shift_neighbors: FourWayNeighbors::default(),
+            _policy: policy,
         };
 
         moves.init_del_neighbors();
@@ -594,17 +560,17 @@ impl<'a, E: EnergyModel> From<(LoopTable<'a, E>, ShiftConfig)>
     }
 }
 
-impl<'a, T: LoopDecomposition, E: EnergyModel>
-TryFrom<(&'a NucleotideVec, &T, &'a E, ShiftConfig)>
-for AddDelShiftMoves<'a, E>
+impl<'a, T: LoopDecomposition, E: EnergyModel, P: ShiftPolicy>
+TryFrom<(&'a NucleotideVec, &T, &'a E, P)>
+for LoopNeighbors<'a, E, P>
 {
     type Error = String;
 
-    fn try_from((sequence, pairings, model, cfg):
-        (&'a NucleotideVec, &T, &'a E, ShiftConfig)
+    fn try_from((sequence, pairings, model, policy):
+        (&'a NucleotideVec, &T, &'a E, P)
     ) -> Result<Self, Self::Error> {
         let ltab = LoopTable::try_from((sequence, pairings, model))?;
-        Ok(AddDelShiftMoves::from((ltab, cfg)))
+        Ok(LoopNeighbors::from((ltab, policy)))
     }
 }
 
@@ -614,20 +580,26 @@ mod tests {
     use ff_structure::PairTable;
     use ff_energy::ViennaRNA;
     use ff_energy::NucleotideVec;
-    use crate::Walker;
     use std::collections::HashSet;
+    use crate::shift_policy::*;
+    use crate::Walker;
+
+    macro_rules! setup_loop_table {
+        ($name:ident, $seq:expr, $db:expr) => {
+            let model = ViennaRNA::default();
+            let sequence = NucleotideVec::from_lossy($seq);
+            let pairings = PairTable::try_from($db)
+                .expect("Invalid structure");
+            let $name = LoopTable::try_from((&sequence, &pairings, &model))
+                .expect("Invalid sequence/structure combination");
+        };
+    }
 
     #[test]
     fn test_add_then_del_roundtrip() {
-        let model = ViennaRNA::default();
-        let sequence = NucleotideVec::from_lossy("GCUAACAACGGUCA");
-        let pairings =       PairTable::try_from("..(.......)...").unwrap();
-
-        let ltab = LoopTable::try_from((&sequence, &pairings, &model)).unwrap();
-        let mut adm = AddDelShiftMoves::from((ltab, ShiftConfig {
-            three_way: true,
-            four_way: false,
-        }));
+        setup_loop_table!(ltab, "GCUAACAACGGUCA", 
+                                "..(.......)...");
+        let mut adm = LoopNeighbors::from((ltab, ThreeWayOnly));
 
         // Clone neighbor list so we don’t mutate while iterating
         let neighbors: Vec<(Move, i32)> = adm.propose_moves().collect();
@@ -651,10 +623,8 @@ mod tests {
 
     #[test]
     fn test_development_bug01() {
-        let model = ViennaRNA::default();
-        let sequence = NucleotideVec::from_lossy("GCAUAGCCCA");
-        let pairings =       PairTable::try_from("..........").unwrap();
-
+        setup_loop_table!(ltab, "GCAUAGCCCA", 
+                                "..........");
         let exp_nb1: Vec<(Move, i32)> = 
             vec![(Move::Add { i: 0, j: 6 }, 380),
                  (Move::Add { i: 0, j: 7 }, 390),
@@ -662,11 +632,7 @@ mod tests {
                  (Move::Add { i: 1, j: 5 }, 430),
                  (Move::Add { i: 3, j: 9 }, 560)];
 
-        let ltab = LoopTable::try_from((&sequence, &pairings, &model)).unwrap();
-        let mut adm = AddDelShiftMoves::from((ltab, ShiftConfig {
-            three_way: true,
-            four_way: false,
-        }));
+        let mut adm = LoopNeighbors::from((ltab, ThreeWayOnly));
         let en1 = adm.current_energy();
         let nb1: Vec<_> = adm.propose_moves().collect();
         assert_eq!(exp_nb1, nb1);
@@ -703,14 +669,9 @@ mod tests {
 
     #[test]
     fn test_development_bug02() {
-        let model = ViennaRNA::default();
-        let sequence = NucleotideVec::from_lossy("GUACACGUCG");
-        let pairings =       PairTable::try_from("..........").unwrap();
-        let ltab = LoopTable::try_from((&sequence, &pairings, &model)).unwrap();
-        let mut adm = AddDelShiftMoves::from((ltab, ShiftConfig {
-            three_way: true,
-            four_way: false,
-        }));
+        setup_loop_table!(ltab, "GUACACGUCG", 
+                                "..........");
+        let mut adm = LoopNeighbors::from((ltab, ThreeWayOnly));
         let en1 = adm.current_energy();
         let nb1: Vec<_> = adm.propose_moves().collect();
         for (mv, d) in nb1 {
@@ -753,10 +714,7 @@ mod tests {
         let sequence = NucleotideVec::from_lossy("GACGCUAUGU");
         let pairings =       PairTable::try_from("...(.....)").unwrap();
         let ltab = LoopTable::try_from((&sequence, &pairings, &model)).unwrap();
-        let mut adm = AddDelShiftMoves::from((ltab, ShiftConfig {
-            three_way: true,
-            four_way: false,
-        }));
+        let mut adm = LoopNeighbors::from((ltab, ThreeWayOnly));
         let nb1: Vec<_> = adm.propose_moves().collect();
 
         for &(mv, d) in &nb1 {
@@ -807,10 +765,7 @@ mod tests {
         let sequence = NucleotideVec::from_lossy("AAAGCAAAAGCAAAAAAGAAAC");
         let pairings =       PairTable::try_from("...((....))......(...)").unwrap();
         let ltab = LoopTable::try_from((&sequence, &pairings, &model)).unwrap();
-        let mut adm = AddDelShiftMoves::from((ltab, ShiftConfig {
-            three_way: true,
-            four_way: true,
-        }));
+        let mut adm = LoopNeighbors::from((ltab, ThreeAndFour));
         let nb1: Vec<_> = adm.propose_moves().collect();
         let pp1 = Move::Del { i: 4, j: 9 };
         let pp2 = Move::Del { i: 17, j: 21 };

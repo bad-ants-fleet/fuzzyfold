@@ -1,11 +1,14 @@
-mod loop_table;
-mod add_del_shift_moves;
-mod base_pair_moves;
-mod walker;
+// Those are only used internally.
+pub mod loop_table;
 pub mod four_way_shifts;
 pub mod three_way_shifts;
+pub mod shift_policy;
 
-pub use loop_table::*;
-pub use add_del_shift_moves::*;
+// Those are public interfaces.
+mod base_pair_moves;
+mod loop_neighbors;
+mod walker;
+
 pub use base_pair_moves::*;
+pub use loop_neighbors::*;
 pub use walker::*;

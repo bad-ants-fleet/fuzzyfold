@@ -10,8 +10,8 @@ use criterion::criterion_main;
 use ff_structure::PairTable;
 use ff_energy::NucleotideVec;
 use ff_energy::ViennaRNA;
-use ff_kinetics::ShiftConfig;
-use ff_kinetics::AddDelShiftMoves;
+use ff_kinetics::shift_policy::*;
+use ff_kinetics::LoopNeighbors;
 
 const INPUT_L50: &str = concat!(env!("CARGO_MANIFEST_DIR"), 
     "/benches/data/benchmark_random_structures_len50.vrna");
@@ -59,10 +59,8 @@ pub fn gen_neighbors(c: &mut Criterion) {
                 |inputs| {
                     let mut count = 0usize;
                     for (seq, pt) in inputs {
-                        let mut moves = AddDelShiftMoves::try_from((seq, pt, &emodel, ShiftConfig {
-                            three_way: false,
-                            four_way: false,
-                        })).expect("failed to build loop table");
+                        let mut moves = LoopNeighbors::try_from((seq, pt, &emodel, NoShift))
+                            .expect("Failed to build LoopNeighbors");
                         moves.generate_neighbors(0, 5, |_, _| {
                             count += 1;
                         });

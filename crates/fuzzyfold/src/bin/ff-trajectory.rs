@@ -9,8 +9,8 @@ use ff_kinetics::RateModel;
 use ff_kinetics::Metropolis;
 use ff_kinetics::Kawasaki;
 use ff_kinetics::Walker;
-use ff_kinetics::AddDelShiftMoves;
-use ff_kinetics::ShiftConfig;
+use ff_kinetics::LoopNeighbors;
+use ff_kinetics::shift_policy::*;
 use ff_kinetics::SSA;
 
 use fuzzyfold::input_parsers::read_fasta_like_input;
@@ -65,21 +65,53 @@ fn main() -> Result<()> {
     );
 
     let clk = cli.kinetics;
-    match clk.rate_model {
-        RateModelKind::Metropolis => {
+    match (clk.rate_model, clk.k3ws.is_some(), clk.k4ws.is_some()) {
+        (RateModelKind::Metropolis, false, false) => {
             let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = AddDelShiftMoves::try_from((&sequence, &pairings, &emodel, ShiftConfig {
-                three_way: clk.k3ws.is_some(),
-                four_way: clk.k4ws.is_some(),
-            })).map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, NoShift))
+                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
             run_simulator(moves, &rmodel, cli.silent, cli.t_end, cli.num_steps);
         },
-        RateModelKind::Kawasaki => {
+        (RateModelKind::Metropolis, true, false) => {
+            let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, ThreeWayOnly))
+                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+            run_simulator(moves, &rmodel, cli.silent, cli.t_end, cli.num_steps);
+        },
+        (RateModelKind::Metropolis, false, true) => {
+            let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, FourWayOnly))
+                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+            run_simulator(moves, &rmodel, cli.silent, cli.t_end, cli.num_steps);
+        },
+        (RateModelKind::Metropolis, true, true) => {
+            let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, ThreeAndFour))
+                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+            run_simulator(moves, &rmodel, cli.silent, cli.t_end, cli.num_steps);
+        },
+        (RateModelKind::Kawasaki, false, false) => {
             let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = AddDelShiftMoves::try_from((&sequence, &pairings, &emodel, ShiftConfig {
-                three_way: clk.k3ws.is_some(),
-                four_way: clk.k4ws.is_some(),
-            })).map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, NoShift))
+                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+            run_simulator(moves, &rmodel, cli.silent, cli.t_end, cli.num_steps);
+        },
+        (RateModelKind::Kawasaki, true, false) => {
+            let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, ThreeWayOnly))
+                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+            run_simulator(moves, &rmodel, cli.silent, cli.t_end, cli.num_steps);
+        },
+        (RateModelKind::Kawasaki, false, true) => {
+            let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, FourWayOnly))
+                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+            run_simulator(moves, &rmodel, cli.silent, cli.t_end, cli.num_steps);
+        },
+        (RateModelKind::Kawasaki, true, true) => {
+            let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, ThreeAndFour))
+                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
             run_simulator(moves, &rmodel, cli.silent, cli.t_end, cli.num_steps);
         },
     }

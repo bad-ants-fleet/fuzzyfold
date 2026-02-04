@@ -2,8 +2,9 @@
 use ff_structure::DotBracketVec;
 use ff_energy::EnergyModel;
 
+use crate::shift_policy::ShiftPolicy;
 use crate::Move;
-use crate::AddDelShiftMoves;
+use crate::LoopNeighbors;
 
 type Moves = Vec<(Move, i32)>;
 
@@ -26,22 +27,18 @@ pub trait Walker {
     fn apply_move(&mut self, mv: &Move) -> (Moves, Moves);
 }
 
-impl<'a, E: EnergyModel> Walker for AddDelShiftMoves<'a, E> {
+impl<'a, E: EnergyModel, P: ShiftPolicy> Walker for LoopNeighbors<'a, E, P> {
     fn len(&self) -> usize {
-        let tl = if let Some(tw) = self.three_way_shift_neighbors() {
-            tw.len() } else { 0 };
-        let fl = if let Some(fw) = self.four_way_shift_neighbors() {
-            fw.len() } else { 0 };
+        let tl = if P::three_way() { self.three_way_shift_neighbors().len() } else { 0 };
+        let fl = if P::four_way() { self.four_way_shift_neighbors().len() } else { 0 };
         self.del_neighbors().len() 
             + self.add_neighbors().values().map(|v| v.len()).sum::<usize>()
             + tl + fl
     }
 
     fn is_empty(&self) -> bool {
-        let te = if let Some(tw) = self.three_way_shift_neighbors() {
-            tw.is_empty() } else { true };
-        let fe = if let Some(fw) = self.four_way_shift_neighbors() {
-            fw.is_empty() } else { true };
+        let te = if P::three_way() { self.three_way_shift_neighbors().is_empty() } else { true };
+        let fe = if P::four_way() { self.four_way_shift_neighbors().is_empty() } else { true };
  
         self.del_neighbors().is_empty() 
             && self.add_neighbors().is_empty()
@@ -70,20 +67,14 @@ impl<'a, E: EnergyModel> Walker for AddDelShiftMoves<'a, E> {
             });
 
         let tw_moves = self.three_way_shift_neighbors()
-            .iter()
-            .flat_map(|tw| {
-                tw.map()
-                    .values()
-                    .flat_map(|moves| moves.iter().copied())
-            });
+            .map()
+            .values()
+            .flat_map(|moves| moves.iter().cloned());
 
-        let fw_moves = self.four_way_shift_neighbors()
-            .iter()
-            .flat_map(|fw| {
-                fw.map()
-                    .values()
-                    .flat_map(|moves| moves.iter().copied())
-            });
+        let fw_moves = self.four_way_shift_neighbors() 
+            .map()
+            .values()
+            .flat_map(|moves| moves.iter().cloned());
 
         add_moves
             .chain(del_moves)

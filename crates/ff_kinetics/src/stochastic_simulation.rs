@@ -122,9 +122,9 @@ mod tests {
     use ff_energy::EnergyModel;
     use ff_energy::NucleotideVec;
     use crate::Metropolis;
-    use crate::movesets::AddDelShiftMoves;
-    use crate::movesets::ShiftConfig;
-    use crate::movesets::LoopTable;
+    use crate::movesets::LoopNeighbors;
+    use crate::movesets::shift_policy::*;
+    use crate::movesets::loop_table::LoopTable;
 
     #[test]
     fn test_simple_ssa_simulation() {
@@ -139,10 +139,7 @@ mod tests {
         let pairings = PairTable::try_from(pairings).unwrap();
 
         let ltab1 = LoopTable::try_from((&sequence, &pairings, &emodel)).unwrap();
-        let adm1 = AddDelShiftMoves::from((ltab1, ShiftConfig {
-            three_way: false,
-            four_way: false,
-        }));
+        let adm1 = LoopNeighbors::from((ltab1, NoShift));
 
         let mut simulator = SSA::from((adm1, &rmodel));
 

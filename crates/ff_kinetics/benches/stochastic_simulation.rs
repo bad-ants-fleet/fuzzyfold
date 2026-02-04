@@ -14,8 +14,8 @@ use ff_energy::NucleotideVec;
 use ff_energy::EnergyModel;
 use ff_energy::ViennaRNA;
 use ff_kinetics::Metropolis;
-use ff_kinetics::AddDelShiftMoves;
-use ff_kinetics::ShiftConfig;
+use ff_kinetics::LoopNeighbors;
+use ff_kinetics::shift_policy::*;
 use ff_kinetics::SSA;
 
 const INPUT_L50: &str = concat!(env!("CARGO_MANIFEST_DIR"), 
@@ -84,10 +84,8 @@ fn simulate_benchmark(c: &mut Criterion) {
                 || &inputs, 
                 |inputs| {
                     for (seq, pt) in inputs {
-                        let moves = AddDelShiftMoves::try_from((seq, pt, &emodel, ShiftConfig {
-                            three_way: false,
-                            four_way: false,
-                        })).expect("failed to build loop table");
+                        let moves = LoopNeighbors::try_from((seq, pt, &emodel, NoShift))
+                            .expect("Failed to build LoopNeighbors");
                         let mut simulator = SSA::from((moves, &rmodel));
 
                         simulator.simulate(
@@ -118,10 +116,8 @@ fn simulate_shift_benchmark(c: &mut Criterion) {
                 || &inputs, 
                 |inputs| {
                     for (seq, pt) in inputs {
-                        let moves = AddDelShiftMoves::try_from((seq, pt, &emodel, ShiftConfig {
-                            three_way: true,
-                            four_way: false,
-                        })).expect("failed to build loop table");
+                        let moves = LoopNeighbors::try_from((seq, pt, &emodel, ThreeWayOnly))
+                            .expect("Failed to build LoopNeighbors");
                         let mut simulator = SSA::from((moves, &rmodel));
 
                         simulator.simulate(

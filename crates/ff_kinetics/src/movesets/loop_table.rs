@@ -1,20 +1,25 @@
 use std::fmt;
-use ff_energy::NucleotideVec;
 use nohash_hasher::IntMap;
 
+use ff_structure::NAIDX;
 use ff_structure::DotBracket;
 use ff_structure::DotBracketVec;
-use ff_structure::NAIDX;
-use ff_energy::Base;
 use ff_energy::EnergyModel;
+use ff_energy::NucleotideVec;
 use ff_energy::LoopDecomposition;
 use ff_energy::NearestNeighborLoop;
 
 type LoopEntry = (NearestNeighborLoop, i32);
 
-/// Stores all information about the current loop decomposition.
+/// Direct storage of the loop decomposition from a structure.
+///
+/// Keeps all loops in a vector, and can efficiently look up
+/// the loops corresponding to paired and unpaired positions.
+///
+/// Keeps track of base-pairs and the current energy for convenience.
+///
 pub struct LoopTable<'a, E: EnergyModel> {
-    sequence: &'a [Base],
+    sequence: &'a NucleotideVec,
     model: &'a E,
     loops: Vec<LoopEntry>,
     stale: Vec<usize>,
@@ -23,6 +28,8 @@ pub struct LoopTable<'a, E: EnergyModel> {
     energy: i32,
 }
 
+/// Clone creates an independent loop bookkeeping state,
+/// but shares the underlying sequence and energy model.
 impl<'a, E: EnergyModel> Clone for LoopTable<'a, E> {
     fn clone(&self) -> Self {
         Self {
@@ -38,12 +45,28 @@ impl<'a, E: EnergyModel> Clone for LoopTable<'a, E> {
 }
 
 impl<'a, E: EnergyModel> LoopTable<'a, E> {
+    pub fn min_hairpin_size(&self) -> usize {
+        self.model.min_hairpin_size()
+    }
+
+    pub fn can_pair(&self, i: usize, j: usize) -> bool {
+        self.model.can_pair(self.sequence[i], self.sequence[j])
+    }
+
+    pub fn energy_of_loop(&self, nn_loop: &NearestNeighborLoop) -> i32 {
+        self.model.energy_of_loop(self.sequence, nn_loop)
+    }
+
     pub fn loops_len(&self) -> usize {
         self.loops.len()
     }
 
     pub fn lookup_len(&self) -> usize {
         self.loop_lookup.len()
+    }
+
+    pub fn pairs(&self) -> impl Iterator<Item = (&NAIDX, &NAIDX)> + '_ {
+        self.pair_lookup.iter()
     }
 
     pub fn delete_pair(&mut self, i: &NAIDX) -> NAIDX {
@@ -58,27 +81,11 @@ impl<'a, E: EnergyModel> LoopTable<'a, E> {
         self.energy
     }
 
-    pub fn pairs(&self) -> impl Iterator<Item = (&NAIDX, &NAIDX)> + '_ {
-        self.pair_lookup.iter()
-    }
-
     pub fn update_lookup(&mut self, idx: usize) {
         let (nn_loop, _) = self.get(idx);
         for k in nn_loop.inclusive_unpaired_indices() {
             self.loop_lookup[k] = idx;
         }
-    }
-
-    pub fn min_hairpin_size(&self) -> usize {
-        self.model.min_hairpin_size()
-    }
-
-    pub fn can_pair(&self, i: usize, j: usize) -> bool {
-        self.model.can_pair(self.sequence[i], self.sequence[j])
-    }
-
-    pub fn energy_of_loop(&self, nn_loop: &NearestNeighborLoop) -> i32 {
-        self.model.energy_of_loop(self.sequence, nn_loop)
     }
 
     pub fn pair_lookup(&self, idx: &NAIDX) -> NAIDX {

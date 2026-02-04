@@ -1,17 +1,18 @@
 use std::io::Write;
 use colored::*;
-use env_logger::Builder;
 use clap::Args;
 use clap::Parser;
 use clap::ArgAction;
 use clap::ArgGroup;
 use anyhow::Result;
+use env_logger::Builder;
 
-use ff_kinetics::ShiftConfig;
+use ff_energy::EnergyModel;
+use ff_kinetics::shift_policy::*;
 use fuzzyfold::structure::PairTable;
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
-use fuzzyfold::kinetics::AddDelShiftMoves;
+use fuzzyfold::kinetics::LoopNeighbors;
 
 
 #[derive(Debug, Args)]
@@ -102,12 +103,42 @@ fn main() -> Result<()> {
         println!("{}", sequence);
     }
 
-    let mut moves = AddDelShiftMoves::try_from((&sequence, &pairings, &emodel, ShiftConfig {
-        three_way: cli.lmin.three_way_shifts,
-        four_way: cli.lmin.four_way_shifts,
-    })).expect("failed to build loop table");
+    match (cli.lmin.three_way_shifts, cli.lmin.four_way_shifts) {
+        (false, false) => {
+            let mut moves = LoopNeighbors::try_from(
+                (&sequence, &pairings, &emodel, NoShift)
+            ).expect("failed to build loop table");
+            do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
+        }
+        (true, false) => {
+            let mut moves = LoopNeighbors::try_from(
+                (&sequence, &pairings, &emodel, ThreeWayOnly)
+            ).expect("failed to build loop table");
+            do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
+        }
+        (false, true) => {
+            let mut moves = LoopNeighbors::try_from(
+                (&sequence, &pairings, &emodel, FourWayOnly)
+            ).expect("failed to build loop table");
+            do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
+        }
+        (true, true) => {
+            let mut moves = LoopNeighbors::try_from(
+                (&sequence, &pairings, &emodel, ThreeAndFour)
+            ).expect("failed to build loop table");
+            do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
+        }
+    }
+    Ok(())
+}
 
-    if !cli.lmin.sorted {
+fn do_enumerate<'a, E: EnergyModel, P: ShiftPolicy>(
+    moves: &mut LoopNeighbors<'a, E, P>,
+    delta: i32,
+    distance: usize,
+    sorted: bool,
+) {
+    if !sorted {
         moves.generate_neighbors(delta, distance, 
             |db, en| { 
                 println!("{} {:.2}", db, en as f64 / 100.0);
@@ -124,8 +155,6 @@ fn main() -> Result<()> {
             println!("{} {:.2}", db, *en as f64 / 100.0);
         }
     }
-
-    Ok(())
-
 }
+
 

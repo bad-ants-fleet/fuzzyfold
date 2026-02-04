@@ -47,7 +47,6 @@ pub enum Move {
 }
 
 impl Move {
-
     /// Returns the inverse move.
     pub fn inverse(self) -> Self {
         match self {
@@ -76,6 +75,7 @@ impl Move {
         }
     }
 
+    /// Returns the pair added by the move.
     pub fn added_pair(&self) -> (NAIDX, NAIDX) {
         match &self {
             Move::Add { i, j } =>  (*i, *j),
@@ -85,6 +85,7 @@ impl Move {
         }
     }
 
+    /// Returns the two pairs added by the move.
     pub fn added_pairs(&self) -> ((NAIDX, NAIDX), (NAIDX, NAIDX)) {
         match &self {
             Move::ShiftIKLJ { i, j, k, l } => ((*i, *k), (*l, *j)),
@@ -93,6 +94,7 @@ impl Move {
         }
     }
 
+    /// Returns the pair deleted by the move.
     pub fn deleted_pair(&self) -> (NAIDX, NAIDX) {
         match &self {
             Move::Del { i, j } =>  (*i, *j),
@@ -102,6 +104,7 @@ impl Move {
         }
     }
 
+    /// Returns the two pairs deleted by the move.
     pub fn deleted_pairs(&self) -> ((NAIDX, NAIDX), (NAIDX, NAIDX)) {
         match &self {
             Move::ShiftIKLJ { i, j, k, l } => ((*i, *j), (*k, *l)),
@@ -110,6 +113,8 @@ impl Move {
         }
     }
 
+    /// Reports if there is an overlap between the added pairs in a move
+    /// and the given pair.
     pub fn conflicts(&self, pair: (NAIDX, NAIDX)) -> bool {
         #[inline]
         fn overlaps(a: (NAIDX, NAIDX), b: (NAIDX, NAIDX)) -> bool {
@@ -145,7 +150,7 @@ mod tests {
     }
 
     #[test]
-    fn inverse_is_involution() {
+    fn test_inverse() {
         let moves = [
             Move::Add { i: 2, j: 10 },
             Move::Del { i: 3, j: 7 },

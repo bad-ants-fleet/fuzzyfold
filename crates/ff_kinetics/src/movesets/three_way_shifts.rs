@@ -5,12 +5,28 @@ use ff_energy::EnergyModel;
 use ff_energy::NearestNeighborLoop;
 
 use crate::Move;
-use crate::movesets::LoopTable;
+use crate::movesets::loop_table::LoopTable;
 
 type Pair = (NAIDX, NAIDX);
 type Moves = Vec<(Move, i32)>;
 
 
+/// Three-way shift move enumeration.
+///
+/// Note, this code relies on the existance of a LoopTable, which maps the
+/// IntMap indices to the actual NearestNeighborLoop.
+///
+/// Three-way shift moves turn two existing loops into two new loops: 
+/// (outer0, inner0) -> (outer1, inner1). The initial pair (i, j) is
+/// used to determine which loop is the outer "enclosing" loop, and 
+/// which one is the inner "enclosed" loop.
+///
+/// The activation energy of a three-way shift move is calculated
+/// as the maximum over three potential energy barries:
+///  -- (E(inner1) + E(outer1)) - (E(inner0) + E(outer0))
+///  -- E(inner1) - E(inner0)
+///  -- E(outer1) - E(outer0)
+///
 #[derive(Clone, Default)]
 pub struct ThreeWayNeighbors {
     map: IntMap<usize, Moves>,
@@ -27,6 +43,10 @@ impl ThreeWayNeighbors {
 
     pub fn map(&self) -> &IntMap<usize, Moves> {
         &self.map
+    }
+
+    pub fn remove(&mut self, index: &usize) -> Option<Moves> {
+        self.map.remove(index)
     }
 
     // Calculate neighbors and return reference.
@@ -47,8 +67,7 @@ impl ThreeWayNeighbors {
         let mut neighbors: Moves = Vec::new();
         let spans = init.inclusive_loop_ranges();
         match init {
-            NearestNeighborLoop::Exterior { .. } 
-            | NearestNeighborLoop::JointExterior { .. } => {
+            NearestNeighborLoop::Exterior { .. } => {
                 debug_assert!(!spans.is_empty(), "Exterior loop has no spans");
                 let n = spans.len() - 1;
                 for (e, r) in spans.iter().enumerate() {
@@ -59,7 +78,9 @@ impl ThreeWayNeighbors {
                     self.shift_iter(ltab, (p5, p5s), (p3, p3e), &loopdict, &mut neighbors);
                }
             },
-            _ => {
+            NearestNeighborLoop::Hairpin { .. }
+            | NearestNeighborLoop::Interior { .. } 
+            | NearestNeighborLoop::Multibranch { .. } => {
                 for r in spans {
                     let p5 = *r.start() as NAIDX;
                     let p5s = p5 + 1;
@@ -68,6 +89,7 @@ impl ThreeWayNeighbors {
                     self.shift_iter(ltab, (p5, p5s), (p3, p3e), &loopdict, &mut neighbors);
                 }
             },
+            _ => todo!("Loop type currently not supported for three-way shifts!"),
         }
         self.map.insert(index, neighbors);
         &self.map[&index]
@@ -86,13 +108,14 @@ impl ThreeWayNeighbors {
             let uk = k as usize;
             for (&p, &(i, j)) in loopdict.iter() {
                 let up = p as usize;
-                if (p == p5 && up + ltab.min_hairpin_size() >= uk) || 
-                    (p == p3 && uk + ltab.min_hairpin_size() >= up) {
-                        continue;
-                } 
                 if !ltab.can_pair(uk, up) {
                     continue;
                 }
+                if (p == p5 && up + ltab.min_hairpin_size() >= uk) 
+                    || (p == p3 && uk + ltab.min_hairpin_size() >= up) 
+                {
+                    continue;
+                } 
                 let mv = if p == i {
                     Move::ShiftIK { i, j, k }
                 } else {
@@ -104,65 +127,42 @@ impl ThreeWayNeighbors {
         }
     }
  
+    pub fn get_loops<E: EnergyModel>(
+        &self,
+        ltab: &LoopTable<E>,
+        mv: &Move,
+    ) -> (usize, // outer0
+          usize, // inner0
+          NearestNeighborLoop, // outer1
+          NearestNeighborLoop) // inner1
+    {
+        let (i, j) = mv.deleted_pair();
+        let outer0_idx = ltab.loop_lookup(i as usize);
+        let inner0_idx = ltab.loop_lookup(j as usize);
+        let (outer0, _en) = ltab.get(outer0_idx);
+        let (inner0, _en) = ltab.get(inner0_idx); 
+        let combo = outer0.join_loop(inner0);
+        let (p, q) = mv.added_pair();
+        let (outer1, inner1) = combo.split_loop(p, q);
+        (outer0_idx, inner0_idx, outer1, inner1)
+    }
+
     fn get_activation_energy<E: EnergyModel>(
         &self,
         ltab: &LoopTable<E>,
         mv: &Move,
     ) -> i32 {
-        let (i_idx, o_idx, s_inner, s_outer) = self.get_loops(ltab, mv);
+        let (outer0_idx, inner0_idx, 
+             outer1, inner1) = self.get_loops(ltab, mv);
 
-        let (_, inner_en) = ltab.get(i_idx);
-        let (_, outer_en) = ltab.get(o_idx);
+        let (_, outer0_en) = ltab.get(outer0_idx);
+        let (_, inner0_en) = ltab.get(inner0_idx);
+        let outer1_en = ltab.energy_of_loop(&outer1);
+        let inner1_en = ltab.energy_of_loop(&inner1);
 
-        let s_inner_en = ltab.energy_of_loop(&s_inner);
-        let s_outer_en = ltab.energy_of_loop(&s_outer);
-
-        (s_inner_en - inner_en)
-            .max(s_outer_en - outer_en)
-            .max((s_inner_en + s_outer_en) - (inner_en + outer_en))
-    }
-
-    fn get_loops<E: EnergyModel>(
-        &self,
-        ltab: &LoopTable<E>,
-        mv: &Move,
-    ) -> (usize, // init
-          usize, // merge
-          NearestNeighborLoop, // s_inner
-          NearestNeighborLoop) // s_outer
-    {
-        match mv {
-            Move::ShiftIK { i, j, k } => {
-                let o_idx = ltab.loop_lookup(*i as usize);
-                let i_idx = ltab.loop_lookup(*j as usize);
-                let (outer, _en) = ltab.get(o_idx);
-                let (inner, _en) = ltab.get(i_idx); 
-                let combo = outer.join_loop(inner);
-                let (p, q) = if *i < *k { (*i, *k) } else { (*k, *i) };
-                let (s_outer, s_inner) = combo.split_loop(p, q);
-                (i_idx, o_idx, s_outer, s_inner)
-            },
-            Move::ShiftJK { i, j, k } => {
-                let o_idx = ltab.loop_lookup(*i as usize);
-                let i_idx = ltab.loop_lookup(*j as usize);
-                let (outer, _en) = ltab.get(o_idx);
-                let (inner, _en) = ltab.get(i_idx); 
-                let combo = outer.join_loop(inner);
-                let (p, q) = if *j < *k { (*j, *k) } else { (*k, *j) };
-                let (s_outer, s_inner) = combo.split_loop(p, q);
-                (i_idx, o_idx, s_outer, s_inner)
-            },
-            _ => panic!("wrong move"),
-        }
-
-    }
-
-    pub fn remove(
-        &mut self, 
-        index: &usize, 
-    ) -> Option<Moves> {
-        self.map
-            .remove(index)
+        ((outer1_en + inner1_en) - (outer0_en + inner0_en))
+            .max(outer1_en - outer0_en)
+            .max(inner1_en - inner0_en)
     }
 
 }
@@ -174,29 +174,32 @@ mod tests {
     use ff_energy::ViennaRNA;
     use ff_energy::NucleotideVec;
 
+    macro_rules! setup_loop_table {
+        ($name:ident, $seq:expr, $db:expr) => {
+            let model = ViennaRNA::default();
+            let sequence = NucleotideVec::from_lossy($seq);
+            let pairings = PairTable::try_from($db)
+                .expect("Invalid structure");
+            let $name = LoopTable::try_from((&sequence, &pairings, &model))
+                .expect("Invalid sequence/structure combination");
+        };
+    }
 
     #[test]
     fn test_three_way_setup() {
-        let model = ViennaRNA::default();
-        let sequence = NucleotideVec::from_lossy("GUACACGUCG");
-        let pairings =       PairTable::try_from("..........").unwrap();
-        let ltab = LoopTable::try_from((&sequence, &pairings, &model)).unwrap();
+        setup_loop_table!(ltab, "GUACACGUCG", 
+                                "..........");
         let mut twn = ThreeWayNeighbors::default();
         let res = twn.compute_neighbors(&ltab, 0);
-        assert!(
-            res.is_empty(),
-            "Expected no three-way shift neighbors."
-        );
+        assert!(res.is_empty(), "Expected no three-way shift neighbors.");
     }
  
     #[test]
     fn test_three_way_simple() {
-        let model = ViennaRNA::default();
-        let sequence = NucleotideVec::from_lossy("GUACCCCUCG");
-        let pairings =       PairTable::try_from("...(.....)").unwrap();
-        let ltab = LoopTable::try_from((&sequence, &pairings, &model)).unwrap();
-        println!("LT: {:?}", ltab);
+        setup_loop_table!(ltab, "GUACCCCUCG", 
+                                "...(.....)");
         let mut twn = ThreeWayNeighbors::default();
+
         let res = twn.compute_neighbors(&ltab, 0);
         assert!(res.len() == 2);
         let m1 = Move::ShiftJK { i: 3, j: 9, k: 4 };
@@ -212,12 +215,10 @@ mod tests {
   
     #[test]
     fn test_three_way_mini() {
-        let model = ViennaRNA::default();
-        let sequence = NucleotideVec::from_lossy("CCCCUCG");
-        let pairings =       PairTable::try_from("(.....)").unwrap();
-        let ltab = LoopTable::try_from((&sequence, &pairings, &model)).unwrap();
-        println!("LT: {:?}", ltab);
+        setup_loop_table!(ltab, "CCCCUCG", 
+                                "(.....)");
         let mut twn = ThreeWayNeighbors::default();
+
         let res = twn.compute_neighbors(&ltab, 0);
         assert!(res.len() == 2);
         let m1 = Move::ShiftJK { i: 0, j: 6, k: 1 };
@@ -228,5 +229,4 @@ mod tests {
         let res = twn.compute_neighbors(&ltab, 1);
         assert!(res.is_empty());
     }
-
 }
