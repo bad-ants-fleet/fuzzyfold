@@ -17,23 +17,22 @@ pub struct RateTree {
     pos_map: FxHashMap<Move, usize>,
 }
 
-impl RateTree {
-
-    /// Initialization of a RateTree. 
-    /// As capacity, think about how many moves you expect.
-    /// Roughly the number of base-pairs in the MFE?
-    pub fn new(capacity: usize) -> Self {
-        let mut entries = Vec::with_capacity(capacity + 1);
-        entries.push(MoveNode {
+impl Default for RateTree {
+    fn default() -> Self {
+        let entries = vec![MoveNode {
             rate: 0.0,
             rate_sum: 0.0,
             mv: Move::Add { i: 0, j: 0 },
-        }); 
+        }];
+
         Self {
             entries,
             pos_map: FxHashMap::default(),
         }
     }
+}
+
+impl RateTree {
 
     pub fn len(&self) -> usize {
         self.entries.len() - 1

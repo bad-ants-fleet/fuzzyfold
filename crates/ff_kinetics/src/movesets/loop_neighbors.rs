@@ -5,6 +5,7 @@ use ff_structure::NAIDX;
 use ff_energy::EnergyModel;
 use ff_energy::NucleotideVec;
 use ff_energy::LoopDecomposition;
+use ff_energy::NearestNeighborLoop;
 
 use crate::Move;
 use crate::movesets::loop_table::LoopTable;
@@ -142,16 +143,15 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
     }
 
     fn get_add_neighbors_per_loop(&mut self, index: usize) -> &Moves {
-        let ltab = &self.loop_table;
-        let (combo, _) = ltab.get(index);
+        let (combo, _) = self.loop_table.get(index);
         let unpaired = combo.unpaired_indices();
         let mut neighbors = Vec::new(); 
         for (idx_i, &i) in unpaired.iter().enumerate() {
             for &j in &unpaired[idx_i + 1..] {
-                if j <= i + ltab.min_hairpin_size() {
+                if j <= i + self.loop_table.min_hairpin_size() {
                     continue;
                 }
-                if ltab.can_pair(i, j) {
+                if self.loop_table.can_pair(i, j) {
                     let i = i as NAIDX;
                     let j = j as NAIDX;
                     let barrier = self.get_add_activation_energy(index, i, j);
@@ -161,6 +161,34 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
         }
         self.add_neighbors.insert(index, neighbors);
         &self.add_neighbors[&index]
+    }
+
+    pub fn apply_ext_move(&mut self) -> (Moves, Moves) {
+        let index = self.loop_table.loop_lookup(0);
+        let (old, _) = self.loop_table.get(index);
+        let new = match old {
+            NearestNeighborLoop::Exterior { ends: (p5, p3), branches } => {
+                NearestNeighborLoop::Exterior { ends: (*p5, p3 + 1), branches: branches.clone() }
+            },
+            _ => panic!("should have been exterior loop"),
+        };
+        let new_en = self.loop_table.energy_of_loop(&new);
+        let new_pairs = new.pairs().to_vec();
+        let _ = self.loop_table.insert_loopentry(Some(index), (new, new_en));
+        self.loop_table.extend_lookup(index);
+
+        let new_add_moves = self.get_add_neighbors_per_loop(index).clone();
+
+        let cap = new_add_moves.len() + new_pairs.len();
+        let mut new_moves = Vec::with_capacity(cap);
+        for (i, j) in new_pairs {
+            let delta = self.get_del_activation_energy(i, j);
+            self.del_neighbors.insert(i, delta);
+            new_moves.push((Move::Del{ i, j }, delta));
+        }
+        new_moves.extend(new_add_moves);
+
+        (Vec::new(), new_moves)
     }
 
     pub fn apply_del_move(&mut self, i: NAIDX, j: NAIDX) -> (Moves, Moves) 

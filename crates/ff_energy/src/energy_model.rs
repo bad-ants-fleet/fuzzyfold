@@ -17,6 +17,7 @@ pub trait EnergyModel {
         structure: &T
     ) -> i32;
 
+    //TODO: consider returning Result in case the evaluation fails!
     fn energy_of_loop(&self, 
         sequence: &[Base], 
         nn_loop: &NearestNeighborLoop

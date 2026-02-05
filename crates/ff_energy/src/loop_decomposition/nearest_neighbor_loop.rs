@@ -131,7 +131,7 @@ impl NearestNeighborLoop {
     ) -> Self {
         match closing {
             None => match ends {
-                Some((i, j)) if i < j => Self::Exterior { branches, ends: (i, j) },
+                Some((i, j)) if i <= j => Self::Exterior { branches, ends: (i, j) },
                 Some((i, j)) if j < i => Self::JointExterior { branches, ends: (i, j) },
                 _ => panic!("Expected end annotation in exterior loop."),
             },
@@ -151,6 +151,17 @@ impl NearestNeighborLoop {
                 Some(*branches.first().expect("JointExterior must have branches")),
             Self::Exterior { .. } => None,
             Self::Disconnected { .. } => None,
+        }
+    }
+
+    /// Report the span of the loop -> first to last involved index.
+    pub fn span(&self) -> (NAIDX, NAIDX) {
+        match self { Self::Hairpin { closing }
+            | Self::Interior { closing, .. }
+            | Self::Multibranch { closing, .. } => *closing,
+            Self::JointExterior{ branches, .. } => *branches.first().expect("JointExterior must have branches"),
+            Self::Exterior { ends, .. } => *ends,
+            Self::Disconnected { .. } => panic!("Cannot determine span of disconnected loops."),
         }
     }
 

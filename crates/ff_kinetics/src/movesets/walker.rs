@@ -6,13 +6,14 @@ use crate::shift_policy::ShiftPolicy;
 use crate::Move;
 use crate::LoopNeighbors;
 
-type Moves = Vec<(Move, i32)>;
+pub type Moves = Vec<(Move, i32)>;
 
 pub trait Walker {
+    /// The sequence length.
+    fn sequence_length(&self) -> usize;
 
-    fn len(&self) -> usize;
-    
-    fn is_empty(&self) -> bool;
+    /// The current structure length.
+    fn current_structure_length(&self) -> usize;
 
     /// The current structure.
     fn current_structure(&self) -> DotBracketVec;
@@ -25,24 +26,18 @@ pub trait Walker {
     /// A function to apply a particular move 
     /// -> returns updates to the proposed_moves: Old (outdated) New
     fn apply_move(&mut self, mv: &Move) -> (Moves, Moves);
+
+    fn apply_extension(&mut self) -> (Moves, Moves);
 }
 
 impl<'a, E: EnergyModel, P: ShiftPolicy> Walker for LoopNeighbors<'a, E, P> {
-    fn len(&self) -> usize {
-        let tl = if P::three_way() { self.three_way_shift_neighbors().len() } else { 0 };
-        let fl = if P::four_way() { self.four_way_shift_neighbors().len() } else { 0 };
-        self.del_neighbors().len() 
-            + self.add_neighbors().values().map(|v| v.len()).sum::<usize>()
-            + tl + fl
+
+    fn sequence_length(&self) -> usize {
+        self.loop_table().sequence_length()
     }
 
-    fn is_empty(&self) -> bool {
-        let te = if P::three_way() { self.three_way_shift_neighbors().is_empty() } else { true };
-        let fe = if P::four_way() { self.four_way_shift_neighbors().is_empty() } else { true };
- 
-        self.del_neighbors().is_empty() 
-            && self.add_neighbors().is_empty()
-            && te && fe
+    fn current_structure_length(&self) -> usize {
+        self.loop_table().lookup_len()
     }
 
     fn current_structure(&self) -> DotBracketVec {
@@ -103,6 +98,10 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> Walker for LoopNeighbors<'a, E, P> {
                 self.apply_four_way_shift_move(mv)
             },
         }
+    }
+
+    fn apply_extension(&mut self) -> (Moves, Moves) {
+        self.apply_ext_move()
     }
 }
 

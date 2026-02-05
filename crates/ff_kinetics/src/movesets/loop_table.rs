@@ -45,6 +45,10 @@ impl<'a, E: EnergyModel> Clone for LoopTable<'a, E> {
 }
 
 impl<'a, E: EnergyModel> LoopTable<'a, E> {
+    pub fn sequence_length(&self) -> usize {
+        self.sequence.len()
+    }
+
     pub fn min_hairpin_size(&self) -> usize {
         self.model.min_hairpin_size()
     }
@@ -79,6 +83,10 @@ impl<'a, E: EnergyModel> LoopTable<'a, E> {
 
     pub fn energy(&self) -> i32 {
         self.energy
+    }
+
+    pub fn extend_lookup(&mut self, idx: usize) {
+        self.loop_lookup.push(idx);
     }
 
     pub fn update_lookup(&mut self, idx: usize) {
@@ -174,11 +182,19 @@ for LoopTable<'a, E> {
     ) -> Result<Self, Self::Error> {
 
         let mut loops = Vec::new();
-        let mut loop_lookup: Vec<usize> = vec![0; sequence.len()];
+        let mut loop_lookup = Vec::with_capacity(sequence.len());
         let mut pair_lookup: IntMap<NAIDX, NAIDX>  = IntMap::default();
         let mut energy = 0;
 
+        let mut current_len = 0;
         pairings.for_each_loop(|l| {
+            let (_, b) = l.span();
+            let b = b as usize;
+            if b > current_len {
+                loop_lookup.resize(b + 1, usize::MAX);
+                current_len = b;
+            }
+
             let loop_energy = model.energy_of_loop(sequence, l);
             energy += loop_energy;
 
