@@ -113,6 +113,17 @@ mod tests {
     use ff_structure::StrandPairTable;
 
     #[test]
+    fn test_decompose_pair_table_edge() {
+        let dbn = "."; // all unpaired → exterior loop only
+        let eloop = NearestNeighborLoop::Exterior { 
+            branches: vec![], 
+            ends: (0 as NAIDX, 0 as NAIDX), 
+        };
+        let loops = PairTable::try_from(dbn).expect("valid").loops();
+        assert_eq!(loops, vec![eloop]);
+    }
+
+    #[test]
     fn test_decompose_pair_table_empty() {
         let dbn = "......."; // all unpaired → exterior loop only
         let eloop = NearestNeighborLoop::Exterior { 

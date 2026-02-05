@@ -84,13 +84,16 @@ fn main() -> Result<()> {
 
     let shared_macrostates = Arc::new(macrostates);
 
+    let tln_path = cli.output.with_extension("tln");
+    let svg_path = cli.output.with_extension("svg");
+
     // If timeline.json exists, reload instead of starting empty
     let mut master = 
-        if Path::new(&cli.output).exists() {
-            println!("Loading existing timeline from: {}", cli.output.display());
-            Timeline::from_file(&cli.output, &times, Arc::clone(&shared_macrostates))?
+        if Path::new(&tln_path).exists() {
+            println!("Loading existing timeline from: {}", tln_path.display());
+            Timeline::from_file(&tln_path, &times, Arc::clone(&shared_macrostates))?
         } else {
-            println!("A new timeline file will be created: {}", cli.output.display());
+            println!("A new timeline file will be created: {}", tln_path.display());
             Timeline::new(&times, Arc::clone(&shared_macrostates))
         };
 
@@ -160,11 +163,10 @@ fn main() -> Result<()> {
     }
 
     println!("Final Timeline:\n{}", master);
-    let svg_path = cli.output.with_extension("svg");
     plot_occupancy_over_time(&master, svg_path, cli.simulation.t_ext, cli.simulation.t_end);
     let serial = master.to_serializable();
     let json = to_string_pretty(&serial).unwrap();
-    fs::write(cli.output, json).unwrap();
+    fs::write(tln_path, json).unwrap();
 
     Ok(())
 }
