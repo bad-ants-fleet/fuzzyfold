@@ -22,8 +22,8 @@ name = "ff-eval"
 path = "src/bin/ff-eval.rs"
 
 [[bin]]
-name = "ff-locmin"
-path = "src/bin/ff-locmin.rs"
+name = "ff-explore"
+path = "src/bin/ff-explore.rs"
 
 [[bin]]
 name = "ff-timecourse"

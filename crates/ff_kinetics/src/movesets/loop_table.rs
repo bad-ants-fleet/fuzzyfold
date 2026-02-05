@@ -189,9 +189,9 @@ for LoopTable<'a, E> {
         let mut current_len = 0;
         pairings.for_each_loop(|l| {
             let (_, b) = l.span();
-            let b = b as usize;
+            let b = b as usize + 1;
             if b > current_len {
-                loop_lookup.resize(b + 1, usize::MAX);
+                loop_lookup.resize(b, usize::MAX);
                 current_len = b;
             }
 

@@ -2,17 +2,8 @@
 
 ## Input files
 
-The file `dld3.fa` contains a designed RNA sequence and can be used to start
-simulations from the **open-chain configuration**:
-
-```fasta
->dld3.fa
-UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
-```
-
-If you want to start simulations in a specific **folded structure**, provide
-that structure explicitly.  For example, the file `dld3_lm3.fa` defines an
-initial conformation:
+The file `dld3_lm3.fa` contains a designed RNA sequence together with 
+an initial conformation:
 
 ```fasta
 >dld3

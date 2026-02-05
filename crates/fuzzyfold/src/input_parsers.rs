@@ -53,21 +53,33 @@ fn parse_fasta_like<R: BufRead>(
     let sequence = sequence.ok_or_else(|| anyhow!("Missing sequence line"))?;
 
     let structure = match (structure, mode) {
-        (Some(s), _) => s,
+        (Some(s), FastaMode::Strict) => {
+            if sequence.len() != s.len() {
+                return Err(anyhow!(
+                        "Sequence length ({}) and structure length ({}) do not match",
+                        sequence.len(),
+                        s.len()
+                ));
+            }
+            s
+        },
+        (None, FastaMode::Strict) => return Err(anyhow!("Missing structure line")),
+
+        (Some(s), FastaMode::Lenient) => {
+            if sequence.len() < s.len() {
+                return Err(anyhow!(
+                        "Structure is longer than sequence ({} > {}).",
+                        s.len(), sequence.len()
+                ));
+            }
+            s
+        },
+
         (None, FastaMode::Lenient) => {
-            DotBracketVec::try_from(".".repeat(sequence.len()).as_str())
+            DotBracketVec::try_from(".")
                 .expect("Failed to construct open-chain structure")
         }
-        (None, FastaMode::Strict) => return Err(anyhow!("Missing structure line")),
     };
-
-    if sequence.len() != structure.len() {
-        return Err(anyhow!(
-            "Sequence length ({}) and structure length ({}) do not match",
-            sequence.len(),
-            structure.len()
-        ));
-    }
 
     Ok((header, sequence, structure))
 }
@@ -76,7 +88,7 @@ fn parse_fasta_like<R: BufRead>(
 //  Base parser functions (lenient and strict variants)
 // ============================================================
 
-pub fn read_fasta_like<R: BufRead>(reader: R) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
+pub fn read_cotr<R: BufRead>(reader: R) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
     parse_fasta_like(reader, FastaMode::Lenient)
 }
 
@@ -138,7 +150,7 @@ macro_rules! define_input_variants {
 
 type FastaResult = Result<(Option<String>, NucleotideVec, DotBracketVec)>;
 
-define_input_variants!(read_fasta_like, FastaResult);
+define_input_variants!(read_cotr, FastaResult);
 define_input_variants!(read_eval, FastaResult);
 
 // ============================================================
@@ -183,16 +195,22 @@ mod tests {
     }
 
     #[test]
-    fn test_read_fasta_like_basic() {
+    fn test_read_cotr_input() {
         let input = ">test\nACGU\n....\n";
-        let (hdr, seq, dbv) = read_fasta_like_string(input).unwrap();
+        let (hdr, seq, dbv) = read_cotr_string(input).unwrap();
         assert_eq!(hdr, Some(">test".into()));
         assert_eq!(seq.to_string(), "ACGU");
         assert_eq!(dbv.to_string(), "....");
+
+        let input = ">test\nACGU";
+        let (hdr, seq, dbv) = read_cotr_string(input).unwrap();
+        assert_eq!(hdr, Some(">test".into()));
+        assert_eq!(seq.to_string(), "ACGU");
+        assert_eq!(dbv.to_string(), ".");
     }
 
     #[test]
-    fn test_read_eval_input_strict_mode() {
+    fn test_read_eval_input() {
         let input = ">test\nACGU\n....\n";
         let ok = read_eval_string(input);
         assert!(ok.is_ok());

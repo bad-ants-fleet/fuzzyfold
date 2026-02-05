@@ -24,7 +24,7 @@ use ff_kinetics::timeline::Timeline;
 use ff_kinetics::timeline_plotting::plot_occupancy_over_time;
 use ff_kinetics::MacrostateRegistry;
 
-use fuzzyfold::input_parsers::read_fasta_like_input;
+use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
 use fuzzyfold::kinetics_parsers::RateModelKind;
 use fuzzyfold::kinetics_parsers::RateModelArguments;
@@ -63,7 +63,7 @@ fn main() -> Result<()> {
     // --- Build simulator ---
     let emodel = cli.energy.build_model();
 
-    let (header, sequence, structure) = read_fasta_like_input(&cli.input)?;
+    let (header, sequence, structure) = read_eval_input(&cli.input)?;
     let pairings = PairTable::try_from(&structure)?;
 
     if let Some(h) = header {

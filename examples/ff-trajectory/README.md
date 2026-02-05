@@ -9,19 +9,12 @@ energies and transition times.
 
 ---
 
-## Using FASTA input
+## Using EVAL input
 
-You can start a trajectory simulation from a predefined **FASTA file**, which
-contains a sequence and optionally an initial structure.
+You can start a trajectory simulation from a predefined **EVAL file**, which
+contains a sequence and an initial structure.
 
-For example, the file `dld3.in` defines an open-chain configuration:
-
-```fasta
->dld3
-UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
-```
-
-while the file `dld3_lm3.in` specifies the same sequence but with a folded
+For example, the file `dld3_lm3.in` specifies a molecule in a particular
 starting conformation:
 
 ```fasta
@@ -30,13 +23,7 @@ UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 .((((....)))).((((........))))...............
 ```
 
-You can run the trajectory simulation for either case as follows:
-
-```bash
-cat dld3.in | ff-trajectory --k0 1.0 --t-end 50
-```
-
-or
+You can run the trajectory simulation as follows:
 
 ```bash
 cat dld3_lm3.in | ff-trajectory --k0 1.0 --t-end 50
@@ -55,10 +42,12 @@ transition times.
 For a quick test, you can generate a random RNA sequence and simulate its trajectory in one command:
 
 ```bash
-ff-randseq -l 50 | ff-trajectory 
+ff-randseq -l 50 --eval | ff-trajectory 
 ```
 
-This creates a random 50-nt sequence and generates a stochastic folding trajectory for one second.
+This creates a random 50-nt sequence, the flag `--eval` appends the open chain
+configuration and thus turn the output into a valid `EVAL` format. Then,
+`ff-trajectory` generates a stochastic folding trajectory.
 
 ---
 

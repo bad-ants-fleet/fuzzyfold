@@ -17,6 +17,11 @@ struct Args {
     /// Number of sequences to generate
     #[arg(short, long, default_value_t = 1)]
     num: usize,
+
+    /// Print the open chain configuration under each sequence
+    #[arg(short, long)]
+    eval: bool,
+
 }
 
 fn main() {
@@ -33,6 +38,8 @@ fn main() {
             .map(|_| *alphabet.choose(&mut rng).unwrap())
             .collect();
         println!("{}", seq);
+        if args.eval {
+            println!("{}", ".".repeat(args.length));
+        }
     }
 }
-
