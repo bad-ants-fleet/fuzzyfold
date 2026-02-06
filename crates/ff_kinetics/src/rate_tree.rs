@@ -33,6 +33,23 @@ impl Default for RateTree {
 }
 
 impl RateTree {
+    pub fn dump_by_rate(&self) {
+        let mut items: Vec<_> = self.entries.iter().collect();
+
+        // Skip the dummy 0th entry if that's intentional
+        items.sort_by(|a, b| b.rate.partial_cmp(&a.rate).unwrap());
+
+        for node in items {
+            println!(
+                "{:>12.5e}  {:?}",
+                node.rate,
+                node.mv
+            );
+        }
+    }
+}
+
+impl RateTree {
 
     pub fn len(&self) -> usize {
         self.entries.len() - 1

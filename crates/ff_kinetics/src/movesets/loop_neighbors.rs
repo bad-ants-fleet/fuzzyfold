@@ -66,11 +66,10 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
         i: NAIDX, 
         j: NAIDX,
     ) -> i32 {
-        let ltab = &self.loop_table;
-        let (outer, outer_en) = ltab.geti(i as usize);
-        let (inner, inner_en) = ltab.geti(j as usize);
+        let (outer, outer_en) = self.loop_table.geti(i as usize);
+        let (inner, inner_en) = self.loop_table.geti(j as usize);
         let combo = outer.join_loop(inner);
-        let combo_energy = ltab.energy_of_loop(&combo);
+        let combo_energy = self.loop_table.energy_of_loop(&combo);
         combo_energy - (outer_en + inner_en)
     }
 
@@ -185,6 +184,20 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
             let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
+
+            if P::three_way() || P::four_way() {
+                let ui = self.loop_table.loop_lookup(i as usize);
+                let uj = self.loop_table.loop_lookup(j as usize);
+                if ui != index {
+                    new_moves.extend(self.maybe_three_way(ui));
+                    new_moves.extend(self.maybe_four_way(ui));
+                } else {
+                    debug_assert!(uj != index);
+                    new_moves.extend(self.maybe_three_way(uj));
+                    new_moves.extend(self.maybe_four_way(uj));
+                }
+            }
+
         }
         new_moves.extend(new_add_moves);
 
@@ -249,6 +262,19 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
             let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
+
+            if P::three_way() || P::four_way() {
+                let ui = self.loop_table.loop_lookup(i as usize);
+                let uj = self.loop_table.loop_lookup(j as usize);
+                if ui != c_index {
+                    new_moves.extend(self.maybe_three_way(ui));
+                    new_moves.extend(self.maybe_four_way(ui));
+                } else {
+                    debug_assert!(uj != c_index);
+                    new_moves.extend(self.maybe_three_way(uj));
+                    new_moves.extend(self.maybe_four_way(uj));
+                }
+            }
         }
         new_moves.extend(new_add_moves);
         new_moves.extend(new_tw_shift_moves);
@@ -302,12 +328,12 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
         let inner_fw_shift_moves = self.maybe_four_way(i_index);
 
         let cap = outer_add_moves.len() 
-            + inner_add_moves.len() 
             + outer_add_moves.len()
-            + inner_tw_shift_moves.len()
+            + inner_add_moves.len() 
             + outer_tw_shift_moves.len() 
-            + inner_fw_shift_moves.len()
+            + inner_tw_shift_moves.len()
             + outer_fw_shift_moves.len() 
+            + inner_fw_shift_moves.len()
             + combo_pairs.len() + 1;
 
         let mut new_moves = Vec::with_capacity(cap);
@@ -315,6 +341,19 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
             let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
+
+            if P::three_way() || P::four_way() {
+                let ui = self.loop_table.loop_lookup(i as usize);
+                let uj = self.loop_table.loop_lookup(j as usize);
+                if ui != o_index && ui != i_index {
+                    new_moves.extend(self.maybe_three_way(ui));
+                    new_moves.extend(self.maybe_four_way(ui));
+                } else {
+                    debug_assert!(uj != o_index && uj != i_index);
+                    new_moves.extend(self.maybe_three_way(uj));
+                    new_moves.extend(self.maybe_four_way(uj));
+                }
+            }
         }
         self.del_neighbors.insert(i, -delta);
         new_moves.push((Move::Del{ i, j }, -delta));
@@ -412,6 +451,16 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
             let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
+            let ui = self.loop_table.loop_lookup(i as usize);
+            if ui != o_index && ui != i_index {
+                new_moves.extend(self.maybe_three_way(ui));
+                new_moves.extend(self.maybe_four_way(ui));
+            }
+            let uj = self.loop_table.loop_lookup(j as usize);
+            if uj != o_index && uj != i_index {
+                new_moves.extend(self.maybe_three_way(uj));
+                new_moves.extend(self.maybe_four_way(uj));
+            }
         }
         self.del_neighbors.insert(p, del_delta);
         new_moves.push((Move::Del { i: p, j: q }, del_delta));
@@ -519,6 +568,19 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
             let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
+
+            let ui = self.loop_table.loop_lookup(i as usize);
+            if ui != in_idx && ui != o1_idx && ui != o2_idx {
+                new_moves.extend(self.maybe_three_way(ui));
+                new_moves.extend(self.maybe_four_way(ui));
+            }
+            let uj = self.loop_table.loop_lookup(j as usize);
+            if uj != in_idx && uj != o1_idx && uj != o2_idx {
+                new_moves.extend(self.maybe_three_way(uj));
+                new_moves.extend(self.maybe_four_way(uj));
+            }
+
+
         }
         for &(i, j) in &outer1_pairs {
             if i == p || i == m {
@@ -527,6 +589,18 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
             let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
+
+            let ui = self.loop_table.loop_lookup(i as usize);
+            if ui != in_idx && ui != o1_idx && ui != o2_idx {
+                new_moves.extend(self.maybe_three_way(ui));
+                new_moves.extend(self.maybe_four_way(ui));
+            }
+            let uj = self.loop_table.loop_lookup(j as usize);
+            if uj != in_idx && uj != o1_idx && uj != o2_idx {
+                new_moves.extend(self.maybe_three_way(uj));
+                new_moves.extend(self.maybe_four_way(uj));
+            }
+
         }
         for &(i, j) in &outer2_pairs {
             if i == p || i == m {
@@ -535,6 +609,18 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
             let delta = self.get_del_activation_energy(i, j);
             self.del_neighbors.insert(i, delta);
             new_moves.push((Move::Del{ i, j }, delta));
+
+            let ui = self.loop_table.loop_lookup(i as usize);
+            if ui != in_idx && ui != o1_idx && ui != o2_idx {
+                new_moves.extend(self.maybe_three_way(ui));
+                new_moves.extend(self.maybe_four_way(ui));
+            }
+            let uj = self.loop_table.loop_lookup(j as usize);
+            if uj != in_idx && uj != o1_idx && uj != o2_idx {
+                new_moves.extend(self.maybe_three_way(uj));
+                new_moves.extend(self.maybe_four_way(uj));
+            }
+
         }
         new_moves.extend(inside_add_moves);
         new_moves.extend(outer1_add_moves);

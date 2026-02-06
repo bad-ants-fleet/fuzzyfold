@@ -84,6 +84,20 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
         }
     }
 
+    //NOTE: can be useful for debugging.
+    fn _simple_update_rate_tree(&mut self, old: Moves, new: Moves) {
+        for (mv, _) in old {
+            self.rate_tree.remove(mv);
+
+        }
+        for (mv, delta) in new {
+            let k = self.ratemodel.rate(&mv, delta);
+            if k > 0. && !self.rate_tree.update_rate(&mv, k) {
+                self.rate_tree.insert(mv, k);
+            } 
+        }
+    }
+
     fn update_rate_tree(&mut self, old: Moves, new: Moves) {
         let mut del = old.iter();
         let mut add = new.iter();
@@ -95,9 +109,12 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
                     let k = self.ratemodel.rate(nmv, *delta);
                     if k == 0.0 || self.rate_tree.update_rate(nmv, k) {
                         cur_add = add.next();
-                    } else {
-                        self.rate_tree.replace(omv, nmv, k);
+                    } else if self.rate_tree.replace(omv, nmv, k) {
+                        // Only true if the old move exists!
+                        // This allows us to exlude valid moves with rate 0!
                         cur_add = add.next();
+                        cur_del = del.next();
+                    } else {
                         cur_del = del.next();
                     }
                 }
@@ -155,7 +172,6 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
             self.update_rate_tree(old, new);
         }
     }
-
 }
 
 #[cfg(test)]
@@ -163,6 +179,8 @@ mod tests {
     use super::*;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rng;
+    use std::collections::HashSet;
 
     use ff_structure::PairTable;
     use ff_energy::ViennaRNA;
@@ -172,6 +190,7 @@ mod tests {
     use crate::movesets::LoopNeighbors;
     use crate::movesets::shift_policy;
     use crate::movesets::loop_table::LoopTable;
+    use crate::movesets::Move;
 
     macro_rules! setup_ssa_input {
         ($wname:ident, $rname:ident, $seq:expr, $db:expr) => {
@@ -188,6 +207,44 @@ mod tests {
             let $wname = LoopNeighbors::from((ltab, shift_policy::NoShift));
         };
     }
+
+    fn same_moves(a: &[(Move, i32)], b: &[(Move, i32)]) -> bool {
+        let sa: HashSet<_> = a.iter().copied().collect();
+        let sb: HashSet<_> = b.iter().copied().collect();
+        sa == sb
+    }
+
+    #[test]
+    fn test_flux_after_moves() {
+        let emodel = ViennaRNA::default();
+        let rmodel = Metropolis::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
+        let policy = shift_policy::ThreeAndFour;
+
+        let sequence = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").expect("Invalid sequence?");
+        let pairings =     PairTable::try_from(".((((....)))).((((........))))...............").expect("Invalid structure?");
+
+        let ltab = LoopTable::try_from((&sequence, &pairings, &emodel))
+            .expect("Invalid sequence/structure combination");
+        let walker = LoopNeighbors::from((ltab, policy));
+ 
+        let mut simulator = SSA::from((walker, &rmodel));
+
+        let mut steps = 0;
+        simulator.simulate(&mut rng(), 100., |_, _, _, w| {
+            steps += 1;
+            println!("{}, {}", w.current_structure(), w.current_energy());
+            let moves1 = w.propose_moves().collect::<Vec<_>>();
+            let p = PairTable::try_from(&w.current_structure()).expect("Invalid structure?");
+            let ltab = LoopTable::try_from((&sequence, &p, &emodel))
+                .expect("Invalid sequence/structure combination");
+            let walker = LoopNeighbors::from((ltab, policy));
+            let moves2 = walker.propose_moves().collect::<Vec<_>>();
+            assert!(same_moves(&moves1, &moves2));
+            true
+        });
+        assert!(steps > 0, "Simulation must perform at least one step");
+    }
+
 
     #[test]
     fn test_simple_ssa_simulation() {
