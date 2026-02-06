@@ -1,6 +1,7 @@
 use rand::rng;
 use clap::Parser;
 use anyhow::Result;
+use anyhow::bail;
 use colored::*;
 
 use ff_structure::PairTable;
@@ -119,23 +120,8 @@ fn main() -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
             run_simulator(moves, &rmodel, &times, cli.silent, cli.num_steps);
         },
-        (RateModelKind::Kawasaki, true, false) => {
-            let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, shift_policy::ThreeWayOnly))
-                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, &rmodel, &times, cli.silent, cli.num_steps);
-        },
-        (RateModelKind::Kawasaki, false, true) => {
-            let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, shift_policy::FourWayOnly))
-                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, &rmodel, &times, cli.silent, cli.num_steps);
-        },
-        (RateModelKind::Kawasaki, true, true) => {
-            let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, shift_policy::ThreeAndFour))
-                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, &rmodel, &times, cli.silent, cli.num_steps);
+        (RateModelKind::Kawasaki, _, _) => {
+            bail!("Shift moves are only available for the Metropolis model.")
         },
     }
 

@@ -12,9 +12,9 @@ energies and transition times.
 ## Using EVAL input
 
 You can start a trajectory simulation from a predefined **EVAL file**, which
-contains a sequence and an initial structure.
+contains an optional FASTA-header, a sequence and an initial structure.
 
-For example, the file `dld3_lm3.in` specifies a molecule in a particular
+For example, the file `dld3_lm3.na` specifies a molecule in a particular
 starting conformation:
 
 ```fasta

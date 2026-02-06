@@ -1,6 +1,6 @@
 [package]
 name = "ff_kinetics"
-version = "0.3.0"
+version = "0.4.0"
 description = "fuzzyfold's stochastic secondary structure simulations."
 documentation = "https://docs.rs/ff_kinetics"
 keywords = ["dna", "rna", "secondary-structure", "kinetics", "nearest-neighbor"]

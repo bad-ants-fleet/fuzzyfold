@@ -12,7 +12,7 @@ pub enum RateModelKind {
 #[derive(Debug, Args)]
 pub struct RateModelArguments {
     /// Rate constant for add/delete moves.
-    #[arg(long, default_value_t = 1e6)]
+    #[arg(long, default_value_t = 1e5)]
     pub k0: f64,
 
     /// Rate constant for three-way shift moves (optional, default = off).
@@ -31,7 +31,7 @@ pub struct RateModelArguments {
 #[derive(Debug, Args)]
 pub struct TimelineParameters {
     /// The last time point of the linear scale.
-    #[arg(long, default_value_t = 1e-7)]
+    #[arg(long, default_value_t = 0.04)]
     pub t_ext: f64,
 
     /// Simulation stop time.
@@ -39,7 +39,7 @@ pub struct TimelineParameters {
     pub t_end: f64,
 
     /// Number of time points on the linear scale: [0..t-ext]
-    #[arg(long, default_value_t = 10)]
+    #[arg(long, default_value_t = 100)]
     pub t_lin: usize,
 
     /// Number of time points on the logarithmic scale: [t-ext..t-end]

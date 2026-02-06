@@ -6,6 +6,7 @@ use rayon::prelude::*;
 use rand::rng;
 use clap::Parser;
 use anyhow::Result;
+use anyhow::bail;
 use colored::*;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
@@ -129,32 +130,14 @@ fn main() -> Result<()> {
                     Arc::clone(&shared_macrostates), &times).collect()
             },
             (RateModelKind::Kawasaki, false, false) => {
-                let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+                let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, None, None);
                 let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, NoShift))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
                 run_timecourse(moves, &rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
-            (RateModelKind::Kawasaki, true, false) => {
-                let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-                let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, ThreeWayOnly))
-                    .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-                run_timecourse(moves, &rmodel, cli.simulation.t_end, cli.num_sims as u64,
-                    Arc::clone(&shared_macrostates), &times).collect()
-            },
-            (RateModelKind::Kawasaki, false, true) => {
-                let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-                let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, FourWayOnly))
-                    .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-                run_timecourse(moves, &rmodel, cli.simulation.t_end, cli.num_sims as u64,
-                    Arc::clone(&shared_macrostates), &times).collect()
-            },
-            (RateModelKind::Kawasaki, true, true) => {
-                let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-                let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, ThreeAndFour))
-                    .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-                run_timecourse(moves, &rmodel, cli.simulation.t_end, cli.num_sims as u64,
-                    Arc::clone(&shared_macrostates), &times).collect()
+            (RateModelKind::Kawasaki, _, _) => {
+                bail!("Shift moves are only available for the Metropolis model.")
             },
         };
 

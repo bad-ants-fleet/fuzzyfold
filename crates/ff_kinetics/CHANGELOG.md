@@ -2,8 +2,16 @@
 
 All notable changes to this crate will be documented in this file.
 
-## development:
-- another speedup for stochastic simulations.
+## [0.4.0] - 2026-02-06
+### Added
+- three-way and four-way shift moves for Metropolis model.
+- co-transcriptional simulations.
+
+### Changed
+- removed LoopStructure, replaced it by:
+   LoopTable, LoopNeighbors, and the Walker trait.
+- renamed explore.rs to enum_neighbors.rs.
+- new plotting style (lin/log equal split).
 
 ## [0.3.0] - 2026-01-13
 ### Added

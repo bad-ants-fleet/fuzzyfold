@@ -2,7 +2,7 @@
 
 ## Input files
 
-The file `dld3_lm3.fa` contains a designed RNA sequence together with 
+The file `dld3_lm3.na` contains a designed RNA sequence together with 
 an initial conformation:
 
 ```fasta
@@ -41,7 +41,7 @@ Here:
 - The second line specifies the **sequence**.
 - The remaining lines list all **secondary structures** that belong to this macro-state.
 
-Note that the starting structure from `dld3_lm3.fa` is part of this macro-state.
+Note that the starting structure from `dld3_lm3.na` is part of this macro-state.
 
 ---
 
@@ -50,13 +50,13 @@ Note that the starting structure from `dld3_lm3.fa` is part of this macro-state.
 To simulate 100 trajectories starting in a specific lm3 conformation:
 
 ```bash
-cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --t-end 0.1 -n 100 --output dld3_lm3 
+ff-timecourse --macrostates dld3*.ms --t-end 1 -n 100 --output dld3_lm3_t1 dld3_lm3.na
 ```
 
-or equivalently:
+or, if you use pipes:
 
 ```bash
-ff-timecourse --macrostates dld3*.ms --t-end 0.1 -n 100 --output dld3_lm3_t0.1 < dld3_lm3.fa
+cat dld3_lm3.na | ff-timecourse --macrostates dld3*.ms --t-end 1 -n 100 --output dld3_lm3_t1
 ```
 
 To familiarize yourself with the default timeline parameters `--t-lin`, `--t-log`,
@@ -72,7 +72,7 @@ completed.  The time course is also plotted automatically as an SVG file,
 where the plot name is derived from the input file. For example:
 
 ```
-dld3_lm3_t0.1.svg
+dld3_lm3_t1.svg
 ```
 
 ---
@@ -89,17 +89,17 @@ timeline parameters do not change between calls!
 For example:
 
 ```bash
-cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --t-end 1 -n 100 --output dld3_t100.tln
+cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --t-end 1 -n 900 --output dld3_lm3_t1
 ```
 
-This command creates `dld3_t100.tln`, which stores the results from 100
-simulations.  Running the same command again will automatically reload the
-file, add another 100 simulations, and update the stored timeline accordingly.
+This command updates `dld3_lm3_t1.tln`, to include the results from the additional 900 simulations.
+Running the same command again will automatically reload the file, add another
+900 simulations, and update the stored timeline accordingly.
 
 Try it! This is the recommended way to extend your simulation dataset without
 restarting from scratch.
 
-An example output file from $10^5$ aggregated simulations of 1-second runs may look like this:
+An output file from $20 000$ aggregated simulations should look like this:
 
-![Timecourse plot](example_dld3_t100.svg)
+![Timecourse plot](result_dld3_lm3_t1.svg)
 

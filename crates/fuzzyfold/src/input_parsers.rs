@@ -7,20 +7,16 @@ use paste::paste;
 use ff_structure::DotBracketVec;
 use ff_energy::NucleotideVec;
 
-// ============================================================
-//  Generic FASTA-like parser supporting lenient/strict modes
-// ============================================================
-
 #[derive(Clone, Copy)]
-enum FastaMode {
+enum NAMode {
     Lenient,
     Strict,
 }
 
 /// Core parsing logic shared by all adapters.
-fn parse_fasta_like<R: BufRead>(
+fn parse_na_format<R: BufRead>(
     reader: R,
-    mode: FastaMode,
+    mode: NAMode,
 ) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
     let mut header: Option<String> = None;
     let mut sequence: Option<NucleotideVec> = None;
@@ -53,7 +49,7 @@ fn parse_fasta_like<R: BufRead>(
     let sequence = sequence.ok_or_else(|| anyhow!("Missing sequence line"))?;
 
     let structure = match (structure, mode) {
-        (Some(s), FastaMode::Strict) => {
+        (Some(s), NAMode::Strict) => {
             if sequence.len() != s.len() {
                 return Err(anyhow!(
                         "Sequence length ({}) and structure length ({}) do not match",
@@ -63,9 +59,9 @@ fn parse_fasta_like<R: BufRead>(
             }
             s
         },
-        (None, FastaMode::Strict) => return Err(anyhow!("Missing structure line")),
+        (None, NAMode::Strict) => return Err(anyhow!("Missing structure line")),
 
-        (Some(s), FastaMode::Lenient) => {
+        (Some(s), NAMode::Lenient) => {
             if sequence.len() < s.len() {
                 return Err(anyhow!(
                         "Structure is longer than sequence ({} > {}).",
@@ -75,7 +71,7 @@ fn parse_fasta_like<R: BufRead>(
             s
         },
 
-        (None, FastaMode::Lenient) => {
+        (None, NAMode::Lenient) => {
             DotBracketVec::try_from(".")
                 .expect("Failed to construct open-chain structure")
         }
@@ -89,11 +85,11 @@ fn parse_fasta_like<R: BufRead>(
 // ============================================================
 
 pub fn read_cotr<R: BufRead>(reader: R) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
-    parse_fasta_like(reader, FastaMode::Lenient)
+    parse_na_format(reader, NAMode::Lenient)
 }
 
 pub fn read_eval<R: BufRead>(reader: R) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
-    parse_fasta_like(reader, FastaMode::Strict)
+    parse_na_format(reader, NAMode::Strict)
 }
 
 // ============================================================
@@ -110,7 +106,7 @@ pub fn read_eval<R: BufRead>(reader: R) -> Result<(Option<String>, NucleotideVec
 ///
 /// Example:
 /// ```ignore
-/// define_input_variants!(read_fasta_like, Result<(Option<String>, NucleotideVec, DotBracketVec)>);
+/// define_input_variants!(read_na_format, Result<(Option<String>, NucleotideVec, DotBracketVec)>);
 /// ```
 macro_rules! define_input_variants {
     ($base:ident, $ret:ty) => {
@@ -148,10 +144,10 @@ macro_rules! define_input_variants {
 //  Apply macro to generate adapters for both variants
 // ============================================================
 
-type FastaResult = Result<(Option<String>, NucleotideVec, DotBracketVec)>;
+type NAResult = Result<(Option<String>, NucleotideVec, DotBracketVec)>;
 
-define_input_variants!(read_cotr, FastaResult);
-define_input_variants!(read_eval, FastaResult);
+define_input_variants!(read_cotr, NAResult);
+define_input_variants!(read_eval, NAResult);
 
 // ============================================================
 //  Example helper: ruler()

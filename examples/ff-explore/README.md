@@ -2,7 +2,7 @@
 
 ## Example
 
-The file `dld3_lm3.fa` provides a sequence and a starting structure in the following format:
+The file `dld3_lm3.na` provides a sequence and a starting structure in the following format:
 
 ```fasta
 >lm3 (dld3)

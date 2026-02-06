@@ -13,7 +13,26 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
 ) {
     assert!(t_lin > 0.0 && t_log > t_lin, "Require 0 < t_lin < t_log");
 
-    let title = format!("ff-simulate ({} simulations)", timeline.points[0].counter);
+    let numsim = timeline.points[0].counter;
+    let title = format!("ff-timecourse ({} simulations)", 
+        {
+            if numsim >= 10000 {
+                let s = numsim.to_string();
+                let mut out = String::new();
+
+                for (i, c) in s.chars().rev().enumerate() {
+                    if i > 0 && i % 3 == 0 {
+                        out.push('_');
+                    }
+                    out.push(c);
+                }
+
+                out.chars().rev().collect::<String>()
+            } else { 
+                numsim.to_string()
+            }
+        }
+    );
 
     // Image size; tweak as you like
     //let root = BitMapBackend::new(filename, (1024, 480)).into_drawing_area();
@@ -22,34 +41,32 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
     root.titled(&title, ("sans-serif", 28)).unwrap();
     root.draw_text(
         "time",
-        &("sans-serif", 18).into_font().into_text_style(&root),
-        (512, 450),   // roughly centered at bottom
+        &("sans-serif", 22).into_font().into_text_style(&root),
+        (496, 450),   // roughly centered at bottom
     ).unwrap();
 
 
-    // Split into two panels: 18% for linear (left), 82% for log (right)
-    let (left, right) = root.split_horizontally(200);
+    let eps = 1e-9; // epsilon for plot labels
+    // Split into two panels: 50% for linear (left), 50% for log (right)
+    let (left, right) = root.split_horizontally(512);
 
     // ---- Left: linear panel ----
     let mut chart_left = ChartBuilder::on(&left)
-        //.caption(format!("Linear plot"), ("sans-serif", 14))
+        .caption("Linear plot", ("sans-serif", 18))
         .margin(20)
         .margin_top(40)
         .margin_right(0)
         .x_label_area_size(40)
         .y_label_area_size(50)
-        .build_cartesian_2d(0.0..t_lin, 0.0..1.0).unwrap();
+        .build_cartesian_2d(0.0..(t_lin+eps), 0.0..1.0).unwrap();
     chart_left
         .configure_mesh()
-        //.x_desc("time (s)")
+        //.x_desc("liner scale")
         .y_desc("occupancy")
-        .x_labels(2)
-        .x_label_formatter(&|x| {
-            if (*x - t_lin).abs() < 1e-9 { "".to_string() } else { format!("{}", x) }
-        })
-    .y_labels(10)
+        .x_labels(6)
+        .y_labels(10)
         .light_line_style(RGBColor(220, 220, 220))
-        .axis_desc_style(("sans-serif", 18))
+        .axis_desc_style(("sans-serif", 22))
         .label_style(("sans-serif", 18))
         .draw()
         .unwrap();
@@ -62,19 +79,20 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
 
     // ---- Right: log panel ----
     let mut chart_right = ChartBuilder::on(&right)
-        //.caption(format!("Logarithmic plot"), ("sans-serif", 14))
+        .caption("Logarithmic plot", ("sans-serif", 18))
         .margin(20)
         .margin_top(40)
         .margin_left(0)
         .margin_right(40)
         .x_label_area_size(40)
         .y_label_area_size(0) // hide y labels on right
-        .build_cartesian_2d((t_lin..t_log).log_scale(), 0.0..1.0).unwrap();
+        .build_cartesian_2d(((t_lin - eps)..(t_log + eps)).log_scale(), 0.0..1.0)
+        .unwrap();
 
     chart_right
         .configure_mesh()
-        //.x_desc("time (s)")
-        //.x_labels(7)
+        //.x_desc("log scale")
+        .x_labels(6)
         .x_label_formatter(&|x| if *x < 0.01 {format!("{:.1e}", x)} else {format!("{}", x)})  // scientific notation
         .y_labels(10) // hide y ticks on right
         .light_line_style(RGBColor(220, 220, 220))
