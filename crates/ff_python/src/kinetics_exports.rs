@@ -1,17 +1,17 @@
-use ff_kinetics::RateModel;
-use ff_kinetics::SSA;
-use pyo3::exceptions::PyValueError;
-use pyo3::types::PyModule;
+use ff_structure::DotBracketVec;
 use pyo3::prelude::*;
+use pyo3::exceptions::PyValueError;
+
+use rand::rng;
 
 use ff_structure::MultiPairTable;
 use ff_energy::NucleotideVec;
-use ff_energy::EnergyModel;
 use ff_energy::ViennaRNA as VRNA;
-use ff_kinetics::Macrostate;
+use ff_kinetics::SSA;
+use ff_kinetics::shift_policy;
 use ff_kinetics::Metropolis;
+use ff_kinetics::Walker;
 use ff_kinetics::LoopNeighbors;
-use ff_kinetics::shift_policy::ShiftPolicy;
 
 
 #[pyclass]
@@ -58,77 +58,87 @@ impl Simulator {
             rate_model,
         })
     }
-}
-
-#[pymethods]
-impl Simulator {
 
     #[pyo3(signature = (
         sequence,
-        source,
-        target,
-        num_sim=100,
-        t_max=1000.0
+        start,
+        t_ext=None,
+        t_end=1.0,
+        silent=false,
     ))]
     fn simulate(
         &self,
         py: Python<'_>,
         sequence: &str,
-        source: &str,
-        target: &str,
-        num_sim: usize,
-        t_max: f64,
-    ) -> PyResult<(f64, Vec<f64>)> {
+        start: Option<&str>,
+        t_ext: Option<f64>,
+        t_end: f64,
+        silent: bool,
+    ) -> PyResult<Vec<(String, i32, f64, f64, f64)>> {
 
         // Convert sequence
         let seq = NucleotideVec::try_from(sequence)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-        // Convert source structure
-        let source_pt = MultiPairTable::try_from(source)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let start = match start {
+            Some(s) => DotBracketVec::try_from(s)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?,
+            None => DotBracketVec::try_from(".")
+                .map_err(|e| PyValueError::new_err(e.to_string()))?,
+        };
 
-        // Convert target macrostate
-        let target_macro = Macrostate::try_from(target)
+        if start.len() < seq.len() && t_ext.is_none() {
+            return Err(PyValueError::new_err(
+                    "t_ext must be provided when the start stucture is shorter than the sequence length!",
+            ));
+        }
+
+        let times: Vec<f64> = if let Some(t_ext) = t_ext {
+            let mut v = vec![t_ext; sequence.len() - start.len()];
+            v.push(t_end);
+            v
+        } else { 
+            vec![t_end] 
+        };
+
+        // Convert source structure
+        let start = MultiPairTable::try_from(&start)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         // Build move set (using stored shift_cfg)
         let moves = LoopNeighbors::try_from((
             &seq,
-            &source_pt,
+            &start,
             &self.energy_model,
+            shift_policy::NoShift,
         ))
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let mut results = Vec::new();
 
-        let rate_model = &self.rate_model;
+        py.allow_threads(|| {
+            let mut ssa = SSA::from((moves, &self.rate_model));
 
-        // 🔥 Release GIL during heavy computation
-        let hitting_times = py.allow_threads(|| {
-
-            let mut times = Vec::with_capacity(num_sim);
-
-            for _ in 0..num_sim {
-
-                let mut ssa = SSA::from((moves.clone(), rate_model));
-
-                let t_hit = ssa.simulate_until(
-                    &target_macro,
-                    t_max,
-                );
-
-                times.push(t_hit);
+            if silent {
+                ssa.co_simulate(&mut rng(), &times, |_, _, _, _| true);
+                let cs = ssa.current_structure().to_string();
+                let en = ssa.current_energy();
+                results.push((cs, en, t_end, 0.0, 0.0));
+            } else {
+                ssa.co_simulate(&mut rng(), &times, 
+                    |t, tinc, flux, w| {
+                        results.push((
+                                w.to_string(),
+                                w.current_energy(),
+                                t,
+                                tinc,
+                                1.0 / flux,
+                        ));
+                        true 
+                    });
             }
-
-            times
         });
 
-        let mean = if hitting_times.is_empty() {
-            0.0
-        } else {
-            hitting_times.iter().sum::<f64>() / hitting_times.len() as f64
-        };
-
-        Ok((mean, hitting_times))
+        Ok(results)
     }
 }
 

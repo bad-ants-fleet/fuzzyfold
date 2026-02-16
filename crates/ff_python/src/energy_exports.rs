@@ -1,6 +1,5 @@
-use pyo3::exceptions::PyValueError;
-use pyo3::types::PyModule;
 use pyo3::prelude::*;
+use pyo3::exceptions::PyValueError;
 
 use ff_structure::MultiPairTable;
 use ff_energy::NucleotideVec;
@@ -8,7 +7,7 @@ use ff_energy::EnergyModel;
 use ff_energy::ViennaRNA as VRNA;
 
 #[pyfunction]
-fn eval(sequence: &str, structure: &str) -> PyResult<i32> {
+pub fn eval(sequence: &str, structure: &str) -> PyResult<i32> {
     let model = VRNA::default();
 
     let sequence = NucleotideVec::try_from(sequence)
@@ -21,7 +20,7 @@ fn eval(sequence: &str, structure: &str) -> PyResult<i32> {
 }
 
 #[pyclass]
-struct ViennaRNA {
+pub struct ViennaRNA {
     model: VRNA,
 }
 
@@ -53,13 +52,6 @@ impl ViennaRNA {
 
         Ok(energy as f64 / 100.0)
     }
-}
-
-#[pymodule]
-fn fuzzyfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<ViennaRNA>()?;
-    m.add_function(wrap_pyfunction!(eval, m)?)?;
-    Ok(())
 }
 
 
