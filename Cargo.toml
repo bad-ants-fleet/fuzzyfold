@@ -1,6 +1,5 @@
 [workspace]
 members = ["crates/*"]
-exclude = ["crates/ff_plotting"]
 default-members = ["crates/fuzzyfold"]
 resolver = "3"
 

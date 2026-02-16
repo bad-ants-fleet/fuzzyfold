@@ -1,0 +1,19 @@
+[package]
+name = "ff_python"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+categories.workspace = true
+
+[lib]
+name = "fuzzyfold"
+crate-type = ["cdylib"]
+
+[dependencies]
+ff_structure.workspace = true
+ff_energy.workspace = true
+ff_kinetics.workspace = true
+pyo3 = { version = "0.21", features = ["extension-module"] }
+
