@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::Arc;
 use nohash_hasher::IntMap;
 
 use ff_structure::NAIDX;
@@ -15,8 +16,8 @@ use crate::shift_policy::ShiftPolicy;
 
 type Moves = Vec<(Move, i32)>;
 
-pub struct LoopNeighbors<'a, E: EnergyModel, P: ShiftPolicy> {
-    loop_table: LoopTable<'a, E>,
+pub struct LoopNeighbors<E: EnergyModel, P: ShiftPolicy> {
+    loop_table: LoopTable<E>,
     add_neighbors: IntMap<usize, Moves>,
     del_neighbors: IntMap<NAIDX, i32>, 
     three_way_shift_neighbors: ThreeWayNeighbors,
@@ -24,8 +25,8 @@ pub struct LoopNeighbors<'a, E: EnergyModel, P: ShiftPolicy> {
     _policy: P,
 }
 
-impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
-    pub fn loop_table(&self) -> &LoopTable<'a, E> {
+impl<E: EnergyModel, P: ShiftPolicy> LoopNeighbors<E, P> {
+    pub fn loop_table(&self) -> &LoopTable<E> {
         &self.loop_table
     }
 
@@ -636,7 +637,7 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
     }
 }
 
-impl<'a, E: EnergyModel, P: ShiftPolicy> Clone for LoopNeighbors<'a, E, P> {
+impl<E: EnergyModel, P: ShiftPolicy> Clone for LoopNeighbors<E, P> {
     fn clone(&self) -> Self {
         Self {
             loop_table: self.loop_table.clone(),
@@ -649,16 +650,16 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> Clone for LoopNeighbors<'a, E, P> {
     }
 }
 
-impl<'a, E: EnergyModel, P: ShiftPolicy> fmt::Display for LoopNeighbors<'a, E, P> {
+impl<E: EnergyModel, P: ShiftPolicy> fmt::Display for LoopNeighbors<E, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.loop_table)
     }
 }
 
-impl<'a, E: EnergyModel, P: ShiftPolicy> From<(LoopTable<'a, E>, P)>
-    for LoopNeighbors<'a, E, P>
+impl<E: EnergyModel, P: ShiftPolicy> From<(LoopTable<E>, P)>
+    for LoopNeighbors<E, P>
 {
-    fn from((loop_table, policy): (LoopTable<'a, E>, P)) -> Self {
+    fn from((loop_table, policy): (LoopTable<E>, P)) -> Self {
         let mut moves = LoopNeighbors {
             loop_table,
             add_neighbors: IntMap::default(),
@@ -674,14 +675,14 @@ impl<'a, E: EnergyModel, P: ShiftPolicy> From<(LoopTable<'a, E>, P)>
     }
 }
 
-impl<'a, T: LoopDecomposition, E: EnergyModel, P: ShiftPolicy>
-TryFrom<(&'a NucleotideVec, &T, &'a E, P)>
-for LoopNeighbors<'a, E, P>
+impl<T: LoopDecomposition, E: EnergyModel, P: ShiftPolicy>
+TryFrom<(NucleotideVec, &T, Arc<E>, P)>
+for LoopNeighbors<E, P>
 {
     type Error = String;
 
     fn try_from((sequence, pairings, model, policy):
-        (&'a NucleotideVec, &T, &'a E, P)
+        (NucleotideVec, &T, Arc<E>, P)
     ) -> Result<Self, Self::Error> {
         let ltab = LoopTable::try_from((sequence, pairings, model))?;
         Ok(LoopNeighbors::from((ltab, policy)))
@@ -704,7 +705,7 @@ mod tests {
             let sequence = NucleotideVec::from_lossy($seq);
             let pairings = PairTable::try_from($db)
                 .expect("Invalid structure");
-            let $name = LoopTable::try_from((&sequence, &pairings, &model))
+            let $name = LoopTable::try_from((sequence, &pairings, Arc::new(model)))
                 .expect("Invalid sequence/structure combination");
         };
     }
@@ -827,7 +828,7 @@ mod tests {
         let model = ViennaRNA::default();
         let sequence = NucleotideVec::from_lossy("GACGCUAUGU");
         let pairings =       PairTable::try_from("...(.....)").unwrap();
-        let ltab = LoopTable::try_from((&sequence, &pairings, &model)).unwrap();
+        let ltab = LoopTable::try_from((sequence, &pairings, Arc::new(model))).unwrap();
         let mut adm = LoopNeighbors::from((ltab, ThreeWayOnly));
         let nb1: Vec<_> = adm.propose_moves().collect();
 
@@ -878,7 +879,7 @@ mod tests {
         let model = ViennaRNA::default();
         let sequence = NucleotideVec::from_lossy("AAAGCAAAAGCAAAAAAGAAAC");
         let pairings =       PairTable::try_from("...((....))......(...)").unwrap();
-        let ltab = LoopTable::try_from((&sequence, &pairings, &model)).unwrap();
+        let ltab = LoopTable::try_from((sequence, &pairings, Arc::new(model))).unwrap();
         let mut adm = LoopNeighbors::from((ltab, ThreeAndFour));
         let nb1: Vec<_> = adm.propose_moves().collect();
         let pp1 = Move::Del { i: 4, j: 9 };

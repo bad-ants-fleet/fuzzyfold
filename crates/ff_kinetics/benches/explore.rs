@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::sync::Arc;
 use std::hint::black_box;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -46,7 +47,7 @@ fn load_raw_inputs(path: &str) -> Vec<(NucleotideVec, PairTable)> {
 }
 
 pub fn gen_neighbors(c: &mut Criterion) {
-    let emodel = ViennaRNA::default();
+    let emodel = Arc::new(ViennaRNA::default());
     let mut group = c.benchmark_group("Generate neighborhoods");
     group.measurement_time(std::time::Duration::from_secs(20));
     group.sample_size(10);
@@ -59,7 +60,7 @@ pub fn gen_neighbors(c: &mut Criterion) {
                 |inputs| {
                     let mut count = 0usize;
                     for (seq, pt) in inputs {
-                        let mut moves = LoopNeighbors::try_from((seq, pt, &emodel, NoShift))
+                        let mut moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), NoShift))
                             .expect("Failed to build LoopNeighbors");
                         moves.generate_neighbors(0, 5, |_, _| {
                             count += 1;

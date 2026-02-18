@@ -30,7 +30,7 @@ pub trait Walker {
     fn apply_extension(&mut self) -> (Moves, Moves);
 }
 
-impl<'a, E: EnergyModel, P: ShiftPolicy> Walker for LoopNeighbors<'a, E, P> {
+impl<E: EnergyModel, P: ShiftPolicy> Walker for LoopNeighbors<E, P> {
 
     fn sequence_length(&self) -> usize {
         self.loop_table().sequence_length()

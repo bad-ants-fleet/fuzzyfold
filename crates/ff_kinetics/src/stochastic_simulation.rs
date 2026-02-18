@@ -7,19 +7,19 @@ use crate::RateModel; // -> K
 use crate::rate_tree::RateTree;
 
 /// An SSA implementation for LoopStructure.
-pub struct SSA<'a, W: Walker, K: RateModel> {
+pub struct SSA<W: Walker, K: RateModel> {
     /// The current RNA structure representation.
     walker: W,
     /// Anything with the RateModel trait.
-    ratemodel: &'a K,
+    ratemodel: K,
     /// Heap-like data structure for sampling.
     rate_tree: RateTree,
 }
 
-impl<'a, W: Walker, K: RateModel> 
-From<(W, &'a K)> for SSA<'a, W, K>
+impl<W: Walker, K: RateModel> 
+From<(W, K)> for SSA<W, K>
 {
-    fn from((walker, ratemodel): (W, &'a K)) -> Self {
+    fn from((walker, ratemodel): (W, K)) -> Self {
         let mut rate_tree = RateTree::default();
 
         for (mv, delta) in walker.propose_moves() {
@@ -38,7 +38,7 @@ From<(W, &'a K)> for SSA<'a, W, K>
     }
 }
 
-impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
+impl<W: Walker, K: RateModel> SSA<W, K> {
     pub fn current_structure(&self) -> DotBracketVec {
         self.walker.current_structure()
     }   
@@ -70,10 +70,10 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
                 rsum: f64, w: &W| {
                     callback(t + gtime, tinc, rsum, w)
             };
-            self.simulate(rng, time, &mut co_callback);
+            let cb = self.simulate(rng, time, &mut co_callback);
 
             // Skip extension after the last time point
-            if idx + 1 == times.len() {
+            if !cb || idx + 1 == times.len() {
                 break;
             }
 
@@ -140,18 +140,19 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
         rng: &mut R,
         t_max: f64,
         mut callback: F,
-    )
+    ) -> bool
     where
         R: Rng + ?Sized,
         F: FnMut(f64, f64, f64, &W) -> bool,
     {
         let mut t = 0.;
+        let mut cb = true;
 
         while t < t_max {
             let rsum = self.rate_tree.total_rate();
 
             if rsum == 0.0 {
-                callback(t, t_max, rsum, &self.walker);
+                cb = callback(t, t_max, rsum, &self.walker);
                 break;
             }
 
@@ -161,6 +162,7 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
             // Callback bewore applying the waiting time.
             // If callback return's false, then abort the simulation!
             if !callback(t, tinc, rsum, &self.walker) {
+                cb = false;
                 break;
             }
 
@@ -171,6 +173,7 @@ impl<'a, W: Walker, K: RateModel> SSA<'a, W, K> {
             let (old, new) = self.walker.apply_move(&mv);
             self.update_rate_tree(old, new);
         }
+        cb
     }
 }
 
@@ -180,6 +183,7 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::SeedableRng;
     use rand::rng;
+    use std::sync::Arc;
     use std::collections::HashSet;
 
     use ff_structure::PairTable;
@@ -202,7 +206,7 @@ mod tests {
             let pairings = PairTable::try_from($db)
                 .expect("Invalid structure?");
 
-            let ltab = LoopTable::try_from((&sequence, &pairings, &emodel))
+            let ltab = LoopTable::try_from((sequence, &pairings, Arc::new(emodel)))
                 .expect("Invalid sequence/structure combination");
             let $wname = LoopNeighbors::from((ltab, shift_policy::NoShift));
         };
@@ -216,18 +220,18 @@ mod tests {
 
     #[test]
     fn test_flux_after_moves() {
-        let emodel = ViennaRNA::default();
+        let emodel = Arc::new(ViennaRNA::default());
         let rmodel = Metropolis::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
         let policy = shift_policy::ThreeAndFour;
 
         let sequence = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").expect("Invalid sequence?");
         let pairings =     PairTable::try_from(".((((....)))).((((........))))...............").expect("Invalid structure?");
 
-        let ltab = LoopTable::try_from((&sequence, &pairings, &emodel))
+        let ltab = LoopTable::try_from((sequence.clone(), &pairings, emodel.clone()))
             .expect("Invalid sequence/structure combination");
         let walker = LoopNeighbors::from((ltab, policy));
  
-        let mut simulator = SSA::from((walker, &rmodel));
+        let mut simulator = SSA::from((walker, rmodel));
 
         let mut steps = 0;
         simulator.simulate(&mut rng(), 100., |_, _, _, w| {
@@ -235,7 +239,7 @@ mod tests {
             println!("{}, {}", w.current_structure(), w.current_energy());
             let moves1 = w.propose_moves().collect::<Vec<_>>();
             let p = PairTable::try_from(&w.current_structure()).expect("Invalid structure?");
-            let ltab = LoopTable::try_from((&sequence, &p, &emodel))
+            let ltab = LoopTable::try_from((sequence.clone(), &p, emodel.clone()))
                 .expect("Invalid sequence/structure combination");
             let walker = LoopNeighbors::from((ltab, policy));
             let moves2 = walker.propose_moves().collect::<Vec<_>>();
@@ -250,7 +254,7 @@ mod tests {
     fn test_simple_ssa_simulation() {
         setup_ssa_input!(walker, rmodel, "GUACACGUCG", "..........");
         let mut rng = StdRng::seed_from_u64(42);
-        let mut simulator = SSA::from((walker, &rmodel));
+        let mut simulator = SSA::from((walker, rmodel));
 
         let mut steps = 0;
         simulator.simulate(&mut rng, 1.0, |t, tinc, flux, _| {
@@ -268,7 +272,7 @@ mod tests {
     fn test_cotr_ssa_simulation() {
         setup_ssa_input!(walker, rmodel, "GUACACGUCG", "......");
         let mut rng = StdRng::seed_from_u64(42);
-        let mut simulator = SSA::from((walker, &rmodel));
+        let mut simulator = SSA::from((walker, rmodel));
 
         simulator.co_simulate(&mut rng, 
             &[4000.0, 4000.0, 4000.0, 4000.0, 4000.0], 

@@ -97,43 +97,44 @@ fn main() -> Result<()> {
             println!("A new timeline file will be created: {}", tln_path.display());
             Timeline::new(&times, Arc::clone(&shared_macrostates))
         };
+    let amodel = Arc::new(cli.energy.build_model());
 
     let clk = cli.kinetics;
     let timelines: Vec<_> =
         match (clk.rate_model, clk.k3ws.is_some(), clk.k4ws.is_some()) {
             (RateModelKind::Metropolis, false, false) => {
                 let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k3ws);
-                let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, NoShift))
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, NoShift))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-                run_timecourse(moves, &rmodel, cli.simulation.t_end, cli.num_sims as u64,
+                run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
             (RateModelKind::Metropolis, true, false) => {
                 let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k3ws);
-                let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, ThreeWayOnly))
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, ThreeWayOnly))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-                run_timecourse(moves, &rmodel, cli.simulation.t_end, cli.num_sims as u64,
+                run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
             (RateModelKind::Metropolis, false, true) => {
                 let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k3ws);
-                let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, FourWayOnly))
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, FourWayOnly))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-                run_timecourse(moves, &rmodel, cli.simulation.t_end, cli.num_sims as u64,
+                run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
             (RateModelKind::Metropolis, true, true) => {
                 let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k3ws);
-                let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, ThreeAndFour))
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, ThreeAndFour))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-                run_timecourse(moves, &rmodel, cli.simulation.t_end, cli.num_sims as u64,
+                run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
             (RateModelKind::Kawasaki, false, false) => {
                 let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, None, None);
-                let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, NoShift))
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, NoShift))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-                run_timecourse(moves, &rmodel, cli.simulation.t_end, cli.num_sims as u64,
+                run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
             (RateModelKind::Kawasaki, _, _) => {
@@ -155,9 +156,9 @@ fn main() -> Result<()> {
 }
 
 
-fn run_timecourse<'t, 'a, W, K, E>(
+fn run_timecourse<'t, W, K, E>(
     moves: W,
-    rmodel: &'a K,
+    rmodel: K,
     t_end: f64,
     num_sims: u64,
     registry: Arc<MacrostateRegistry<'t, E>>,
@@ -165,9 +166,9 @@ fn run_timecourse<'t, 'a, W, K, E>(
 ) -> impl ParallelIterator<Item = Timeline<'t, E>>
 where
     W: Walker + Clone + Send + Sync,
-    K: RateModel + Sync,
+    K: RateModel + Sync + Clone + std::marker::Send,
     E: EnergyModel + Sync,
-    SSA<'a, W, K>: From<(W, &'a K)>,
+    SSA<W, K>: From<(W, K)>,
 {
     println!("Simulation progress:");
     let pb = ProgressBar::new(num_sims);
@@ -186,7 +187,7 @@ where
                 let registry = Arc::clone(&registry);
                 let mut timeline = Timeline::new(times, registry);
 
-                let mut simulator = SSA::from((moves.clone(), rmodel));
+                let mut simulator = SSA::from((moves.clone(), rmodel.clone()));
                 let mut t_idx = 0;
                 simulator.simulate(
                     &mut rng(),

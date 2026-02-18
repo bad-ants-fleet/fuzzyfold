@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::sync::Arc;
 use colored::*;
 use clap::Args;
 use clap::Parser;
@@ -82,7 +83,7 @@ fn init_logging(verbosity: u8) {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     init_logging(cli.lmin.verbose);
-    let emodel = cli.energy.build_model();
+    let emodel = Arc::new(cli.energy.build_model());
     let (header, sequence, structure) = read_eval_input(&cli.lmin.input)?;
     let pairings = PairTable::try_from(&structure)?;
 
@@ -106,25 +107,25 @@ fn main() -> Result<()> {
     match (cli.lmin.three_way_shifts, cli.lmin.four_way_shifts) {
         (false, false) => {
             let mut moves = LoopNeighbors::try_from(
-                (&sequence, &pairings, &emodel, NoShift)
+                (sequence, &pairings, emodel, NoShift)
             ).expect("failed to build loop table");
             do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
         }
         (true, false) => {
             let mut moves = LoopNeighbors::try_from(
-                (&sequence, &pairings, &emodel, ThreeWayOnly)
+                (sequence, &pairings, emodel, ThreeWayOnly)
             ).expect("failed to build loop table");
             do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
         }
         (false, true) => {
             let mut moves = LoopNeighbors::try_from(
-                (&sequence, &pairings, &emodel, FourWayOnly)
+                (sequence, &pairings, emodel, FourWayOnly)
             ).expect("failed to build loop table");
             do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
         }
         (true, true) => {
             let mut moves = LoopNeighbors::try_from(
-                (&sequence, &pairings, &emodel, ThreeAndFour)
+                (sequence, &pairings, emodel, ThreeAndFour)
             ).expect("failed to build loop table");
             do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
         }
@@ -132,8 +133,8 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn do_enumerate<'a, E: EnergyModel, P: ShiftPolicy>(
-    moves: &mut LoopNeighbors<'a, E, P>,
+fn do_enumerate<E: EnergyModel, P: ShiftPolicy>(
+    moves: &mut LoopNeighbors<E, P>,
     delta: i32,
     distance: usize,
     sorted: bool,

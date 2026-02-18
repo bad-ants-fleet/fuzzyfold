@@ -170,6 +170,7 @@ impl ThreeWayNeighbors {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use ff_structure::PairTable;
     use ff_energy::ViennaRNA;
     use ff_energy::NucleotideVec;
@@ -180,7 +181,7 @@ mod tests {
             let sequence = NucleotideVec::from_lossy($seq);
             let pairings = PairTable::try_from($db)
                 .expect("Invalid structure");
-            let $name = LoopTable::try_from((&sequence, &pairings, &model))
+            let $name = LoopTable::try_from((sequence, &pairings, Arc::new(model)))
                 .expect("Invalid sequence/structure combination");
         };
     }

@@ -1,4 +1,5 @@
 use rand::rng;
+use std::sync::Arc;
 use clap::Parser;
 use anyhow::Result;
 use anyhow::bail;
@@ -55,7 +56,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // --- Build simulator ---
-    let emodel = cli.energy.build_model();
+    let emodel = Arc::new(cli.energy.build_model());
 
 
     let (header, sequence, structure) =
@@ -92,33 +93,33 @@ fn main() -> Result<()> {
     match (clk.rate_model, clk.k3ws.is_some(), clk.k4ws.is_some()) {
         (RateModelKind::Metropolis, false, false) => {
             let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, shift_policy::NoShift))
+            let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::NoShift))
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, &rmodel, &times, cli.silent, cli.num_steps);
+            run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
         },
         (RateModelKind::Metropolis, true, false) => {
             let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, shift_policy::ThreeWayOnly))
+            let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::ThreeWayOnly))
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, &rmodel, &times, cli.silent, cli.num_steps);
+            run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
         },
         (RateModelKind::Metropolis, false, true) => {
             let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, shift_policy::FourWayOnly))
+            let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::FourWayOnly))
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, &rmodel, &times, cli.silent, cli.num_steps);
+            run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
         },
         (RateModelKind::Metropolis, true, true) => {
             let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, shift_policy::ThreeAndFour))
+            let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::ThreeAndFour))
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, &rmodel, &times, cli.silent, cli.num_steps);
+            run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
         },
         (RateModelKind::Kawasaki, false, false) => {
             let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = LoopNeighbors::try_from((&sequence, &pairings, &emodel, shift_policy::NoShift))
+            let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::NoShift))
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, &rmodel, &times, cli.silent, cli.num_steps);
+            run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
         },
         (RateModelKind::Kawasaki, _, _) => {
             bail!("Shift moves are only available for the Metropolis model.")
@@ -129,15 +130,15 @@ fn main() -> Result<()> {
 }
 
 
-fn run_simulator<'a, W: Walker + std::fmt::Display, K: RateModel>(
+fn run_simulator<W: Walker + std::fmt::Display, K: RateModel>(
     moves: W,
-    rmodel: &'a K,
+    rmodel: K,
     times: &[f64],
     silent: bool,
     num_steps: usize,
 )
 where
-    SSA<'a, W, K>: From<(W, &'a K)>,
+    SSA<W, K>: From<(W, K)>,
 {
     let mut simulator = SSA::from((moves, rmodel));
 

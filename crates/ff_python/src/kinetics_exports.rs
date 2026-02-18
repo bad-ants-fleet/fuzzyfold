@@ -1,9 +1,11 @@
-use ff_structure::DotBracketVec;
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
 
-use rand::rng;
+use std::sync::Arc;
+use rand::SeedableRng;
+use rand::rngs::SmallRng;
 
+use ff_structure::DotBracketVec;
 use ff_structure::MultiPairTable;
 use ff_energy::NucleotideVec;
 use ff_energy::ViennaRNA as VRNA;
@@ -16,13 +18,13 @@ use ff_kinetics::LoopNeighbors;
 
 #[pyclass]
 pub struct Simulator {
-    energy_model: VRNA,
+    energy_model: Arc<VRNA>,
     rate_model: Metropolis,
 }
 
+
 #[pymethods]
 impl Simulator {
-
     #[new]
     #[pyo3(signature = (
         temperature=37.0,
@@ -54,92 +56,140 @@ impl Simulator {
         );
 
         Ok(Self {
-            energy_model,
+            energy_model: Arc::new(energy_model),
             rate_model,
         })
     }
 
     #[pyo3(signature = (
-        sequence,
-        start,
-        t_ext=None,
-        t_end=1.0,
-        silent=false,
+            sequence,
+            start=None,
+            t_ext=None,
+            t_end=1.0,
     ))]
     fn simulate(
         &self,
-        py: Python<'_>,
         sequence: &str,
         start: Option<&str>,
         t_ext: Option<f64>,
         t_end: f64,
-        silent: bool,
-    ) -> PyResult<Vec<(String, i32, f64, f64, f64)>> {
+    ) -> PyResult<SimulationIterator> {
 
-        // Convert sequence
         let seq = NucleotideVec::try_from(sequence)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-        let start = match start {
+        let start_db = match start {
             Some(s) => DotBracketVec::try_from(s)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?,
             None => DotBracketVec::try_from(".")
                 .map_err(|e| PyValueError::new_err(e.to_string()))?,
         };
 
-        if start.len() < seq.len() && t_ext.is_none() {
+        if start_db.len() < seq.len() && t_ext.is_none() {
             return Err(PyValueError::new_err(
-                    "t_ext must be provided when the start stucture is shorter than the sequence length!",
+                    "t_ext must be provided when start is shorter than sequence",
             ));
         }
 
-        let times: Vec<f64> = if let Some(t_ext) = t_ext {
-            let mut v = vec![t_ext; sequence.len() - start.len()];
+        let times = if let Some(dt) = t_ext {
+            let mut v = vec![dt; sequence.len() - start_db.len()];
             v.push(t_end);
             v
-        } else { 
-            vec![t_end] 
+        } else {
+            vec![t_end]
         };
 
-        // Convert source structure
-        let start = MultiPairTable::try_from(&start)
+        let start_pt = MultiPairTable::try_from(&start_db)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-        // Build move set (using stored shift_cfg)
-        let moves = LoopNeighbors::try_from((
-            &seq,
-            &start,
-            &self.energy_model,
-            shift_policy::NoShift,
+        let walker = LoopNeighbors::try_from((
+                seq,
+                &start_pt,
+                Arc::clone(&self.energy_model),
+                shift_policy::NoShift,
         ))
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let mut results = Vec::new();
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-        py.allow_threads(|| {
-            let mut ssa = SSA::from((moves, &self.rate_model));
+        let ssa = SSA::from((walker, self.rate_model));
 
-            if silent {
-                ssa.co_simulate(&mut rng(), &times, |_, _, _, _| true);
-                let cs = ssa.current_structure().to_string();
-                let en = ssa.current_energy();
-                results.push((cs, en, t_end, 0.0, 0.0));
-            } else {
-                ssa.co_simulate(&mut rng(), &times, 
-                    |t, tinc, flux, w| {
-                        results.push((
-                                w.to_string(),
-                                w.current_energy(),
-                                t,
-                                tinc,
-                                1.0 / flux,
-                        ));
-                        true 
-                    });
-            }
-        });
-
-        Ok(results)
+        Ok(SimulationIterator {
+            ssa,
+            rng: SmallRng::from_os_rng(),
+            times,
+            elapsed: 0.0,
+            finished: false,
+        })
     }
 }
+
+#[pyclass]
+pub struct SimulationIterator {
+    ssa: SSA<LoopNeighbors<VRNA, shift_policy::NoShift>, Metropolis>,
+    rng: rand::rngs::SmallRng,
+    times: Vec<f64>,
+    elapsed: f64,
+    finished: bool,
+}
+
+#[pymethods]
+impl SimulationIterator {
+
+    fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
+        slf
+    }
+
+    fn __next__(
+        mut slf: PyRefMut<Self>
+    ) -> Option<(String, i32, f64, f64, f64)> {
+
+        let this: &mut Self = &mut slf;
+
+        if this.finished {
+            return None;
+        }
+
+        let mut produced: Option<(String, i32, f64, f64, f64)> = None;
+
+        let rng = &mut this.rng;
+        let mut mytinc = 0.0;
+
+        let mut first_pass = true;
+        this.ssa.co_simulate(
+            rng,
+            &this.times,
+            |t, tinc, flux, w| {
+                if first_pass {
+                    mytinc = tinc.min(this.times[0]);
+                    produced = Some((
+                            w.to_string(),
+                            w.current_energy(),
+                            this.elapsed + t,
+                            mytinc,
+                            flux,
+                    ));
+                    this.elapsed += mytinc;
+                    first_pass = false;
+                    // advance the simulator to update the structure.
+                    true
+                } else {
+                    false
+                }
+        });
+
+        if (this.times[0] - mytinc).abs() < f64::EPSILON {
+            this.times.remove(0); 
+            if this.times.is_empty() {
+                this.finished = true;
+            }
+        } else {
+            assert!(this.times[0] > mytinc);
+            this.times[0] -= mytinc;
+        }
+        produced
+    }
+}
+
+
+
 
 

@@ -73,7 +73,7 @@ struct Frame {
     max_delta: i32,
 }
 
-impl<'a, E: EnergyModel, P: ShiftPolicy> LoopNeighbors<'a, E, P> {
+impl<E: EnergyModel, P: ShiftPolicy> LoopNeighbors<E, P> {
     pub fn all_moves(&self) -> Vec<(Move, i32)> {
         self.propose_moves().collect()
     }

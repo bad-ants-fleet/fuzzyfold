@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::Arc;
 use nohash_hasher::IntMap;
 
 use ff_structure::NAIDX;
@@ -18,9 +19,9 @@ type LoopEntry = (NearestNeighborLoop, i32);
 ///
 /// Keeps track of base-pairs and the current energy for convenience.
 ///
-pub struct LoopTable<'a, E: EnergyModel> {
-    sequence: &'a NucleotideVec,
-    model: &'a E,
+pub struct LoopTable<E: EnergyModel> {
+    sequence: NucleotideVec,
+    model: Arc<E>,
     loops: Vec<LoopEntry>,
     stale: Vec<usize>,
     loop_lookup: Vec<usize>,
@@ -30,11 +31,11 @@ pub struct LoopTable<'a, E: EnergyModel> {
 
 /// Clone creates an independent loop bookkeeping state,
 /// but shares the underlying sequence and energy model.
-impl<'a, E: EnergyModel> Clone for LoopTable<'a, E> {
+impl<E: EnergyModel> Clone for LoopTable<E> {
     fn clone(&self) -> Self {
         Self {
-            sequence: self.sequence,
-            model: self.model,
+            sequence: self.sequence.clone(),
+            model: self.model.clone(),
             loops: self.loops.clone(),
             stale: self.stale.clone(),
             loop_lookup: self.loop_lookup.clone(),
@@ -44,7 +45,7 @@ impl<'a, E: EnergyModel> Clone for LoopTable<'a, E> {
     }
 }
 
-impl<'a, E: EnergyModel> LoopTable<'a, E> {
+impl<E: EnergyModel> LoopTable<E> {
     pub fn sequence_length(&self) -> usize {
         self.sequence.len()
     }
@@ -58,7 +59,7 @@ impl<'a, E: EnergyModel> LoopTable<'a, E> {
     }
 
     pub fn energy_of_loop(&self, nn_loop: &NearestNeighborLoop) -> i32 {
-        self.model.energy_of_loop(self.sequence, nn_loop)
+        self.model.energy_of_loop(&self.sequence, nn_loop)
     }
 
     pub fn loops_len(&self) -> usize {
@@ -140,7 +141,7 @@ impl<'a, E: EnergyModel> LoopTable<'a, E> {
     }
 }
 
-impl<'a, E: EnergyModel> fmt::Display for LoopTable<'a, E> {
+impl<E: EnergyModel> fmt::Display for LoopTable<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Convert sequence to string
         let mut dbr = vec!['.'; self.loop_lookup.len()];
@@ -153,7 +154,7 @@ impl<'a, E: EnergyModel> fmt::Display for LoopTable<'a, E> {
     }
 }
 
-impl<'a, E: EnergyModel> fmt::Debug for LoopTable<'a, E> {
+impl<E: EnergyModel> fmt::Debug for LoopTable<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LoopTable")
             .field("loop_lookup", &self.loop_lookup)
@@ -162,8 +163,8 @@ impl<'a, E: EnergyModel> fmt::Debug for LoopTable<'a, E> {
     }
 }
 
-impl<'a, E: EnergyModel> From<&LoopTable<'a, E>> for DotBracketVec {
-    fn from(ltab: &LoopTable<'a, E>) -> Self {
+impl<E: EnergyModel> From<&LoopTable<E>> for DotBracketVec {
+    fn from(ltab: &LoopTable<E>) -> Self {
         // Use the same logic as your Display impl, but avoid allocating a String unnecessarily
         let mut vec = vec![DotBracket::Unpaired; ltab.lookup_len()];
         for (i, j) in ltab.pairs() {
@@ -174,11 +175,11 @@ impl<'a, E: EnergyModel> From<&LoopTable<'a, E>> for DotBracketVec {
     }
 }
 
-impl<'a, T: LoopDecomposition, E: EnergyModel> TryFrom<(&'a NucleotideVec, &T, &'a E)> 
-for LoopTable<'a, E> {
+impl<T: LoopDecomposition, E: EnergyModel> TryFrom<(NucleotideVec, &T, Arc<E>)> 
+for LoopTable<E> {
     type Error = String;
 
-    fn try_from((sequence, pairings, model): (&'a NucleotideVec, &T, &'a E)
+    fn try_from((sequence, pairings, model): (NucleotideVec, &T, Arc<E>)
     ) -> Result<Self, Self::Error> {
 
         let mut loops = Vec::new();
@@ -195,7 +196,7 @@ for LoopTable<'a, E> {
                 current_len = b;
             }
 
-            let loop_energy = model.energy_of_loop(sequence, l);
+            let loop_energy = model.energy_of_loop(&sequence, l);
             energy += loop_energy;
 
             if let Some((i, j)) = l.closing() {
