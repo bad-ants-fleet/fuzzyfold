@@ -54,10 +54,7 @@ pub struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-
-    // --- Build simulator ---
     let emodel = Arc::new(cli.energy.build_model());
-
 
     let (header, sequence, structure) =
         if cli.t_ext.is_some() {
@@ -116,7 +113,7 @@ fn main() -> Result<()> {
             run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
         },
         (RateModelKind::Kawasaki, false, false) => {
-            let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+            let rmodel = Kawasaki::new(emodel.temperature(), clk.k0);
             let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::NoShift))
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
             run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);

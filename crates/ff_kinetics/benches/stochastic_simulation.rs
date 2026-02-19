@@ -16,7 +16,7 @@ use ff_energy::EnergyModel;
 use ff_energy::ViennaRNA;
 use ff_kinetics::Metropolis;
 use ff_kinetics::LoopNeighbors;
-use ff_kinetics::shift_policy::*;
+use ff_kinetics::shift_policy;
 use ff_kinetics::SSA;
 
 const INPUT_L50: &str = concat!(env!("CARGO_MANIFEST_DIR"), 
@@ -85,7 +85,7 @@ fn simulate_benchmark(c: &mut Criterion) {
                 || &inputs, 
                 |inputs| {
                     for (seq, pt) in inputs {
-                        let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), NoShift))
+                        let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), shift_policy::NoShift))
                             .expect("Failed to build LoopNeighbors");
                         let mut simulator = SSA::from((moves, rmodel));
 
@@ -103,9 +103,9 @@ fn simulate_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-fn simulate_shift_benchmark(c: &mut Criterion) {
+fn simulate_three_way_shift_benchmark(c: &mut Criterion) {
     let emodel = Arc::new(ViennaRNA::default());
-    let rmodel = Metropolis::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
+    let rmodel = Metropolis::new(emodel.temperature(), 1.0, Some(1.0), None);
     let mut group = c.benchmark_group("Seeded stochastic simulations with shift moves.");
     group.measurement_time(std::time::Duration::from_secs(50)); 
 
@@ -117,7 +117,7 @@ fn simulate_shift_benchmark(c: &mut Criterion) {
                 || &inputs, 
                 |inputs| {
                     for (seq, pt) in inputs {
-                        let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), ThreeWayOnly))
+                        let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), shift_policy::ThreeWayOnly))
                             .expect("Failed to build LoopNeighbors");
                         let mut simulator = SSA::from((moves, rmodel));
 
@@ -135,6 +135,6 @@ fn simulate_shift_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, simulate_benchmark, simulate_shift_benchmark);
+criterion_group!(benches, simulate_benchmark, simulate_three_way_shift_benchmark);
 criterion_main!(benches);
 

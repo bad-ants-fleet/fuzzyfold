@@ -63,12 +63,10 @@ impl RateModel for Metropolis {
 pub struct Kawasaki {
     beta: f64, // 2 * k_B * T in kcal/mol
     k0: f64,
-    k3ws: f64,
-    k4ws: f64,
 }
 
 impl Kawasaki {
-    pub fn new(celsius: f64, k0: f64, k3ws: Option<f64>, k4ws: Option<f64>) -> Self {
+    pub fn new(celsius: f64, k0: f64) -> Self {
         if k0 < 0. {
             panic!("k0 must not be negative!");
         }
@@ -76,8 +74,6 @@ impl Kawasaki {
         Self { 
             beta: KB * t_kelvin * 2.0,
             k0,
-            k3ws: k3ws.unwrap_or(0.0),
-            k4ws: k4ws.unwrap_or(0.0),
         }
     }
 }
@@ -88,12 +84,7 @@ impl RateModel for Kawasaki {
             Move::Add { .. } | Move::Del { .. } => {
                 self.k0 * ((-delta_e as f64 / 100.) / self.beta).exp()
             },
-            Move::ShiftIK { .. } | Move::ShiftJK { .. } => {
-                self.k3ws * ((-delta_e as f64 / 100.) / self.beta).exp()
-            },
-            Move::ShiftILJK { .. } | Move::ShiftIKLJ { .. } => {
-                self.k4ws * ((-delta_e as f64 / 100.) / self.beta).exp()
-            },
+            _ => unreachable!("Kawasaki does not support shift activation energies.")
         }
 
     }

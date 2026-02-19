@@ -8,17 +8,18 @@ use rand::rngs::SmallRng;
 use ff_structure::DotBracketVec;
 use ff_structure::MultiPairTable;
 use ff_energy::NucleotideVec;
-use ff_energy::ViennaRNA as VRNA;
+use ff_energy::ViennaRNA;
 use ff_kinetics::SSA;
 use ff_kinetics::shift_policy;
 use ff_kinetics::Metropolis;
 use ff_kinetics::Walker;
 use ff_kinetics::LoopNeighbors;
 
+//TODO: support shifts, rename to arrhenius
 
 #[pyclass]
 pub struct Simulator {
-    energy_model: Arc<VRNA>,
+    energy_model: Arc<ViennaRNA>,
     rate_model: Metropolis,
 }
 
@@ -45,7 +46,7 @@ impl Simulator {
             ));
         }
 
-        let mut energy_model = VRNA::default();
+        let mut energy_model = ViennaRNA::default();
         energy_model.set_temperature(temperature);
 
         let rate_model = Metropolis::new(
@@ -124,7 +125,7 @@ impl Simulator {
 
 #[pyclass]
 pub struct SimulationIterator {
-    ssa: SSA<LoopNeighbors<VRNA, shift_policy::NoShift>, Metropolis>,
+    ssa: SSA<LoopNeighbors<ViennaRNA, shift_policy::NoShift>, Metropolis>,
     rng: rand::rngs::SmallRng,
     times: Vec<f64>,
     elapsed: f64,

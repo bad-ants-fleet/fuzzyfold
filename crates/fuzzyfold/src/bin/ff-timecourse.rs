@@ -131,7 +131,7 @@ fn main() -> Result<()> {
                     Arc::clone(&shared_macrostates), &times).collect()
             },
             (RateModelKind::Kawasaki, false, false) => {
-                let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, None, None);
+                let rmodel = Kawasaki::new(emodel.temperature(), clk.k0);
                 let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, NoShift))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
                 run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
