@@ -6,7 +6,6 @@ use rayon::prelude::*;
 use rand::rng;
 use clap::Parser;
 use anyhow::Result;
-use anyhow::bail;
 use colored::*;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
@@ -15,8 +14,6 @@ use serde_json::to_string_pretty;
 use ff_structure::PairTable;
 use ff_energy::EnergyModel;
 use ff_kinetics::RateModel;
-use ff_kinetics::Metropolis;
-use ff_kinetics::Kawasaki;
 use ff_kinetics::Walker;
 use ff_kinetics::LoopNeighbors;
 use ff_kinetics::shift_policy::*;
@@ -27,7 +24,6 @@ use ff_kinetics::MacrostateRegistry;
 
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
-use fuzzyfold::kinetics_parsers::RateModelKind;
 use fuzzyfold::kinetics_parsers::RateModelArguments;
 use fuzzyfold::kinetics_parsers::TimelineParameters;
 
@@ -63,6 +59,7 @@ fn main() -> Result<()> {
 
     // --- Build simulator ---
     let emodel = cli.energy.build_model();
+    let rmodel = cli.kinetics.build_model(emodel.temperature());
 
     let (header, sequence, structure) = read_eval_input(&cli.input)?;
     let pairings = PairTable::try_from(&structure)?;
@@ -99,46 +96,31 @@ fn main() -> Result<()> {
         };
     let amodel = Arc::new(cli.energy.build_model());
 
-    let clk = cli.kinetics;
     let timelines: Vec<_> =
-        match (clk.rate_model, clk.k3ws.is_some(), clk.k4ws.is_some()) {
-            (RateModelKind::Metropolis, false, false) => {
-                let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k3ws);
+        match (rmodel.k3ws().is_some(), rmodel.k4ws().is_some()) {
+            (false, false) => {
                 let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, NoShift))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
                 run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
-            (RateModelKind::Metropolis, true, false) => {
-                let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k3ws);
+            (true, false) => {
                 let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, ThreeWayOnly))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
                 run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
-            (RateModelKind::Metropolis, false, true) => {
-                let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k3ws);
+            (false, true) => {
                 let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, FourWayOnly))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
                 run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
-            (RateModelKind::Metropolis, true, true) => {
-                let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k3ws);
+            (true, true) => {
                 let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, ThreeAndFour))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
                 run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
-            },
-            (RateModelKind::Kawasaki, false, false) => {
-                let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, None, None);
-                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, NoShift))
-                    .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-                run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
-                    Arc::clone(&shared_macrostates), &times).collect()
-            },
-            (RateModelKind::Kawasaki, _, _) => {
-                bail!("Shift moves are only available for the Metropolis model.")
             },
         };
 

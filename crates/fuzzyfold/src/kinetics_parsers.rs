@@ -1,13 +1,7 @@
 use clap::Args;
-use clap::ValueEnum;
 use anyhow::bail;
 use anyhow::Result;
-
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum RateModelKind {
-    Metropolis,
-    Kawasaki,
-}
+use ff_kinetics::Arrhenius;
 
 #[derive(Debug, Args)]
 pub struct RateModelArguments {
@@ -22,11 +16,15 @@ pub struct RateModelArguments {
     /// Rate constant for four-way shift moves (optional, default = off).
     #[arg(long)]
     pub k4ws: Option<f64>,
-
-    /// Select a rate model.
-    #[arg(long, value_enum, default_value = "metropolis")]
-    pub rate_model: RateModelKind,
 }
+
+impl RateModelArguments {
+    /// Validate that all parameters make sense.
+    pub fn build_model(&self, celsius: f64) -> Arrhenius {
+        Arrhenius::new(celsius, self.k0, self.k3ws, self.k4ws)
+    }
+}
+
 
 #[derive(Debug, Args)]
 pub struct TimelineParameters {

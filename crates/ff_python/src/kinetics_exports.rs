@@ -6,12 +6,12 @@ use rand::SeedableRng;
 use rand::rngs::SmallRng;
 
 use ff_structure::DotBracketVec;
-use ff_structure::MultiPairTable;
+use ff_structure::PairTable;
 use ff_energy::NucleotideVec;
 use ff_energy::ViennaRNA as VRNA;
 use ff_kinetics::SSA;
 use ff_kinetics::shift_policy;
-use ff_kinetics::Metropolis;
+use ff_kinetics::Arrhenius;
 use ff_kinetics::Walker;
 use ff_kinetics::LoopNeighbors;
 
@@ -19,7 +19,7 @@ use ff_kinetics::LoopNeighbors;
 #[pyclass]
 pub struct Simulator {
     energy_model: Arc<VRNA>,
-    rate_model: Metropolis,
+    rate_model: Arrhenius,
 }
 
 
@@ -27,13 +27,13 @@ pub struct Simulator {
 impl Simulator {
     #[new]
     #[pyo3(signature = (
-        temperature=37.0,
+        celsius=37.0,
         k0=1e5,
         k3ws=0.0,
         k4ws=0.0,
     ))]
     fn new(
-        temperature: f64,
+        celsius: f64,
         k0: f64,
         k3ws: f64,
         k4ws: f64,
@@ -46,10 +46,10 @@ impl Simulator {
         }
 
         let mut energy_model = VRNA::default();
-        energy_model.set_temperature(temperature);
+        energy_model.set_temperature(celsius);
 
-        let rate_model = Metropolis::new(
-            temperature,
+        let rate_model = Arrhenius::new(
+            celsius,
             k0,
             Some(k3ws),
             Some(k4ws),
@@ -99,33 +99,95 @@ impl Simulator {
             vec![t_end]
         };
 
-        let start_pt = MultiPairTable::try_from(&start_db)
+        let start_pt = PairTable::try_from(&start_db)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-        let walker = LoopNeighbors::try_from((
+        match (self.rate_model.k3ws().is_some(), self.rate_model.k4ws().is_some()) {
+            (false, false) => build_iterator(
                 seq,
                 &start_pt,
                 Arc::clone(&self.energy_model),
+                self.rate_model,
+                times,
                 shift_policy::NoShift,
-        ))
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                SSAKind::NoShift,
+            ),
 
-        let ssa = SSA::from((walker, self.rate_model));
+            (true, false) => build_iterator(
+                seq,
+                &start_pt,
+                Arc::clone(&self.energy_model),
+                self.rate_model,
+                times,
+                shift_policy::ThreeWayOnly,
+                SSAKind::ThreeWayOnly,
+            ),
 
-        Ok(SimulationIterator {
-            ssa,
-            rng: SmallRng::from_os_rng(),
-            times,
-            elapsed: 0.0,
-            finished: false,
-        })
-    }
+            (false, true) => build_iterator(
+                seq,
+                &start_pt,
+                Arc::clone(&self.energy_model),
+                self.rate_model,
+                times,
+                shift_policy::FourWayOnly,
+                SSAKind::FourWayOnly,
+            ),
+
+            (true, true) => build_iterator(
+                seq,
+                &start_pt,
+                Arc::clone(&self.energy_model),
+                self.rate_model,
+                times,
+                shift_policy::ThreeAndFour,
+                SSAKind::ThreeAndFour,
+            ),
+        }
+   }
+}
+
+fn build_iterator<P>(
+    seq: NucleotideVec,
+    start_pt: &PairTable,
+    energy_model: Arc<VRNA>,
+    rate_model: Arrhenius,
+    times: Vec<f64>,
+    policy: P,
+    wrap: fn(SSA<LoopNeighbors<VRNA, P>, Arrhenius>) -> SSAKind,
+) -> PyResult<SimulationIterator>
+where
+    P: shift_policy::ShiftPolicy,
+{
+    let walker = LoopNeighbors::try_from((
+        seq,
+        start_pt,
+        energy_model,
+        policy,
+    ))
+    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    let ssa = wrap(SSA::from((walker, rate_model)));
+
+    Ok(SimulationIterator {
+        ssa,
+        rng: SmallRng::from_os_rng(),
+        times,
+        elapsed: 0.0,
+        finished: false,
+    })
+}
+
+enum SSAKind {
+    NoShift(SSA<LoopNeighbors<VRNA, shift_policy::NoShift>, Arrhenius>),
+    ThreeWayOnly(SSA<LoopNeighbors<VRNA, shift_policy::ThreeWayOnly>, Arrhenius>),
+    FourWayOnly(SSA<LoopNeighbors<VRNA, shift_policy::FourWayOnly>, Arrhenius>),
+    ThreeAndFour(SSA<LoopNeighbors<VRNA, shift_policy::ThreeAndFour>, Arrhenius>),
 }
 
 #[pyclass]
 pub struct SimulationIterator {
-    ssa: SSA<LoopNeighbors<VRNA, shift_policy::NoShift>, Metropolis>,
-    rng: rand::rngs::SmallRng,
+    ssa: SSAKind,
+    rng: SmallRng,
     times: Vec<f64>,
     elapsed: f64,
     finished: bool,
@@ -152,29 +214,43 @@ impl SimulationIterator {
 
         let rng = &mut this.rng;
         let mut mytinc = 0.0;
-
         let mut first_pass = true;
-        this.ssa.co_simulate(
-            rng,
-            &this.times,
-            |t, tinc, flux, w| {
-                if first_pass {
-                    mytinc = tinc.min(this.times[0]);
-                    produced = Some((
-                            w.to_string(),
-                            w.current_energy(),
-                            this.elapsed + t,
-                            mytinc,
-                            flux,
-                    ));
-                    this.elapsed += mytinc;
-                    first_pass = false;
-                    // advance the simulator to update the structure.
-                    true
-                } else {
-                    false
-                }
-        });
+
+        macro_rules! dispatch_ssa {
+            ($ssa:expr) => {{
+                $ssa.co_simulate(
+                    rng,
+                    &this.times,
+                    |t, tinc, flux, w| {
+                        if first_pass {
+                            mytinc = tinc.min(this.times[0]);
+
+                            produced = Some((
+                                    w.to_string(),
+                                    w.current_energy(),
+                                    this.elapsed + t,
+                                    mytinc,
+                                    flux,
+                            ));
+
+                            this.elapsed += mytinc;
+                            first_pass = false;
+                            // advance the simulator to update the structure.
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                    );
+            }};
+        }
+
+        match &mut this.ssa {
+            SSAKind::NoShift(ssa) => dispatch_ssa!(ssa),
+            SSAKind::ThreeWayOnly(ssa) => dispatch_ssa!(ssa),
+            SSAKind::FourWayOnly(ssa) => dispatch_ssa!(ssa),
+            SSAKind::ThreeAndFour(ssa) => dispatch_ssa!(ssa),
+        }
 
         if (this.times[0] - mytinc).abs() < f64::EPSILON {
             this.times.remove(0); 
@@ -188,8 +264,5 @@ impl SimulationIterator {
         produced
     }
 }
-
-
-
 
 

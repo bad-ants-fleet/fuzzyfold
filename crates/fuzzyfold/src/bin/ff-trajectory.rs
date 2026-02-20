@@ -1,15 +1,12 @@
-use rand::rng;
-use std::sync::Arc;
 use clap::Parser;
 use anyhow::Result;
-use anyhow::bail;
 use colored::*;
+use rand::rng;
+use std::sync::Arc;
 
 use ff_structure::PairTable;
 use ff_energy::EnergyModel;
 use ff_kinetics::RateModel;
-use ff_kinetics::Metropolis;
-use ff_kinetics::Kawasaki;
 use ff_kinetics::Walker;
 use ff_kinetics::LoopNeighbors;
 use ff_kinetics::shift_policy;
@@ -19,7 +16,6 @@ use fuzzyfold::input_parsers::read_cotr_input;
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
 use fuzzyfold::kinetics_parsers::RateModelArguments;
-use fuzzyfold::kinetics_parsers::RateModelKind;
 //TODO: support seeded rng.
 
 #[derive(Debug, Parser)]
@@ -57,7 +53,7 @@ fn main() -> Result<()> {
 
     // --- Build simulator ---
     let emodel = Arc::new(cli.energy.build_model());
-
+    let rmodel = cli.kinetics.build_model(emodel.temperature());
 
     let (header, sequence, structure) =
         if cli.t_ext.is_some() {
@@ -89,40 +85,26 @@ fn main() -> Result<()> {
         vec![cli.t_end] 
     };
 
-    let clk = cli.kinetics;
-    match (clk.rate_model, clk.k3ws.is_some(), clk.k4ws.is_some()) {
-        (RateModelKind::Metropolis, false, false) => {
-            let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+    match (rmodel.k3ws().is_some(), rmodel.k4ws().is_some()) {
+        (false, false) => {
             let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::NoShift))
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
             run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
         },
-        (RateModelKind::Metropolis, true, false) => {
-            let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+        (true, false) => {
             let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::ThreeWayOnly))
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
             run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
         },
-        (RateModelKind::Metropolis, false, true) => {
-            let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+        (false, true) => {
             let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::FourWayOnly))
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
             run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
         },
-        (RateModelKind::Metropolis, true, true) => {
-            let rmodel = Metropolis::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
+        (true, true) => {
             let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::ThreeAndFour))
                 .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
             run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
-        },
-        (RateModelKind::Kawasaki, false, false) => {
-            let rmodel = Kawasaki::new(emodel.temperature(), clk.k0, clk.k3ws, clk.k4ws);
-            let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::NoShift))
-                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
-        },
-        (RateModelKind::Kawasaki, _, _) => {
-            bail!("Shift moves are only available for the Metropolis model.")
         },
     }
 

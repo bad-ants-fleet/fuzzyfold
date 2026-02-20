@@ -2,6 +2,11 @@
 
 All notable changes to this crate will be documented in this file.
 
+## under development
+- added Arrhenius, removed Metropolis/Kawasaki
+- removed lifetimes and added Arc<EnergyModel> for Python exports.
+- LoopTable now owns it's sequence! 
+
 ## [0.4.0] - 2026-02-06
 ### Added
 - three-way and four-way shift moves for Metropolis model.

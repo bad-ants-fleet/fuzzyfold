@@ -1,18 +1,33 @@
 import fuzzyfold as ff
 
 seq = "UGCCUAGAGAGUCAGGUGAU"
-db1 = ".((((.((...))))))."
+db1 = ".((((.((...))))))..."
 
-#emodel = ff.ViennaRNA()
-#print(emodel.energy_of_structure(seq, db1))
+# Testing energy evaluation.
+emodel = ff.ViennaRNA()
+print(emodel.energy_of_structure(seq, db1))
 
-ssa = ff.Simulator(k0 = 1)
+# Let's get a standard simulator (25C, why not?).
+ssa = ff.Simulator(celsius = 25, k0 = 1)
 
+
+# Simulate from start stucture:
 print(f"{seq}")
-for i, (ss, en, gt, ti, wt) in enumerate(ssa.simulate(seq, None, t_ext = 4, t_end = 4)):
-    print(f"{ss} {en/100:6.2f} {gt:12.8e} {ti:12.8e}")
+for ss, en, gtime, _tinc, _wtime in ssa.simulate(seq, db1, t_end = 4000):
+    print(f"{ss} {en/100:6.2f} {gtime:12.8e}")
 print(f"{seq}")
 
-# for line in ssa.simulate(seq, None, t_ext = 4000, t_end = 4000):
-#     print(line)
+# Co-transcriptional mode:
+print(f"{seq}")
+for ss, en, gtime, _tinc, _wtime in ssa.simulate(seq, None, t_ext = 4000, t_end = 4000):
+    print(f"{ss} {en/100:6.2f} {gtime:12.8e}")
+print(f"{seq}")
+
+# Co-transcriptional mode with shift moves:
+ssa = ff.Simulator(k0 = 1, k3ws = 1, k4ws = 1)
+print(f"{seq}")
+for ss, en, gtime, _tinc, _wtime in ssa.simulate(seq, None, t_ext = 4000, t_end = 4000):
+    print(f"{ss} {en/100:6.2f} {gtime:12.8e}")
+print(f"{seq}")
+
 

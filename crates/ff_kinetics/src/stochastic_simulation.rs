@@ -190,7 +190,7 @@ mod tests {
     use ff_energy::ViennaRNA;
     use ff_energy::EnergyModel;
     use ff_energy::NucleotideVec;
-    use crate::Metropolis;
+    use crate::Arrhenius;
     use crate::movesets::LoopNeighbors;
     use crate::movesets::shift_policy;
     use crate::movesets::loop_table::LoopTable;
@@ -199,7 +199,7 @@ mod tests {
     macro_rules! setup_ssa_input {
         ($wname:ident, $rname:ident, $seq:expr, $db:expr) => {
             let emodel = ViennaRNA::default();
-            let $rname = Metropolis::new(emodel.temperature(), 1.0, None, None);
+            let $rname = Arrhenius::new(emodel.temperature(), 1.0, None, None);
 
             let sequence = NucleotideVec::try_from($seq)
                 .expect("Invalid sequence?");
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn test_flux_after_moves() {
         let emodel = Arc::new(ViennaRNA::default());
-        let rmodel = Metropolis::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
+        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
         let policy = shift_policy::ThreeAndFour;
 
         let sequence = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").expect("Invalid sequence?");
