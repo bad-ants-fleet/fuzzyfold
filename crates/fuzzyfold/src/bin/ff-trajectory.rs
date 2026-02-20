@@ -50,8 +50,6 @@ pub struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-
-    // --- Build simulator ---
     let emodel = Arc::new(cli.energy.build_model());
     let rmodel = cli.kinetics.build_model(emodel.temperature());
 

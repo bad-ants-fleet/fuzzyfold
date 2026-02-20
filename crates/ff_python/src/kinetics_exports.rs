@@ -8,17 +8,18 @@ use rand::rngs::SmallRng;
 use ff_structure::DotBracketVec;
 use ff_structure::PairTable;
 use ff_energy::NucleotideVec;
-use ff_energy::ViennaRNA as VRNA;
+use ff_energy::ViennaRNA;
 use ff_kinetics::SSA;
 use ff_kinetics::shift_policy;
 use ff_kinetics::Arrhenius;
 use ff_kinetics::Walker;
 use ff_kinetics::LoopNeighbors;
 
+//TODO: support shifts, rename to arrhenius
 
 #[pyclass]
 pub struct Simulator {
-    energy_model: Arc<VRNA>,
+    energy_model: Arc<ViennaRNA>,
     rate_model: Arrhenius,
 }
 
@@ -45,7 +46,7 @@ impl Simulator {
             ));
         }
 
-        let mut energy_model = VRNA::default();
+        let mut energy_model = ViennaRNA::default();
         energy_model.set_temperature(celsius);
 
         let rate_model = Arrhenius::new(
@@ -149,11 +150,11 @@ impl Simulator {
 fn build_iterator<P>(
     seq: NucleotideVec,
     start_pt: &PairTable,
-    energy_model: Arc<VRNA>,
+    energy_model: Arc<ViennaRNA>,
     rate_model: Arrhenius,
     times: Vec<f64>,
     policy: P,
-    wrap: fn(SSA<LoopNeighbors<VRNA, P>, Arrhenius>) -> SSAKind,
+    wrap: fn(SSA<LoopNeighbors<ViennaRNA, P>, Arrhenius>) -> SSAKind,
 ) -> PyResult<SimulationIterator>
 where
     P: shift_policy::ShiftPolicy,
@@ -178,10 +179,10 @@ where
 }
 
 enum SSAKind {
-    NoShift(SSA<LoopNeighbors<VRNA, shift_policy::NoShift>, Arrhenius>),
-    ThreeWayOnly(SSA<LoopNeighbors<VRNA, shift_policy::ThreeWayOnly>, Arrhenius>),
-    FourWayOnly(SSA<LoopNeighbors<VRNA, shift_policy::FourWayOnly>, Arrhenius>),
-    ThreeAndFour(SSA<LoopNeighbors<VRNA, shift_policy::ThreeAndFour>, Arrhenius>),
+    NoShift(SSA<LoopNeighbors<ViennaRNA, shift_policy::NoShift>, Arrhenius>),
+    ThreeWayOnly(SSA<LoopNeighbors<ViennaRNA, shift_policy::ThreeWayOnly>, Arrhenius>),
+    FourWayOnly(SSA<LoopNeighbors<ViennaRNA, shift_policy::FourWayOnly>, Arrhenius>),
+    ThreeAndFour(SSA<LoopNeighbors<ViennaRNA, shift_policy::ThreeAndFour>, Arrhenius>),
 }
 
 #[pyclass]
