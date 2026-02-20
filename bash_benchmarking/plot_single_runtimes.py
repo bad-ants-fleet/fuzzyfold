@@ -3,7 +3,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-tag = "FF_metropolis"
+tag = "FF_silent_noshift"
 
 # Load VKF benchmark files
 files = {
@@ -61,8 +61,22 @@ plt.xscale("log")
 plt.yscale("log")
 plt.ylim(5e-3, 2e3)
 plt.xlim(5e0, 2e6)
+
+ax = plt.gca()
+
+# Grid
+plt.grid(True, which="major", linestyle="-", linewidth=0.6, alpha=0.6)
+plt.grid(True, which="minor", linestyle=":", linewidth=0.4, alpha=0.4)
+
+#ax.axhline(60, color="black", linestyle="--", linewidth=1, alpha=0.8, zorder=10)
+#ax.axhline(600, color="black", linestyle="--", linewidth=1, alpha=0.8, zorder=10)
+#ax.axvline(4000, color="black", linestyle="--", linewidth=1, alpha=0.8, zorder=10)
+
 plt.xlabel("Simulation time (--t-end)")
 plt.ylabel("Wall-clock runtime [s]")
 plt.title(f"{tag} (100 repeats)")
 plt.legend(ncol=2, fontsize=8)
-plt.savefig(f"{tag}.pdf")
+name = f"{tag}.svg"
+plt.savefig(name)
+print(f"Produced {name}")
+

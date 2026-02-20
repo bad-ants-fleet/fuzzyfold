@@ -11,11 +11,8 @@ fi
 
 TEXT="100000"
 
-# CALL="RNAfold"
-# TAG="RF"
-
 CALL="ff-trajectory --k0 1 --t-ext ${TEXT} --t-end ${TEXT} --silent"
-TAG="FF_silent_metropolis_cotr"
+#TAG="FF_silent_metropolis_cotr_extended2"
 
 # Output CSV
 RESULTS="simulate_benchmark_${TAG}_t${TEXT}.csv"

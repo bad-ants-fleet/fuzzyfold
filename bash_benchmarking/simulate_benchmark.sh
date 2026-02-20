@@ -9,23 +9,22 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-TIME="1000"
+TIME="10"
 
-CALL="ff-trajectory --k0 1 --ks 1 --t-end ${TIME} "
-TAG="FF_metropolis"
+# CALL="ff-trajectory --k0 1 --t-end ${TIME} --silent "
+# TAG="FF_silent_noshift"
 
-# CALL="ff-trajectory --k0 1 --ks 1 --t-end ${TIME} --silent "
-# TAG="FF_silent_metropolis"
-# 
-# CALL="ff-trajectory --k0 1 --ks 1 --t-end ${TIME} --silent --model kawasaki"
-# TAG="FF_silent_kawasaki"
-# 
-# CALL="ff-trajectory --k0 1 --ks 1 --t-end ${TIME} --silent --shift-moves "
-# TAG="FF_silent_metropolis_shift"
-#   
-# CALL="ff-trajectory --k0 1 --ks 1 --t-end ${TIME} --silent --model kawasaki --shift-moves"
-# TAG="FF_silent_kawasaki_shift"
- 
+# CALL="ff-trajectory --k0 1 --k3ws 1 --t-end ${TIME} --silent "
+# TAG="FF_silent_twshift"
+
+# CALL="ff-trajectory --k0 1 --k4ws 1 --t-end ${TIME} --silent "
+# TAG="FF_silent_fwshift"
+
+# CALL="ff-trajectory --k0 1 --k3ws 1 --k4ws 1 --t-end ${TIME} --silent "
+# TAG="FF_silent_shifts"
+
+# -------
+
 # CALL="Kinfold --noShift --fpt --met --time ${TIME} --start --logML --cut 99999" 
 # TAG="KF_metropolis"
  
