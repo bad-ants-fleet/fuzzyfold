@@ -31,7 +31,7 @@ impl ViennaRNA {
     fn new(temp_celsius: Option<f64>) -> Self {
         let mut model = VRNA::default();
         if let Some(t) = temp_celsius {
-            model.set_temperature(t);
+            model.reset_with_temperature(t);
         }
         Self { model }
     }

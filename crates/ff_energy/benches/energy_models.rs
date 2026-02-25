@@ -12,6 +12,7 @@ use ff_structure::MultiPairTable;
 use ff_energy::EnergyModel;
 use ff_energy::ViennaRNA;
 use ff_energy::NucleotideVec;
+use ff_energy::parameters::TURNER2004;
 
 const INPUT_L50: &str = concat!(env!("CARGO_MANIFEST_DIR"), 
     "/benches/data/benchmark_random_structures_len50.vrna");
@@ -100,14 +101,14 @@ fn load_multi_inputs(path: &str) -> Vec<(NucleotideVec, MultiPairTable)> {
 fn bench_model_init(c: &mut Criterion) {
     c.bench_function("ViennaRNA::default()", |b| {
         b.iter(|| {
-            let model = ViennaRNA::default();
+            let model = ViennaRNA::new(&TURNER2004);
             black_box(model);
         })
     });
 }
 
 fn bench_evaluation(c: &mut Criterion) {
-    let emodel = ViennaRNA::default();
+    let emodel = ViennaRNA::new(&TURNER2004);
     let mut group = c.benchmark_group("Bulk energy evaluations.");
     group.measurement_time(std::time::Duration::from_secs(30));
 
@@ -134,7 +135,7 @@ fn bench_evaluation(c: &mut Criterion) {
 }
 
 fn bench_multi_evaluation(c: &mut Criterion) {
-    let emodel = ViennaRNA::default();
+    let emodel = ViennaRNA::new(&TURNER2004);
     let mut group = c.benchmark_group("Bulk multi-energy evaluations.");
     group.measurement_time(std::time::Duration::from_secs(30));
 

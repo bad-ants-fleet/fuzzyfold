@@ -33,6 +33,7 @@ impl fmt::Display for SequenceError {
 impl std::error::Error for SequenceError {}
 
 
+#[repr(u8)]
 #[derive(Clone, Hash, Copy, Debug, Eq, PartialEq)]
 pub enum Base { A, C, G, U, N, StrandBreak }
 pub const BCOUNT: usize = 5; // 5 Base variants for tables.
@@ -139,8 +140,17 @@ const PAIR_LOOKUP: [[PairTypeRNA; BCOUNT]; BCOUNT] = {
     table
 };
 
+#[repr(usize)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum PairTypeRNA { AU, UA, CG, GC, GU, UG, NN }
+pub enum PairTypeRNA {
+    AU = 0,
+    UA = 1,
+    CG = 2,
+    GC = 3,
+    GU = 4,
+    UG = 5,
+    NN = 6,
+}
 pub const PCOUNT: usize = 7; // 7 Pair variants for tables.
 
 impl From<(Base, Base)> for PairTypeRNA {

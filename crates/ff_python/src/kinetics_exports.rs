@@ -47,7 +47,7 @@ impl Simulator {
         }
 
         let mut energy_model = ViennaRNA::default();
-        energy_model.set_temperature(celsius);
+        energy_model.reset_with_temperature(celsius);
 
         let rate_model = Arrhenius::new(
             celsius,

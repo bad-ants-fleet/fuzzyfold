@@ -5,10 +5,7 @@ use clap::ValueEnum;
 use std::path::PathBuf;
 
 use ff_energy::ViennaRNA;
-use ff_energy::parameters::RNA_TURNER_2004;
-use ff_energy::parameters::RNA_TURNER_2004_EXT;
-use ff_energy::parameters::RNA_ANDRONESCU_2007;
-use ff_energy::parameters::DNA_MATHEWS_2004;
+use ff_energy::parameters::TURNER2004;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum RnaParams {
@@ -53,35 +50,36 @@ impl EnergyModelArguments {
     pub fn build_model(&self) -> ViennaRNA {
         debug!("{} {} °C", "Temperature:".bold().red(), self.temperature);
 
-        let mut model = if let Some(path) = &self.na_params {
-            debug!("{} {:?}", "Polymer:".bold().red(), path);
-            ViennaRNA::from_parameter_file(path)
-                .expect("Failed to load parameter file")
-        } else if let Some(rna_choice) = &self.rna {
-            // RNA mode
-            let preset = rna_choice.unwrap_or(RnaParams::Turner2004);
-            let (data, name) = match preset {
-                RnaParams::Turner2004 => (RNA_TURNER_2004, "rna_turner_2004"),
-                RnaParams::Turner2004ext => (RNA_TURNER_2004_EXT, "rna_turner_2004_ext"),
-                RnaParams::Andronescu2007 => (RNA_ANDRONESCU_2007, "rna_andronescu_2007"),
-            };
-            debug!("{} {}", "Polymer:".bold().red(), name);
-            ViennaRNA::from_parameter_str(data).unwrap()
+        //let mut model = if let Some(path) = &self.na_params {
+        //    debug!("{} {:?}", "Polymer:".bold().red(), path);
+        //    ViennaRNA::from_parameter_file(path)
+        //        .expect("Failed to load parameter file")
+        //} else if let Some(rna_choice) = &self.rna {
+        //    // RNA mode
+        //    let preset = rna_choice.unwrap_or(RnaParams::Turner2004);
+        //    let (data, name) = match preset {
+        //        RnaParams::Turner2004 => (RNA_TURNER_2004, "rna_turner_2004"),
+        //        RnaParams::Turner2004ext => (RNA_TURNER_2004_EXT, "rna_turner_2004_ext"),
+        //        RnaParams::Andronescu2007 => (RNA_ANDRONESCU_2007, "rna_andronescu_2007"),
+        //    };
+        //    debug!("{} {}", "Polymer:".bold().red(), name);
+        //    ViennaRNA::from_parameter_str(data).unwrap()
 
-        } else if let Some(dna_choice) = &self.dna {
-            // DNA mode
-            let preset = dna_choice.unwrap_or(DnaParams::Mathews2004);
-            let (data, name) = match preset {
-                DnaParams::Mathews2004 => (DNA_MATHEWS_2004, "dna_mathews_2004"),
-            };
-            debug!("{} {}", "Polymer:".bold().red(), name);
-            ViennaRNA::from_parameter_str(data).unwrap()
-        } else {
-            debug!("{} rna_turner_2004", "Polymer:".bold().red());
-            ViennaRNA::default()
-        };
+        //} else if let Some(dna_choice) = &self.dna {
+        //    // DNA mode
+        //    let preset = dna_choice.unwrap_or(DnaParams::Mathews2004);
+        //    let (data, name) = match preset {
+        //        DnaParams::Mathews2004 => (DNA_MATHEWS_2004, "dna_mathews_2004"),
+        //    };
+        //    debug!("{} {}", "Polymer:".bold().red(), name);
+        //    ViennaRNA::from_parameter_str(data).unwrap()
+        //} else {
+        //    debug!("{} rna_turner_2004", "Polymer:".bold().red());
+        //    ViennaRNA::default()
+        //};
 
-        model.set_temperature(self.temperature);
+        let mut model = ViennaRNA::new(&TURNER2004);
+        model.reset_with_temperature(self.temperature);
         model
     }
 }

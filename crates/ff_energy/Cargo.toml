@@ -20,6 +20,7 @@ env_logger.workspace = true
 itertools.workspace = true
 rustc-hash.workspace = true
 log.workspace = true
+paste = "1.0.15"
 
 [[bench]]
 name = "energy_models"
