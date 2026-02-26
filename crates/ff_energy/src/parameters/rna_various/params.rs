@@ -1,14 +1,14 @@
 use crate::parameters::ThermoParams;
-use crate::parameters::rna_various::extended_stacks::*;
 use crate::parameters::rna_turner_2004::turner2004_mimas::*;
 use crate::parameters::rna_turner_2004::turner2004_int11::*;
 use crate::parameters::rna_turner_2004::turner2004_int21::*;
 use crate::parameters::rna_turner_2004::turner2004_int22::*;
 use crate::parameters::rna_turner_2004::turner2004_loops::*;
 use crate::parameters::rna_turner_2004::turner2004_dangles::*;
-use crate::parameters::rna_turner_2004::turner2004_hairpins::*;
+use crate::parameters::rna_various::extended_stacks::*;
+use crate::parameters::rna_various::extended_hairpins::*;
 
-pub static RNA_TURNER_2004: ThermoParams = ThermoParams {
+pub static RNA_TURNER_2004_EXTENDED: ThermoParams = ThermoParams {
     stack_en37: &STACK_EN37,
     stack_enth: &STACK_ENTH,
 
@@ -61,12 +61,12 @@ pub static RNA_TURNER_2004: ThermoParams = ThermoParams {
     ml_intern_en37:  -90,
     ml_intern_enth: -220,
 
-    triloops_en37: TRILOOPS_EN37,
-    triloops_enth: TRILOOPS_ENTH,
-    tetraloops_en37: TETRALOOPS_EN37,
-    tetraloops_enth: TETRALOOPS_ENTH,
-    hexaloops_en37: HEXALOOPS_EN37,
-    hexaloops_enth: HEXALOOPS_ENTH,
+    triloops_en37: COLLECTED_TRILOOPS_EN37,
+    triloops_enth: COLLECTED_TRILOOPS_ENTH,
+    tetraloops_en37: COLLECTED_TETRALOOPS_EN37,
+    tetraloops_enth: COLLECTED_TETRALOOPS_ENTH,
+    hexaloops_en37: COLLECTED_HEXALOOPS_EN37,
+    hexaloops_enth: COLLECTED_HEXALOOPS_ENTH,
 };
 
 

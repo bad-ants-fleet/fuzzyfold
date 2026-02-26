@@ -68,7 +68,7 @@ fn main() -> Result<()> {
     //PairTable. May be worth to refactor and wrap PT and MPT into an enum which
     //implements LoopDecomposition.
     let pairings = MultiPairTable::try_from(&structure)?;
-    let energy = model.energy_of_structure(&sequence, &pairings);
+    let energy = model.energy_of_structure(&sequence, &pairings)?;
 
     info!("{}", ruler(sequence.len() - 1).magenta());
     println!("{}\n{} {}", sequence, structure, format!("{:>6.2}", energy as f64 / 100.0).green());

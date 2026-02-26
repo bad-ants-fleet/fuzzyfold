@@ -5,7 +5,7 @@ pub const MAX_LOOP: usize = 30;
 pub const B: usize = 4;  // A, C, G, U
 pub const P: usize = 6;  // AU, UA, CG, GC, GU, UG
                          
-pub type StackParams = [[i32; P]; P];
+//pub type StackParams = [[i32; P]; P]; 
 pub type LoopParams = [i32; MAX_LOOP + 1];
 pub type MismatchParams = [[[i32; B]; B]; P];
 pub type DangleParams = [[i32; B]; P];
@@ -14,6 +14,9 @@ pub type Int11Params = [[[[i32; B]; B]; P]; P];
 pub type Int21Params = [[[[[i32; B]; B]; B]; P]; P];
 pub type Int22Params = [[[[[[i32; B]; B]; B]; B]; P]; P];
 
+pub const E: usize = 8;  // AU, UA, CG, GC, GU, UG, AP, PA
+pub type ExtendedStackParams = [[i32; E]; E];
+
 #[derive(Copy, Clone, Debug)]
 pub struct LoopEntry {
     pub seq: &'static [Base],
@@ -21,8 +24,8 @@ pub struct LoopEntry {
 }
 
 pub struct ThermoParams {
-    pub stack_en37: &'static StackParams,
-    pub stack_enth: &'static StackParams,
+    pub stack_en37: &'static ExtendedStackParams,
+    pub stack_enth: &'static ExtendedStackParams,
     pub mismatch_hairpin_en37: &'static MismatchParams,
     pub mismatch_hairpin_enth: &'static MismatchParams,
     pub mismatch_interior_en37: &'static MismatchParams,
@@ -78,7 +81,7 @@ pub struct ThermoParams {
 }
 
 pub struct FittedParams {
-    pub stack: &'static StackParams,
+    pub stack: &'static ExtendedStackParams,
     pub mismatch_hairpin: &'static MismatchParams,
     pub mismatch_interior: &'static MismatchParams,
     pub mismatch_interior_1n: &'static MismatchParams,

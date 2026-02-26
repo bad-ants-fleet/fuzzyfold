@@ -1,5 +1,6 @@
-use crate::parameters::parameterset::StackParams;
+use crate::parameters::parameterset::ExtendedStackParams;
 
+/*
 pub static STACK: StackParams = [
     /* [cl] [i]:   AU     UA     CG     GC     GU     UG */
     /* [AU] */ [  -99,   -69,  -199,  -189,   -88,    -1],
@@ -9,4 +10,16 @@ pub static STACK: StackParams = [
     /* [GU] */ [  -88,   -47,  -178,  -193,    30,   -71],
     /* [UG] */ [   -1,     0,   -85,  -127,   -71,   -70],
 ];
+*/
 
+pub static STACK: ExtendedStackParams = [
+    /* [cl] [i]:   AU     UA     CG     GC     GU     UG     AP     PA  */
+    /* [AU] */ [  -99,   -69,  -199,  -189,   -88,    -1,   -99,   -69 ],
+    /* [UA] */ [  -69,   -91,  -178,  -211,   -47,     0,   -69,   -91 ],
+    /* [CG] */ [ -199,  -178,  -203,  -271,  -178,   -85,  -199,  -178 ],
+    /* [GC] */ [ -189,  -211,  -271,  -300,  -193,  -127,  -189,  -211 ],
+    /* [GU] */ [  -88,   -47,  -178,  -193,    30,   -71,   -88,   -47 ],
+    /* [UG] */ [   -1,     0,   -85,  -127,   -71,   -70,    -1,     0 ],
+    /* [AP] */ [  -99,   -69,  -199,  -189,   -88,    -1,   -99,   -69 ],
+    /* [PA] */ [  -69,   -91,  -178,  -211,   -47,     0,   -69,   -91 ],
+];

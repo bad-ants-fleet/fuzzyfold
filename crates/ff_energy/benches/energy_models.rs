@@ -122,7 +122,7 @@ fn bench_evaluation(c: &mut Criterion) {
                         sum += emodel.energy_of_structure(
                             black_box(seq),
                             black_box(pt),
-                        );
+                        ).unwrap();
                     }
                     black_box(sum);
                 },
@@ -149,7 +149,7 @@ fn bench_multi_evaluation(c: &mut Criterion) {
                         sum += emodel.energy_of_structure(
                             black_box(seq),
                             black_box(pt),
-                        );
+                        ).unwrap();
                     }
                     black_box(sum);
                 },

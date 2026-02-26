@@ -89,7 +89,8 @@ impl Macrostate {
         for dbv in structures {
             let pt = PairTable::try_from(dbv)
                 .expect("Invalid dot-bracket for energy evaluation");
-            let en = energy_model.energy_of_structure(sequence, &pt);
+            let en = energy_model.energy_of_structure(sequence, &pt)
+                .expect("Broken energy evaluation!");
             let q = (-en as f64 / 100.0 / rt).exp();
             ensemble.insert(dbv.clone(), (en, q));
             q_sum += q;

@@ -17,7 +17,10 @@ pub fn eval(sequence: &str, structure: &str) -> PyResult<i32> {
     let pairings = MultiPairTable::try_from(structure)
         .map_err(|e| PyValueError::new_err(format!("Invalid structure: {:?}", e)))?;
 
-    Ok(model.energy_of_structure(&sequence, &pairings))
+    let energy = model.energy_of_structure(&sequence, &pairings)
+        .map_err(|e| PyValueError::new_err(format!("Energy evaluation errored: {:?}", e)))?;
+
+    Ok(energy)
 }
 
 #[pyclass]
@@ -51,20 +54,11 @@ impl ViennaRNA {
         let pairings = MultiPairTable::try_from(structure)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-        let energy = self.model.energy_of_structure(&sequence, &pairings);
-
+        let energy = self.model.energy_of_structure(&sequence, &pairings)
+            .map_err(|e| PyValueError::new_err(format!("Energy evaluation errored: {:?}", e)))?;
+ 
         Ok(energy as f64 / 100.0)
     }
 }
 
-
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn it_works() {
-    }
-}
-*/
 

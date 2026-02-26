@@ -5,16 +5,18 @@ use paste::paste;
 use crate::Base;
 use crate::PairTypeRNA;
 use crate::EnergyModel;
+use crate::EnergyError;
 use crate::parameters::*;
 use crate::LoopDecomposition;
 use crate::NearestNeighborLoop;
 use crate::K0;
+use crate::nucleotides::BCOUNT;
 
 pub struct ViennaRNA {
     min_hp_size: usize,
     temperature: f64, //TODO: make this optional for fitted params?
 
-    stack: StackParams,
+    stack: ExtendedStackParams,
     mismatch_hairpin: MismatchParams,
     mismatch_interior: MismatchParams,
     mismatch_interior_1n: MismatchParams,
@@ -75,6 +77,8 @@ impl Default for ViennaRNA {
 }
 
 impl ViennaRNA {
+    /// Initializes a model from fitted parameters, which means there
+    /// is no possiblity to change the temperature.
     pub fn from_fitted_params(params: &'static FittedParams) -> Self {
         Self {
             min_hp_size: 3,
@@ -116,6 +120,7 @@ impl ViennaRNA {
         }
     }
 
+    /// Initializes a model from thermodynamic parameters. That's the default!
     pub fn from_thermo_params(params: &'static ThermoParams, celsius: f64) -> Self {
         if (celsius - T_REF).abs() < 1e-6 {
             Self {
@@ -207,29 +212,33 @@ impl ViennaRNA {
             8 => &self.hexaloops,
             _ => return None,
         };
-
         table
             .iter()
             .find(|e| e.seq == seq)
             .map(|e| e.val)
     }
 
-    // TODO: Return result!
-    fn hairpin(&self, seq: &[Base]) -> i32 {
+    fn hairpin(&self, seq: &[Base]) -> Result<i32, EnergyError> {
         let n = seq.len() - 2;
+
         if n < self.min_hp_size {
-            panic!("Invalid hairpin size {n}");
+            return Err(EnergyError::HairpinTooSmall {
+                size: n,
+                min: self.min_hp_size,
+            });
         }
 
         // Special hairpin energies
         if let Some(en) = self.hairpin_bonus(seq) {
-            return en;
+            return Ok(en);
         }
 
-        let closing = PairTypeRNA::new((seq[0], *seq.last().unwrap()));
-        assert!(closing.can_pair());
+        let closing = PairTypeRNA::from_fallback((seq[0], *seq.last().unwrap()));
+        if !closing.can_pair() {
+            return Err(EnergyError::InvalidClosingPair);
+        }
 
-        // Initiation terms
+        // Initiation term
         let mut en = if n <= 30 {
             self.hairpin[n]
         } else {
@@ -239,44 +248,54 @@ impl ViennaRNA {
         if n == 3 && closing.is_ru() {
             en += self.terminal_ru;
         } else if n > 3 {
-            //println!("mmh {} {} {}", closing, seq[1], seq[n]);
             en += self.mismatch_hairpin
                 [closing as usize]
-                [seq[1] as usize]
-                [seq[n] as usize];
+                [seq[1].canonical_rna_index()]
+                [seq[n].canonical_rna_index()];
         }
-        en
+
+        Ok(en)
     }
 
-    fn interior(&self, fwdseq: &[Base], revseq: &[Base]) -> i32 {
-        let outer = PairTypeRNA::new((*fwdseq.first().unwrap(), *revseq.last().unwrap()));
-        let inner = PairTypeRNA::from((*revseq.first().unwrap(), *fwdseq.last().unwrap()));
-        assert!(outer.can_pair() && inner.can_pair());
+    fn interior(&self, fwdseq: &[Base], revseq: &[Base]) -> Result<i32, EnergyError> {
+        let outer = PairTypeRNA::from_fallback((*fwdseq.first().unwrap(), *revseq.last().unwrap()));
+        let inner = PairTypeRNA::from_fallback((*revseq.first().unwrap(), *fwdseq.last().unwrap()));
+        if !outer.can_pair() || !inner.can_pair() {
+            return Err(EnergyError::InvalidClosingPair);
+        }
 
-        match (fwdseq.len(), revseq.len()) {
-            (2, 2) => 
-                self.stack[outer as usize][inner as usize],
+        let res = match (fwdseq.len(), revseq.len()) {
+            (2, 2) => {
+                let outer = PairTypeRNA::from((*fwdseq.first().unwrap(), *revseq.last().unwrap()));
+                let inner = PairTypeRNA::from((*revseq.first().unwrap(), *fwdseq.last().unwrap()));
+                self.stack[outer as usize][inner as usize]
+            },
             (3, 2) | (2, 3) => { //NOTE: SpecialC if C adjacent to paired C missing!
                 self.bulge[1] + 
                 self.stack[outer as usize][inner as usize]},
             (3, 3) => 
                 self.int11[outer as usize][inner as usize]
-                [fwdseq[1] as usize][revseq[1] as usize],
+                [fwdseq[1].canonical_rna_index()]
+                [revseq[1].canonical_rna_index()],
             (3, 4) => 
                 self.int21
                 [outer as usize][inner as usize]
-                [fwdseq[1] as usize][revseq[1] as usize]
-                [revseq[2] as usize],
+                [fwdseq[1].canonical_rna_index()]
+                [revseq[1].canonical_rna_index()]
+                [revseq[2].canonical_rna_index()],
             (4, 3) => 
                 self.int21
                 [inner as usize][outer as usize]
-                [revseq[1] as usize][fwdseq[1] as usize]
-                [fwdseq[2] as usize],
+                [revseq[1].canonical_rna_index()]
+                [fwdseq[1].canonical_rna_index()]
+                [fwdseq[2].canonical_rna_index()],
             (4, 4) => 
                 self.int22
                 [outer as usize][inner as usize]
-                [fwdseq[1] as usize][fwdseq[2] as usize]
-                [revseq[1] as usize][revseq[2] as usize],
+                [fwdseq[1].canonical_rna_index()]
+                [fwdseq[2].canonical_rna_index()]
+                [revseq[1].canonical_rna_index()]
+                [revseq[2].canonical_rna_index()],
             (l, 2) | (2, l) => { // General Bulge case
                 let n = l - 2;
                 let pg1 = if outer.is_ru() { self.terminal_ru } else { 0 };
@@ -291,11 +310,13 @@ impl ViennaRNA {
             (l, 3) | (3, l) => { // 1-n interior looop
                 let mut en = 
                     self.mismatch_interior_1n
-                    [outer as usize][fwdseq[1] as usize]
-                    [revseq[revseq.len() - 2] as usize] +
+                    [outer as usize]
+                    [fwdseq[1].canonical_rna_index()]
+                    [revseq[revseq.len() - 2].canonical_rna_index()] +
                     self.mismatch_interior_1n
-                    [inner as usize][revseq[1] as usize]
-                    [fwdseq[fwdseq.len() - 2] as usize];
+                    [inner as usize]
+                    [revseq[1].canonical_rna_index()]
+                    [fwdseq[fwdseq.len() - 2].canonical_rna_index()];
 
                 en += self.ninio_max.min(
                     (l - 3) as i32 * self.ninio);
@@ -311,22 +332,26 @@ impl ViennaRNA {
             (5, 4) | (4, 5) => { // 2-3 interior looop
                 let mut en = 
                     self.mismatch_interior_23
-                    [outer as usize][fwdseq[1] as usize]
-                    [revseq[revseq.len() - 2] as usize] +
+                    [outer as usize]
+                    [fwdseq[1].canonical_rna_index()]
+                    [revseq[revseq.len() - 2].canonical_rna_index()] +
                     self.mismatch_interior_23
-                    [inner as usize][revseq[1] as usize]
-                    [fwdseq[fwdseq.len() - 2] as usize];
+                    [inner as usize]
+                    [revseq[1].canonical_rna_index()]
+                    [fwdseq[fwdseq.len() - 2].canonical_rna_index()];
                 en += self.ninio;
                 en += self.interior[5];
                 en
             }
             (lfwd, lrev) => { 
                 let mut en = self.mismatch_interior
-                    [outer as usize][fwdseq[1] as usize]
-                    [revseq[lrev - 2] as usize] +
+                    [outer as usize]
+                    [fwdseq[1].canonical_rna_index()]
+                    [revseq[lrev - 2].canonical_rna_index()] +
                     self.mismatch_interior
-                    [inner as usize][revseq[1] as usize]
-                    [fwdseq[lfwd - 2] as usize];
+                    [inner as usize]
+                    [revseq[1].canonical_rna_index()]
+                    [fwdseq[lfwd - 2].canonical_rna_index()];
 
                 let asy = (lfwd as isize - lrev as isize).abs() as i32;
                 en += self.ninio_max.min(asy * self.ninio);
@@ -339,13 +364,16 @@ impl ViennaRNA {
                        + (self.lxc * ((n as f64) / 30.).ln()) as i32
                 }
             }
-        }
+        };
+        Ok(res)
     }
 
-    fn multibranch(&self, segments: &[&[Base]]) -> i32 {
+    fn multibranch(&self, segments: &[&[Base]]) -> Result<i32, EnergyError> {
         // For warning purposes only.
-        let closing = PairTypeRNA::new((segments[0][0], *segments.last().unwrap().last().unwrap()));
-        assert!(closing.can_pair());
+        let closing = PairTypeRNA::from((segments[0][0], *segments.last().unwrap().last().unwrap()));
+        if !closing.can_pair() {
+            return Err(EnergyError::InvalidClosingPair);
+        }
 
         // Number of stems in the multiloop.
         let n = segments.len(); 
@@ -353,8 +381,10 @@ impl ViennaRNA {
         let mut en = 0;
         for i in 0..n {
             let j = (i + 1) % n; 
-            let pair = PairTypeRNA::from((*segments[i].last().unwrap(), segments[j][0]));
-            assert!(pair.can_pair());
+            let pair = PairTypeRNA::from_fallback((*segments[i].last().unwrap(), segments[j][0]));
+            if !pair.can_pair() {
+                return Err(EnergyError::InvalidClosingPair);
+            }
             if pair.is_ru() { 
                 en += self.terminal_ru;
             }
@@ -367,13 +397,17 @@ impl ViennaRNA {
             let den = match (d5, d3) { 
                 (Some(&b5), Some(&b3)) => 
                     self.mismatch_multi
-                    [pair as usize][b5 as usize][b3 as usize],
+                    [pair as usize]
+                    [b5.canonical_rna_index()]
+                    [b3.canonical_rna_index()],
                 (Some(&b5), None) => 
                     self.dangle5
-                     [pair as usize][b5 as usize].min(0),
+                     [pair as usize]
+                     [b5.canonical_rna_index()].min(0),
                 (None, Some(&b3)) => 
                     self.dangle3
-                    [pair as usize][b3 as usize].min(0),
+                    [pair as usize]
+                    [b3.canonical_rna_index()].min(0),
                 _ => 0,
             };
             en += den;
@@ -381,19 +415,21 @@ impl ViennaRNA {
  
         // Number of unpaired bases in the multiloop.
         let m: usize = segments.iter().map(|s| s.len() - 2).sum();
-        en + self.ml_base * m as i32
+        Ok(en + self.ml_base * m as i32
            + self.ml_closing
-           + self.ml_intern * n as i32
+           + self.ml_intern * n as i32)
     }
 
-    fn exterior(&self, segments: &[&[Base]]) -> i32 {
+    fn exterior(&self, segments: &[&[Base]]) -> Result<i32, EnergyError> {
         let mut en = 0;
         let n = segments.len() - 1; 
         for i in 0..n {
             let j = i + 1; 
             
-            let pair = PairTypeRNA::from((*segments[i].last().unwrap(), segments[j][0]));
-            assert!(pair.can_pair());
+            let pair = PairTypeRNA::from_fallback((*segments[i].last().unwrap(), segments[j][0]));
+            if !pair.can_pair() {
+                return Err(EnergyError::InvalidClosingPair);
+            }
             if pair.is_ru() { 
                 en += self.terminal_ru;
             }
@@ -407,20 +443,36 @@ impl ViennaRNA {
             let den = match (d5, d3) { 
                 (Some(&b5), Some(&b3)) => 
                     self.mismatch_exterior
-                    [pair as usize][b5 as usize][b3 as usize],
+                    [pair as usize][b5.canonical_rna_index()][b3.canonical_rna_index()],
                 (Some(&b5), None) => 
                     self.dangle5
-                    [pair as usize][b5 as usize].min(0),
+                    [pair as usize][b5.canonical_rna_index()].min(0),
                 (None, Some(&b3)) => 
                      self.dangle3
-                    [pair as usize][b3 as usize].min(0),
+                    [pair as usize][b3.canonical_rna_index()].min(0),
                 _ => 0,
             };
             en += den;
         }
-        en
+        Ok(en)
     }
 }
+
+const CAN_PAIR: [[bool; BCOUNT]; BCOUNT] = {
+    use Base::*;
+    let mut table = [[false; BCOUNT]; BCOUNT];
+    table[A as usize][U as usize] = true;
+    table[U as usize][A as usize] = true;
+    table[C as usize][G as usize] = true;
+    table[G as usize][C as usize] = true;
+    table[G as usize][U as usize] = true;
+    table[U as usize][G as usize] = true;
+    table[A as usize][PU as usize] = true;
+    table[PU as usize][A as usize] = true;
+    table[G as usize][PU as usize] = true;
+    table[PU as usize][G as usize] = true;
+    table
+};
 
 impl EnergyModel for ViennaRNA {
  
@@ -429,10 +481,7 @@ impl EnergyModel for ViennaRNA {
     }
 
     fn can_pair(&self, b1: Base, b2: Base) -> bool {
-        matches!((b1, b2),
-        (Base::A, Base::U) | (Base::U, Base::A) |
-        (Base::G, Base::C) | (Base::C, Base::G) |
-        (Base::G, Base::U) | (Base::U, Base::G))
+        CAN_PAIR[b1 as usize][b2 as usize]
     }
 
     fn min_hairpin_size(&self) -> usize { self.min_hp_size }
@@ -440,18 +489,20 @@ impl EnergyModel for ViennaRNA {
     fn energy_of_structure<T: LoopDecomposition>(&self, 
         sequence: &[Base], 
         structure: &T
-    ) -> i32  {
+    ) -> Result<i32, EnergyError> {
         let mut total = 0;
         structure.for_each_loop(|l| {
-            let en = self.energy_of_loop(sequence, l);
+            let en = self.energy_of_loop(sequence, l).unwrap_or_else(|e| {
+                panic!("Energy evaluation error: {:?} {:?} {:?}.", sequence, l, e);
+            });
             total += en;
             info!("{:<41} {}", format!("{}:", l), format!("{:>6.2}", en as f64 / 100.).green());
         });
-        total
+        Ok(total)
     }
 
-    fn energy_of_loop(&self, sequence: &[Base], nn_loop: &NearestNeighborLoop) -> i32 {
-
+    fn energy_of_loop(&self, sequence: &[Base], nn_loop: &NearestNeighborLoop
+    ) -> Result<i32, EnergyError> {
         match nn_loop {
             NearestNeighborLoop::Hairpin { closing: (i, j) } => {
                 self.hairpin(&sequence[*i as usize..=*j as usize])
@@ -501,7 +552,7 @@ impl EnergyModel for ViennaRNA {
                     p5 = l as usize;
                 }
                 slices.push(&sequence[p5..=(*p3 as usize)]);
-                self.exterior(&slices) + self.duplex_init
+                self.exterior(&slices).map(|e| e + self.duplex_init)
             }
             NearestNeighborLoop::Disconnected { .. } => unreachable!("Must not evaluate disconnected loops.")
         }
@@ -516,126 +567,139 @@ mod tests {
     use ff_structure::MultiPairTable;
     use crate::NucleotideVec;
 
+    macro_rules! assert_hp {
+        ($model:expr, $seq:expr, $val:expr) => {
+            assert_eq!(
+                $model
+                .hairpin(&NucleotideVec::from_lossy($seq))
+                .unwrap(),
+                $val
+            );
+        };
+    }
+
+    macro_rules! assert_il {
+        ($model:expr, $seq1:expr, $seq2:expr, $val:expr) => {
+            assert_eq!(
+                $model
+                .interior(&NucleotideVec::from_lossy($seq1),
+                          &NucleotideVec::from_lossy($seq2))
+                .unwrap(),
+                $val
+            );
+        };
+    }
+
     #[test]
     fn test_vrna_hairpin_evaluation() {
         let model = ViennaRNA::default();
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("GAAAC")), 540);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("CCGAGG")), 350);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("CCAAGG")), 330);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("CAAGG")), 540);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("CAAAG")), 540);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("AAAAU")), 590);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("GAAAU")), 590);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("CAAAAG")), 410);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("ACCCU")), 590);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("GCCCCC")), 490);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("AAAAAU")), 530);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("GAAAAU")), 580);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("ACCCCU")), 540);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("ACCCCCU")), 550);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("AAAAAAU")), 540);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("AAAAAAAU")), 510);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("AAAAAAAAAAU")), 610);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy(&format!("C{}G", "A".repeat(30)))), 620);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy(&format!("C{}G", "A".repeat(31)))), 623);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy(&format!("C{}G", "A".repeat(32)))), 626);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy(&format!("C{}G", "A".repeat(33)))), 630);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy(&format!("C{}G", "A".repeat(34)))), 633);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy(&format!("C{}G", "A".repeat(35)))), 636);
-    }
-
-    fn test_cannot_pair() {
-        let model = ViennaRNA::default();
-        //assert_eq!(model.hairpin(&NucleotideVec::from_lossy("GAAAG")), 590);
-        //assert_eq!(model.hairpin(&NucleotideVec::from_lossy("CAAAC")), 590);
-        //assert_eq!(model.hairpin(&NucleotideVec::from_lossy("AAAAAAAAAAA")), 660);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("GAAAG")), 9999);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("CAAAC")), 9999);
-        assert_eq!(model.hairpin(&NucleotideVec::from_lossy("AAAAAAAAAAA")), 9999);
+        assert_hp!(model, "GAAAC", 540);
+        assert_hp!(model, "CCGAGG", 350);
+        assert_hp!(model, "CCAAGG", 330);
+        assert_hp!(model, "CAAGG", 540);
+        assert_hp!(model, "CAAAG", 540);
+        assert_hp!(model, "AAAAU", 590);
+        assert_hp!(model, "GAAAU", 590);
+        assert_hp!(model, "CAAAAG", 410);
+        assert_hp!(model, "ACCCU", 590);
+        assert_hp!(model, "GCCCCC", 490);
+        assert_hp!(model, "AAAAAU", 530);
+        assert_hp!(model, "GAAAAU", 580);
+        assert_hp!(model, "ACCCCU", 540);
+        assert_hp!(model, "ACCCCCU", 550);
+        assert_hp!(model, "AAAAAAU", 540);
+        assert_hp!(model, "AAAAAAAU", 510);
+        assert_hp!(model, "AAAAAAAAAAU", 610);
+        assert_hp!(model, &format!("C{}G", "A".repeat(30)), 620);
+        assert_hp!(model, &format!("C{}G", "A".repeat(31)), 623);
+        assert_hp!(model, &format!("C{}G", "A".repeat(32)), 626);
+        assert_hp!(model, &format!("C{}G", "A".repeat(33)), 630);
+        assert_hp!(model, &format!("C{}G", "A".repeat(34)), 633);
+        assert_hp!(model, &format!("C{}G", "A".repeat(35)), 636);
     }
 
     #[test]
     fn test_vrna_stacking_evaluation() {
         let model = ViennaRNA::default();
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CG"), &NucleotideVec::from_lossy("CG")), -240);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AC"), &NucleotideVec::from_lossy("GU")), -220);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GU"), &NucleotideVec::from_lossy("AC")), -220);
+        assert_il!(model, "CG", "CG", -240);
+        assert_il!(model, "AC", "GU", -220);
+        assert_il!(model, "GU", "AC", -220);
     }
 
     #[test]
     fn test_vrna_int11_evaluation() {
         let model = ViennaRNA::default();
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CCG"), &NucleotideVec::from_lossy("CGG")), 50);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CAG"), &NucleotideVec::from_lossy("CAG")), 90);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("ACU"), &NucleotideVec::from_lossy("AAU")), 190);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GCU"), &NucleotideVec::from_lossy("AUC")), 120);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GCU"), &NucleotideVec::from_lossy("AGC")), 120);
+        assert_il!(model, "CCG", "CGG", 50);
+        assert_il!(model, "CAG", "CAG", 90);
+        assert_il!(model, "ACU", "AAU", 190);
+        assert_il!(model, "GCU", "AUC", 120);
+        assert_il!(model, "GCU", "AGC", 120);
     }
 
     #[test]
     fn test_vrna_int21_evaluation() {
         let model = ViennaRNA::default();
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CACG"), &NucleotideVec::from_lossy("CGG")), 110);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CAAG"), &NucleotideVec::from_lossy("CAG")), 230);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AACU"), &NucleotideVec::from_lossy("AAU")), 370);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GACU"), &NucleotideVec::from_lossy("AUC")), 300);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GACU"), &NucleotideVec::from_lossy("AGC")), 300);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CGG"), &NucleotideVec::from_lossy("CACG")), 110);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CAG"), &NucleotideVec::from_lossy("CAAG")), 230);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AAU"), &NucleotideVec::from_lossy("AACU")), 370);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AUC"), &NucleotideVec::from_lossy("GACU")), 300);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AGC"), &NucleotideVec::from_lossy("GACU")), 300);
+        assert_il!(model, "CACG", "CGG", 110);
+        assert_il!(model, "CAAG", "CAG", 230);
+        assert_il!(model, "AACU", "AAU", 370);
+        assert_il!(model, "GACU", "AUC", 300);
+        assert_il!(model, "GACU", "AGC", 300);
+        assert_il!(model, "CGG", "CACG", 110);
+        assert_il!(model, "CAG", "CAAG", 230);
+        assert_il!(model, "AAU", "AACU", 370);
+        assert_il!(model, "AUC", "GACU", 300);
+        assert_il!(model, "AGC", "GACU", 300);
     }
 
     #[test]
     fn test_vrna_bulge_1_evaluation() {
         let model = ViennaRNA::default();
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CAG"), &NucleotideVec::from_lossy("CG")), 140);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AAU"), &NucleotideVec::from_lossy("AU")), 270);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GAU"), &NucleotideVec::from_lossy("AC")), 160);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CCG"), &NucleotideVec::from_lossy("CG")), 140);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("ACU"), &NucleotideVec::from_lossy("AU")), 270);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GCU"), &NucleotideVec::from_lossy("AC")), 160);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CG"), &NucleotideVec::from_lossy("CAG")), 140);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AU"), &NucleotideVec::from_lossy("AAU")), 270);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AC"), &NucleotideVec::from_lossy("GAU")), 160);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CG"), &NucleotideVec::from_lossy("CCG")), 140);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AU"), &NucleotideVec::from_lossy("ACU")), 270);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AC"), &NucleotideVec::from_lossy("GCU")), 160);
+        assert_il!(model, "CAG", "CG", 140);
+        assert_il!(model, "AAU", "AU", 270);
+        assert_il!(model, "GAU", "AC", 160);
+        assert_il!(model, "CCG", "CG", 140);
+        assert_il!(model, "ACU", "AU", 270);
+        assert_il!(model, "GCU", "AC", 160);
+        assert_il!(model, "CG", "CAG", 140);
+        assert_il!(model, "AU", "AAU", 270);
+        assert_il!(model, "AC", "GAU", 160);
+        assert_il!(model, "CG", "CCG", 140);
+        assert_il!(model, "AU", "ACU", 270);
+        assert_il!(model, "AC", "GCU", 160);
     }
 
     #[test]
     fn test_vrna_bulge_2_evaluation() {
         let model = ViennaRNA::default();
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CAAG"), &NucleotideVec::from_lossy("CG")), 280);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AAAU"), &NucleotideVec::from_lossy("AU")), 380);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GAAU"), &NucleotideVec::from_lossy("AC")), 330);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CCAG"), &NucleotideVec::from_lossy("CG")), 280);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("ACAU"), &NucleotideVec::from_lossy("AU")), 380);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GCAU"), &NucleotideVec::from_lossy("AC")), 330);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CG"), &NucleotideVec::from_lossy("CAAG")), 280);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AU"), &NucleotideVec::from_lossy("AAAU")), 380);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AC"), &NucleotideVec::from_lossy("GAAU")), 330);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CG"), &NucleotideVec::from_lossy("CCAG")), 280);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AU"), &NucleotideVec::from_lossy("ACAU")), 380);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AC"), &NucleotideVec::from_lossy("GCAU")), 330);
+        assert_il!(model, "CAAG", "CG", 280);
+        assert_il!(model, "AAAU", "AU", 380);
+        assert_il!(model, "GAAU", "AC", 330);
+        assert_il!(model, "CCAG", "CG", 280);
+        assert_il!(model, "ACAU", "AU", 380);
+        assert_il!(model, "GCAU", "AC", 330);
+        assert_il!(model, "CG", "CAAG", 280);
+        assert_il!(model, "AU", "AAAU", 380);
+        assert_il!(model, "AC", "GAAU", 330);
+        assert_il!(model, "CG", "CCAG", 280);
+        assert_il!(model, "AU", "ACAU", 380);
+        assert_il!(model, "AC", "GCAU", 330);
     }
 
     #[test]
     fn test_vrna_interior_evaluation() {
         let model = ViennaRNA::default();
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("ACA"), &NucleotideVec::from_lossy("UGAAU")), 370);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("ACAA"), &NucleotideVec::from_lossy("UGAAU")), 290);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GUAGU"), &NucleotideVec::from_lossy("AGGC")), 260);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("AUAGU"), &NucleotideVec::from_lossy("AGGU")), 330);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("GGC"), &NucleotideVec::from_lossy("GUGC")), 110);
+        assert_il!(model, "ACA", "UGAAU", 370);
+        assert_il!(model, "ACAA", "UGAAU", 290);
+        assert_il!(model, "GUAGU", "AGGC", 260);
+        assert_il!(model, "AUAGU", "AGGU", 330);
+        assert_il!(model, "GGC", "GUGC", 110);
     }
 
     #[test]
     fn test_vrna_bulge_n_evaluation() {
         let model = ViennaRNA::default();
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CAAAAAAG"), &NucleotideVec::from_lossy("CG")), 440);
-        assert_eq!(model.interior(&NucleotideVec::from_lossy("CAAAAAAAAG"), &NucleotideVec::from_lossy("CG")), 470);
+        assert_il!(model, "CAAAAAAG", "CG", 440);
+        assert_il!(model, "CAAAAAAAAG", "CG", 470);
     }
 
     #[test]
@@ -644,12 +708,12 @@ mod tests {
         let seg1 = &NucleotideVec::from_lossy("GAAC");
         let seg2 = &NucleotideVec::from_lossy("GAC");
         let seg3 = &NucleotideVec::from_lossy("GAAAC");
-        let energy = model.multibranch(&[seg1, seg2, seg3]);
+        let energy = model.multibranch(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, 330);
         let seg1 = &NucleotideVec::from_lossy("GAAC");
         let seg2 = &NucleotideVec::from_lossy("GAC");
         let seg3 = &NucleotideVec::from_lossy("GAAAAAAAAAAAAAAAAAAC");
-        let energy = model.multibranch(&[seg1, seg2, seg3]);
+        let energy = model.multibranch(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, 330);
     }
 
@@ -659,22 +723,22 @@ mod tests {
 
         let seg1 = &NucleotideVec::from_lossy("AUG");
         let seg2 = &NucleotideVec::from_lossy("CUG");
-        let energy = model.exterior(&[seg1, seg2]);
+        let energy = model.exterior(&[seg1, seg2]).unwrap();
         assert_eq!(energy, -120);
 
         let seg1 = &NucleotideVec::from_lossy("UG");
         let seg2 = &NucleotideVec::from_lossy("CU");
-        let energy = model.exterior(&[seg1, seg2]);
+        let energy = model.exterior(&[seg1, seg2]).unwrap();
         assert_eq!(energy, -120); 
 
         let seg1 = &NucleotideVec::from_lossy("G");
         let seg2 = &NucleotideVec::from_lossy("CU");
-        let energy = model.exterior(&[seg1, seg2]);
+        let energy = model.exterior(&[seg1, seg2]).unwrap();
         assert_eq!(energy, -120);
  
         let seg1 = &NucleotideVec::from_lossy("UG");
         let seg2 = &NucleotideVec::from_lossy("C");
-        let energy = model.exterior(&[seg1, seg2]);
+        let energy = model.exterior(&[seg1, seg2]).unwrap();
         assert_eq!(energy, 0); 
     }
 
@@ -685,31 +749,31 @@ mod tests {
         let seg1 = &NucleotideVec::from_lossy("AUG");
         let seg2 = &NucleotideVec::from_lossy("CUG");
         let seg3 = &NucleotideVec::from_lossy("CUG");
-        let energy = model.exterior(&[seg1, seg2, seg3]);
+        let energy = model.exterior(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, -240);
 
         let seg1 = &NucleotideVec::from_lossy("AUG");
         let seg2 = &NucleotideVec::from_lossy("CUUG");
         let seg3 = &NucleotideVec::from_lossy("CUG");
-        let energy = model.exterior(&[seg1, seg2, seg3]);
+        let energy = model.exterior(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, -240);
 
         let seg1 = &NucleotideVec::from_lossy("AUG");
         let seg2 = &NucleotideVec::from_lossy("CUUG");
         let seg3 = &NucleotideVec::from_lossy("C");
-        let energy = model.exterior(&[seg1, seg2, seg3]);
+        let energy = model.exterior(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, -120);
 
         let seg1 = &NucleotideVec::from_lossy("AUG");
         let seg2 = &NucleotideVec::from_lossy("CG");
         let seg3 = &NucleotideVec::from_lossy("CU");
-        let energy = model.exterior(&[seg1, seg2, seg3]);
+        let energy = model.exterior(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, -290);
 
         let seg1 = &NucleotideVec::from_lossy("ACA");
         let seg2 = &NucleotideVec::from_lossy("UGG");
         let seg3 = &NucleotideVec::from_lossy("CUG");
-        let energy = model.exterior(&[seg1, seg2, seg3]);
+        let energy = model.exterior(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, -130);
     }
 
@@ -721,14 +785,14 @@ mod tests {
         let seg2 = &NucleotideVec::from_lossy("CUG");
         let seg3 = &NucleotideVec::from_lossy("CUG");
         let seg4 = &NucleotideVec::from_lossy("CUG");
-        let energy = model.exterior(&[seg1, seg2, seg3, seg4]);
+        let energy = model.exterior(&[seg1, seg2, seg3, seg4]).unwrap();
         assert_eq!(energy, -360);
 
         let seg1 = &NucleotideVec::from_lossy("AUG");
         let seg2 = &NucleotideVec::from_lossy("CUG");
         let seg3 = &NucleotideVec::from_lossy("UUG");
         let seg4 = &NucleotideVec::from_lossy("CUG");
-        let energy = model.exterior(&[seg1, seg2, seg3, seg4]);
+        let energy = model.exterior(&[seg1, seg2, seg3, seg4]).unwrap();
         assert_eq!(energy, -240);
     }
 
@@ -740,27 +804,27 @@ mod tests {
         let seq = "GAAAAC";
         let dbr = "(....)";
         let e37 = 450;
-        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")), e37);
+        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")).unwrap(), e37);
 
         let seq = "ACGUUAAAGACGU";
         let dbr = "(((((...)))))";
         let e37 = -170;
-        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")), e37);
+        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")).unwrap(), e37);
 
         let seq = "AGACGACAAGGUUGAAUCGC";
         let dbr = ".(.(((.(....)...))))";
         let e37 = 420;
-        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")), e37);
+        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")).unwrap(), e37);
 
         let seq = "GAGUAGUGGAACCAGGCUAU";
         let dbr = ".((...((....))..))..";
         let e37 = 190;
-        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")), e37);
+        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")).unwrap(), e37);
 
         let seq = "UCUACUAUUCCGGCUUGACAUAAAUAUCGAGUGCUCGACC";
         let dbr = "...........(.(((((........)))))..)......";
         let e37 = -210;
-        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")), e37);
+        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")).unwrap(), e37);
     }
  
     #[test]
@@ -772,7 +836,7 @@ mod tests {
         let e37 = 450;
         assert_eq!(model.energy_of_structure(
                 &NucleotideVec::from_lossy(seq), 
-                &MultiPairTable::try_from(dbr).expect("valid")), e37);
+                &MultiPairTable::try_from(dbr).expect("valid")).unwrap(), e37);
 
         let fseq = "GA+AAAC";
         let fdbr = "(.+...)";
@@ -782,10 +846,10 @@ mod tests {
         assert_eq!(
             model.energy_of_structure(
                 &NucleotideVec::from_lossy(fseq), 
-                &MultiPairTable::try_from(fdbr).expect("valid")), 
+                &MultiPairTable::try_from(fdbr).expect("valid")).unwrap(), 
             model.energy_of_structure(
                 &NucleotideVec::from_lossy(rseq), 
-                &MultiPairTable::try_from(rdbr).expect("valid"))
+                &MultiPairTable::try_from(rdbr).expect("valid")).unwrap()
         );
 
         let seq = "GAA+AAC";
@@ -793,21 +857,21 @@ mod tests {
         let e37 = 300;
         assert_eq!(model.energy_of_structure(
                 &NucleotideVec::from_lossy(seq), 
-                &MultiPairTable::try_from(dbr).expect("valid")), e37);
+                &MultiPairTable::try_from(dbr).expect("valid")).unwrap(), e37);
 
         let seq = "GC+UUUUAGU+AU+AC";
         let dbr = "((+(...)).+..+.)";
         let e37 = 1140;
         assert_eq!(model.energy_of_structure(
                 &NucleotideVec::from_lossy(seq), 
-                &MultiPairTable::try_from(dbr).expect("valid")), e37);
+                &MultiPairTable::try_from(dbr).expect("valid")).unwrap(), e37);
 
         let seq = "GC&UUUUAGU&AGAAACU&AGAAACU&AC";
         let dbr = "((&(...)).&.(...).&.(...).&.)";
         let e37 = 2020;
         assert_eq!(model.energy_of_structure(
                 &NucleotideVec::from_lossy(seq), 
-                &MultiPairTable::try_from(dbr).expect("valid")), e37);
+                &MultiPairTable::try_from(dbr).expect("valid")).unwrap(), e37);
  
     }
 

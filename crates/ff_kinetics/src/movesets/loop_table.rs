@@ -60,6 +60,7 @@ impl<E: EnergyModel> LoopTable<E> {
 
     pub fn energy_of_loop(&self, nn_loop: &NearestNeighborLoop) -> i32 {
         self.model.energy_of_loop(&self.sequence, nn_loop)
+            .expect("Broken energy evaluation!")
     }
 
     pub fn loops_len(&self) -> usize {
@@ -196,7 +197,8 @@ for LoopTable<E> {
                 current_len = b;
             }
 
-            let loop_energy = model.energy_of_loop(&sequence, l);
+            let loop_energy = model.energy_of_loop(&sequence, l)
+                .expect("Broken energy evaluation!");
             energy += loop_energy;
 
             if let Some((i, j)) = l.closing() {
