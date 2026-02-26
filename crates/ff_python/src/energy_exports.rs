@@ -5,6 +5,7 @@ use ff_structure::MultiPairTable;
 use ff_energy::NucleotideVec;
 use ff_energy::EnergyModel;
 use ff_energy::ViennaRNA as VRNA;
+use ff_energy::parameters::RNA_TURNER_2004;
 
 #[pyfunction]
 pub fn eval(sequence: &str, structure: &str) -> PyResult<i32> {
@@ -28,12 +29,14 @@ pub struct ViennaRNA {
 impl ViennaRNA {
 
     #[new]
-    fn new(temp_celsius: Option<f64>) -> Self {
-        let mut model = VRNA::default();
-        if let Some(t) = temp_celsius {
-            model.reset_with_temperature(t);
+    #[pyo3(signature = (
+        celsius=37.0,
+    ))]
+ 
+    fn new(celsius: f64) -> Self {
+        Self { 
+            model: VRNA::from_thermo_params(&RNA_TURNER_2004, celsius)
         }
-        Self { model }
     }
 
     fn energy_of_structure(

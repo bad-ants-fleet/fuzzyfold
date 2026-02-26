@@ -6,6 +6,7 @@ use rand::SeedableRng;
 use rand::rngs::SmallRng;
 
 use ff_structure::DotBracketVec;
+use ff_energy::parameters::RNA_TURNER_2004;
 use ff_structure::PairTable;
 use ff_energy::NucleotideVec;
 use ff_energy::ViennaRNA;
@@ -46,9 +47,9 @@ impl Simulator {
             ));
         }
 
-        let mut energy_model = ViennaRNA::default();
-        energy_model.reset_with_temperature(celsius);
-
+        let energy_model = ViennaRNA::from_thermo_params(
+            &RNA_TURNER_2004, celsius
+        );
         let rate_model = Arrhenius::new(
             celsius,
             k0,

@@ -5,7 +5,7 @@ use clap::ValueEnum;
 use std::path::PathBuf;
 
 use ff_energy::ViennaRNA;
-use ff_energy::parameters::TURNER2004;
+use ff_energy::parameters::RNA_TURNER_2004;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum RnaParams {
@@ -78,9 +78,7 @@ impl EnergyModelArguments {
         //    ViennaRNA::default()
         //};
 
-        let mut model = ViennaRNA::new(&TURNER2004);
-        model.reset_with_temperature(self.temperature);
-        model
+        ViennaRNA::from_thermo_params(&RNA_TURNER_2004, self.temperature)
     }
 }
 

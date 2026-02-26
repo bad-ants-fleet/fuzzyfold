@@ -1,9 +1,12 @@
+use crate::parameters::LoopEntry;
 
 pub trait EnergyParameter: Sized {
-    fn rescale(&self, enthalpy: &Self, scale: f64) -> Self;
+    type Output;
+    fn rescale(&self, enthalpy: &Self, scale: f64) -> Self::Output;
 }
 
 impl EnergyParameter for i32 {
+    type Output = i32;
     #[inline]
     fn rescale(&self, h: &Self, scale: f64) -> Self {
         let g37 = *self as f64;
@@ -12,7 +15,8 @@ impl EnergyParameter for i32 {
     }
 }
 
-impl<T: EnergyParameter + Copy, const N: usize> EnergyParameter for [T; N] {
+impl<T: EnergyParameter<Output = T> + Copy, const N: usize> EnergyParameter for [T; N] {
+    type Output = [T; N];
     #[inline]
     fn rescale(&self, enthalpies: &Self, scale: f64) -> Self {
         let mut new = *self;
@@ -20,6 +24,28 @@ impl<T: EnergyParameter + Copy, const N: usize> EnergyParameter for [T; N] {
             *g = g.rescale(h, scale);
         }
         new
+    }
+}
+
+impl EnergyParameter for LoopEntry {
+    type Output = LoopEntry;
+    #[inline]
+    fn rescale(&self, enthalpy: &Self, scale: f64) -> Self {
+        Self {
+            seq: self.seq,
+            val: self.val.rescale(&enthalpy.val, scale),
+        }
+    }
+}
+
+impl<T: EnergyParameter<Output = T> + Clone> EnergyParameter for &[T] {
+    type Output = Vec<T>;
+    #[inline]
+    fn rescale(&self, enthalpies: &Self, scale: f64) -> Vec<T> {
+        self.iter()
+            .zip(enthalpies.iter())
+            .map(|(g, h)| g.rescale(h, scale))
+            .collect()
     }
 }
 

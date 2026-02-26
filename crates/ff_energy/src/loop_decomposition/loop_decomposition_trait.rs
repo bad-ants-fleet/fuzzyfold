@@ -95,11 +95,9 @@ impl LoopDecomposition for MultiPairTable {
                     },
                 }
             }
-            if ends.is_some() {
-                if let Some((k, l)) = closing {
-                    branches.insert(0, (k, l));
-                    closing = None;
-                } 
+            if ends.is_some() && let Some((k, l)) = closing {
+                branches.insert(0, (k, l));
+                closing = None;
             }
             f(&NearestNeighborLoop::classify(ends, closing, branches));
         }

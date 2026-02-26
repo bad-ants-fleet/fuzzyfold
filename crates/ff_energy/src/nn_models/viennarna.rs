@@ -1,34 +1,18 @@
-use paste::paste;
 use log::info;
 use colored::*; 
-use crate::EnergyModel;
-use crate::NearestNeighborLoop;
-use crate::LoopDecomposition;
+use paste::paste;
+
 use crate::Base;
-use crate::parameters::*;
 use crate::PairTypeRNA;
+use crate::EnergyModel;
+use crate::parameters::*;
+use crate::LoopDecomposition;
+use crate::NearestNeighborLoop;
 use crate::K0;
-const T_REF: f64 = 37.0;
-
-pub enum TableSource<T: 'static> {
-    Static(&'static T),
-    Owned(Box<T>),
-}
-
-impl<T> TableSource<T> {
-    #[inline]
-    pub fn get(&self) -> &T {
-        match self {
-            TableSource::Static(t) => t,
-            TableSource::Owned(b) => b,
-        }
-    }
-}
 
 pub struct ViennaRNA {
     min_hp_size: usize,
-    temperature: f64,
-    params: &'static ThermoParams,
+    temperature: f64, //TODO: make this optional for fitted params?
 
     stack: StackParams,
     mismatch_hairpin: MismatchParams,
@@ -41,9 +25,9 @@ pub struct ViennaRNA {
     dangle5: DangleParams,
     dangle3: DangleParams,
                                                                               
-    int11: TableSource<Int11Params>,
-    int21: TableSource<Int21Params>,
-    int22: TableSource<Int22Params>,
+    int11: Int11Params,
+    int21: Int21Params,
+    int22: Int22Params,
 
     hairpin: LoopParams,
     bulge: LoopParams,
@@ -65,83 +49,66 @@ pub struct ViennaRNA {
     hexaloops: Vec<LoopEntry>,
 }
 
-macro_rules! rescale_table {
-    ($self:ident, $field:ident, $scale:ident) => {{
+macro_rules! rescale_params {
+    ($field:ident, $params:ident, $scale:ident) => {
         paste! {
-            $self.params.[<$field _en37>]
-                .rescale($self.params.[<$field _enth>], $scale)
-        }
-    }};
-}
-
-macro_rules! rescale_value {
-    ($self:ident, $field:ident, $scale:ident) => {
-        paste! {
-            $self.$field =
-                $self.params.[<$field _en37>]
-                    .rescale(&$self.params.[<$field _enth>], $scale);
+                $params.[<$field _en37>]
+                    .rescale($params.[<$field _enth>], $scale)
         }
     };
 }
 
-macro_rules! copy_table {
-    ($self:ident, $field:ident) => {
+macro_rules! rescale_param {
+    ($field:ident, $params:ident, $scale:ident) => {
         paste! {
-            $self.$field = *$self.params.[<$field _en37>];
+                $params.[<$field _en37>]
+                    .rescale(&$params.[<$field _enth>], $scale)
         }
     };
 }
 
-macro_rules! copy_value {
-    ($self:ident, $field:ident) => {
-        paste! {
-            $self.$field = $self.params.[<$field _en37>];
-        }
-    };
-}
 
 impl Default for ViennaRNA {
     fn default() -> Self {
-        Self::new(&TURNER2004)
+        Self::from_thermo_params(&RNA_TURNER_2004, 37.0)
     }
 }
 
 impl ViennaRNA {
-    pub fn new(params: &'static ThermoParams) -> Self {
+    pub fn from_fitted_params(params: &'static FittedParams) -> Self {
         Self {
             min_hp_size: 3,
             temperature: 37.0,
-            params,
 
-            stack: *params.stack_en37,
-            mismatch_hairpin: *params.mismatch_hairpin_en37,
-            mismatch_interior: *params.mismatch_interior_en37,
-            mismatch_interior_1n: *params.mismatch_interior_1n_en37,
-            mismatch_interior_23: *params.mismatch_interior_23_en37,
-            mismatch_multi: *params.mismatch_multi_en37,
-            mismatch_exterior: *params.mismatch_exterior_en37,
+            stack: *params.stack,
+            mismatch_hairpin: *params.mismatch_hairpin,
+            mismatch_interior: *params.mismatch_interior,
+            mismatch_interior_1n: *params.mismatch_interior_1n,
+            mismatch_interior_23: *params.mismatch_interior_23,
+            mismatch_multi: *params.mismatch_multi,
+            mismatch_exterior: *params.mismatch_exterior,
 
-            dangle5: *params.dangle5_en37,
-            dangle3: *params.dangle3_en37,
+            dangle5: *params.dangle5,
+            dangle3: *params.dangle3,
 
-            int11: TableSource::Static(params.int11_en37),
-            int21: TableSource::Static(params.int21_en37),
-            int22: TableSource::Static(params.int22_en37),
+            int11: *params.int11,
+            int21: *params.int21,
+            int22: *params.int22,
 
-            hairpin: *params.hairpin_en37,
-            bulge: *params.bulge_en37,
-            interior: *params.interior_en37,
+            hairpin: *params.hairpin,
+            bulge: *params.bulge,
+            interior: *params.interior,
 
-            duplex_init: params.duplex_init_en37,
-            terminal_ru: params.terminal_ru_en37,
+            duplex_init: params.duplex_init,
+            terminal_ru: params.terminal_ru,
             lxc: params.lxc,
 
-            ninio: params.ninio_en37,
+            ninio: params.ninio,
             ninio_max: params.ninio_max,
 
-            ml_base: params.ml_base_en37,
-            ml_closing: params.ml_closing_en37,
-            ml_intern: params.ml_intern_en37,
+            ml_base: params.ml_base,
+            ml_closing: params.ml_closing,
+            ml_intern: params.ml_intern,
 
             triloops: params.triloops.to_vec(),
             tetraloops: params.tetraloops.to_vec(),
@@ -149,74 +116,88 @@ impl ViennaRNA {
         }
     }
 
-    // NOTE: Setting temperature resets the tables!
-    pub fn reset_with_temperature(&mut self, temp: f64) {
-        self.temperature = temp;
-        if (temp - T_REF).abs() < 1e-4 {
-            copy_table!(self, stack);
-            copy_table!(self, mismatch_hairpin);
-            copy_table!(self, mismatch_interior);
-            copy_table!(self, mismatch_interior_1n);
-            copy_table!(self, mismatch_interior_23);
-            copy_table!(self, mismatch_multi);
-            copy_table!(self, mismatch_exterior);
-            copy_table!(self, dangle5);
-            copy_table!(self, dangle3);
-            self.int11 = TableSource::Static(self.params.int11_en37);
-            self.int21 = TableSource::Static(self.params.int21_en37);
-            self.int22 = TableSource::Static(self.params.int22_en37);
-            copy_table!(self, hairpin);
-            copy_table!(self, bulge);
-            copy_table!(self, interior);
+    pub fn from_thermo_params(params: &'static ThermoParams, celsius: f64) -> Self {
+        if (celsius - T_REF).abs() < 1e-6 {
+            Self {
+                min_hp_size: 3,
+                temperature: 37.0,
 
-            copy_value!(self, duplex_init);
-            copy_value!(self, terminal_ru);
-            self.lxc = self.params.lxc;
-            copy_value!(self, ninio);
-            self.ninio_max = self.params.ninio_max;
-            copy_value!(self, ml_base);
-            copy_value!(self, ml_closing);
-            copy_value!(self, ml_intern);
+                stack: *params.stack_en37,
+                mismatch_hairpin: *params.mismatch_hairpin_en37,
+                mismatch_interior: *params.mismatch_interior_en37,
+                mismatch_interior_1n: *params.mismatch_interior_1n_en37,
+                mismatch_interior_23: *params.mismatch_interior_23_en37,
+                mismatch_multi: *params.mismatch_multi_en37,
+                mismatch_exterior: *params.mismatch_exterior_en37,
 
-            self.triloops = self.params.triloops.to_vec();
-            self.tetraloops = self.params.tetraloops.to_vec();
-            self.hexaloops = self.params.hexaloops.to_vec();
-            return;
+                dangle5: *params.dangle5_en37,
+                dangle3: *params.dangle3_en37,
+
+                int11: *params.int11_en37,
+                int21: *params.int21_en37,
+                int22: *params.int22_en37,
+
+                hairpin: *params.hairpin_en37,
+                bulge: *params.bulge_en37,
+                interior: *params.interior_en37,
+
+                duplex_init: params.duplex_init_en37,
+                terminal_ru: params.terminal_ru_en37,
+                lxc: params.lxc,
+
+                ninio: params.ninio_en37,
+                ninio_max: params.ninio_max,
+
+                ml_base: params.ml_base_en37,
+                ml_closing: params.ml_closing_en37,
+                ml_intern: params.ml_intern_en37,
+
+                triloops: params.triloops_en37.to_vec(),
+                tetraloops: params.tetraloops_en37.to_vec(),
+                hexaloops: params.hexaloops_en37.to_vec(),
+            }
+        } else {
+            let kelvin = celsius + K0;
+            let scale = kelvin / (T_REF + K0);
+            Self {
+                min_hp_size: 3,
+                temperature: celsius,
+
+                stack: rescale_params!(stack, params, scale),
+                mismatch_hairpin: rescale_params!(mismatch_hairpin, params, scale),
+                mismatch_interior: rescale_params!(mismatch_interior, params, scale),
+                mismatch_interior_1n: rescale_params!(mismatch_interior_1n, params, scale),
+                mismatch_interior_23: rescale_params!(mismatch_interior_23, params, scale),
+                mismatch_multi: rescale_params!(mismatch_multi, params, scale),
+                mismatch_exterior: rescale_params!(mismatch_exterior, params, scale),
+
+                dangle5: rescale_params!(dangle5, params, scale),
+                dangle3: rescale_params!(dangle3, params, scale),
+
+                int11: rescale_params!(int11, params, scale),
+                int21: rescale_params!(int21, params, scale),
+                int22: rescale_params!(int22, params, scale),
+
+                hairpin: rescale_params!(hairpin, params, scale),
+                bulge: rescale_params!(bulge, params, scale),
+                interior: rescale_params!(interior, params, scale),
+
+                duplex_init: rescale_param!(duplex_init, params, scale),
+                terminal_ru: rescale_param!(terminal_ru, params, scale),
+                lxc: params.lxc * celsius,
+
+                ninio: rescale_param!(ninio, params, scale),
+                ninio_max: params.ninio_max,
+
+                ml_base: rescale_param!(ml_base, params, scale),
+                ml_closing: rescale_param!(ml_closing, params, scale),
+                ml_intern: rescale_param!(ml_intern, params, scale),
+
+                triloops: rescale_param!(triloops, params, scale),
+                tetraloops: rescale_param!(tetraloops, params, scale),
+                hexaloops: rescale_param!(hexaloops, params, scale),
+            }
         }
-
-        let kelvin = temp + K0;
-        let scale = kelvin / (T_REF + K0);
-        rescale_table!(self, stack, scale);
-        rescale_table!(self, mismatch_hairpin, scale);
-        rescale_table!(self, mismatch_interior, scale);
-        rescale_table!(self, mismatch_interior_1n, scale);
-        rescale_table!(self, mismatch_interior_23, scale);
-        rescale_table!(self, mismatch_multi, scale);
-        rescale_table!(self, mismatch_exterior, scale);
-        rescale_table!(self, dangle5, scale);
-        rescale_table!(self, dangle3, scale);
-        self.int11 = TableSource::Owned(Box::new(rescale_table!(self, int11, scale)));
-        self.int21 = TableSource::Owned(Box::new(rescale_table!(self, int21, scale)));
-        self.int22 = TableSource::Owned(Box::new(rescale_table!(self, int22, scale)));
-        rescale_table!(self, hairpin, scale);
-        rescale_table!(self, bulge, scale);
-        rescale_table!(self, interior, scale);
-
-        rescale_value!(self, duplex_init, scale);
-        rescale_value!(self, terminal_ru, scale);
-        self.lxc = self.params.lxc * scale;
-        rescale_value!(self, ninio, scale);
-        self.ninio_max = self.params.ninio_max; // NOTE
-        rescale_value!(self, ml_base, scale);
-        rescale_value!(self, ml_closing, scale);
-        rescale_value!(self, ml_intern, scale);
-
-        self.triloops = self.params.triloops
-            .iter().map(|e| e.rescaled(scale)).collect();
-        self.tetraloops = self.params.tetraloops
-            .iter().map(|e| e.rescaled(scale)).collect();
-        self.hexaloops = self.params.hexaloops
-            .iter().map(|e| e.rescaled(scale)).collect();
     }
 
     fn hairpin_bonus(&self, seq: &[Base]) -> Option<i32> {
@@ -229,24 +210,8 @@ impl ViennaRNA {
 
         table
             .iter()
-            .find(|e| {
-                let bytes = e.seq.as_bytes();
-                for (b, &c) in seq.iter().zip(bytes.iter()) {
-                    let base = match c {
-                        b'A' => Base::A,
-                        b'C' => Base::C,
-                        b'G' => Base::G,
-                        b'U' => Base::U,
-                        _ => return false,
-                    };
-
-                    if *b != base {
-                        return false;
-                    }
-                }
-                true
-            })
-            .map(|e| e.g37)
+            .find(|e| e.seq == seq)
+            .map(|e| e.val)
     }
 
     // TODO: Return result!
@@ -295,20 +260,20 @@ impl ViennaRNA {
                 self.bulge[1] + 
                 self.stack[outer as usize][inner as usize]},
             (3, 3) => 
-                self.int11.get()[outer as usize][inner as usize]
+                self.int11[outer as usize][inner as usize]
                 [fwdseq[1] as usize][revseq[1] as usize],
             (3, 4) => 
-                self.int21.get()
+                self.int21
                 [outer as usize][inner as usize]
                 [fwdseq[1] as usize][revseq[1] as usize]
                 [revseq[2] as usize],
             (4, 3) => 
-                self.int21.get()
+                self.int21
                 [inner as usize][outer as usize]
                 [revseq[1] as usize][fwdseq[1] as usize]
                 [fwdseq[2] as usize],
             (4, 4) => 
-                self.int22.get()
+                self.int22
                 [outer as usize][inner as usize]
                 [fwdseq[1] as usize][fwdseq[2] as usize]
                 [revseq[1] as usize][revseq[2] as usize],
@@ -401,7 +366,7 @@ impl ViennaRNA {
             // prefers terminal mismatch over single dangling.
             let den = match (d5, d3) { 
                 (Some(&b5), Some(&b3)) => 
-                    self.mismatch_exterior
+                    self.mismatch_multi
                     [pair as usize][b5 as usize][b3 as usize],
                 (Some(&b5), None) => 
                     self.dangle5
@@ -549,12 +514,11 @@ mod tests {
     use super::*;
     use ff_structure::PairTable;
     use ff_structure::MultiPairTable;
-    use crate::parameters::TURNER2004;
     use crate::NucleotideVec;
 
     #[test]
     fn test_vrna_hairpin_evaluation() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
         assert_eq!(model.hairpin(&NucleotideVec::from_lossy("GAAAC")), 540);
         assert_eq!(model.hairpin(&NucleotideVec::from_lossy("CCGAGG")), 350);
         assert_eq!(model.hairpin(&NucleotideVec::from_lossy("CCAAGG")), 330);
@@ -581,7 +545,7 @@ mod tests {
     }
 
     fn test_cannot_pair() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
         //assert_eq!(model.hairpin(&NucleotideVec::from_lossy("GAAAG")), 590);
         //assert_eq!(model.hairpin(&NucleotideVec::from_lossy("CAAAC")), 590);
         //assert_eq!(model.hairpin(&NucleotideVec::from_lossy("AAAAAAAAAAA")), 660);
@@ -592,7 +556,7 @@ mod tests {
 
     #[test]
     fn test_vrna_stacking_evaluation() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
         assert_eq!(model.interior(&NucleotideVec::from_lossy("CG"), &NucleotideVec::from_lossy("CG")), -240);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("AC"), &NucleotideVec::from_lossy("GU")), -220);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("GU"), &NucleotideVec::from_lossy("AC")), -220);
@@ -600,7 +564,7 @@ mod tests {
 
     #[test]
     fn test_vrna_int11_evaluation() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
         assert_eq!(model.interior(&NucleotideVec::from_lossy("CCG"), &NucleotideVec::from_lossy("CGG")), 50);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("CAG"), &NucleotideVec::from_lossy("CAG")), 90);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("ACU"), &NucleotideVec::from_lossy("AAU")), 190);
@@ -610,7 +574,7 @@ mod tests {
 
     #[test]
     fn test_vrna_int21_evaluation() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
         assert_eq!(model.interior(&NucleotideVec::from_lossy("CACG"), &NucleotideVec::from_lossy("CGG")), 110);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("CAAG"), &NucleotideVec::from_lossy("CAG")), 230);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("AACU"), &NucleotideVec::from_lossy("AAU")), 370);
@@ -625,7 +589,7 @@ mod tests {
 
     #[test]
     fn test_vrna_bulge_1_evaluation() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
         assert_eq!(model.interior(&NucleotideVec::from_lossy("CAG"), &NucleotideVec::from_lossy("CG")), 140);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("AAU"), &NucleotideVec::from_lossy("AU")), 270);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("GAU"), &NucleotideVec::from_lossy("AC")), 160);
@@ -642,7 +606,7 @@ mod tests {
 
     #[test]
     fn test_vrna_bulge_2_evaluation() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
         assert_eq!(model.interior(&NucleotideVec::from_lossy("CAAG"), &NucleotideVec::from_lossy("CG")), 280);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("AAAU"), &NucleotideVec::from_lossy("AU")), 380);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("GAAU"), &NucleotideVec::from_lossy("AC")), 330);
@@ -659,7 +623,7 @@ mod tests {
 
     #[test]
     fn test_vrna_interior_evaluation() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
         assert_eq!(model.interior(&NucleotideVec::from_lossy("ACA"), &NucleotideVec::from_lossy("UGAAU")), 370);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("ACAA"), &NucleotideVec::from_lossy("UGAAU")), 290);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("GUAGU"), &NucleotideVec::from_lossy("AGGC")), 260);
@@ -669,14 +633,14 @@ mod tests {
 
     #[test]
     fn test_vrna_bulge_n_evaluation() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
         assert_eq!(model.interior(&NucleotideVec::from_lossy("CAAAAAAG"), &NucleotideVec::from_lossy("CG")), 440);
         assert_eq!(model.interior(&NucleotideVec::from_lossy("CAAAAAAAAG"), &NucleotideVec::from_lossy("CG")), 470);
     }
 
     #[test]
     fn test_vrna_multibranch() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
         let seg1 = &NucleotideVec::from_lossy("GAAC");
         let seg2 = &NucleotideVec::from_lossy("GAC");
         let seg3 = &NucleotideVec::from_lossy("GAAAC");
@@ -691,7 +655,7 @@ mod tests {
 
     #[test]
     fn test_vrna_exterior_single_branch() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
 
         let seg1 = &NucleotideVec::from_lossy("AUG");
         let seg2 = &NucleotideVec::from_lossy("CUG");
@@ -716,7 +680,7 @@ mod tests {
 
     #[test]
     fn test_vrna_exterior_two_branches() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
 
         let seg1 = &NucleotideVec::from_lossy("AUG");
         let seg2 = &NucleotideVec::from_lossy("CUG");
@@ -751,7 +715,7 @@ mod tests {
 
     #[test]
     fn test_vrna_exterior_three_branches() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
 
         let seg1 = &NucleotideVec::from_lossy("AUG");
         let seg2 = &NucleotideVec::from_lossy("CUG");
@@ -771,7 +735,7 @@ mod tests {
  
     #[test]
     fn test_evaluations() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
 
         let seq = "GAAAAC";
         let dbr = "(....)";
@@ -801,7 +765,7 @@ mod tests {
  
     #[test]
     fn test_multi_evaluations() {
-        let model = ViennaRNA::new(&TURNER2004);
+        let model = ViennaRNA::default();
 
         let seq = "GAAAAC";
         let dbr = "(....)";

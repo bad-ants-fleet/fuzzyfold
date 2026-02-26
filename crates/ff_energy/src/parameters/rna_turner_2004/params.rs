@@ -8,7 +8,7 @@ use crate::parameters::turner2004_loops::*;
 use crate::parameters::turner2004_dangles::*;
 use crate::parameters::turner2004_hairpins::*;
 
-pub static TURNER2004: ThermoParams = ThermoParams {
+pub static RNA_TURNER_2004: ThermoParams = ThermoParams {
     stack_en37: &STACK_EN37,
     stack_enth: &STACK_ENTH,
 
@@ -61,9 +61,12 @@ pub static TURNER2004: ThermoParams = ThermoParams {
     ml_intern_en37:  -90,
     ml_intern_enth: -220,
 
-    triloops: TRILOOPS_TURNER_2004,
-    tetraloops: TETRALOOPS_TURNER_2004,
-    hexaloops: HEXALOOPS_TURNER_2004,
+    triloops_en37: TRILOOPS_EN37,
+    triloops_enth: TRILOOPS_ENTH,
+    tetraloops_en37: TETRALOOPS_EN37,
+    tetraloops_enth: TETRALOOPS_ENTH,
+    hexaloops_en37: HEXALOOPS_EN37,
+    hexaloops_enth: HEXALOOPS_ENTH,
 };
 
 
