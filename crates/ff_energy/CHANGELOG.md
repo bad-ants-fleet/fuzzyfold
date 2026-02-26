@@ -2,6 +2,14 @@
 
 All notable changes to this crate will be documented in this file.
 
+## [0.4.0] - 2026-02-26
+### Fixed
+- Mayor compile-time boost
+- Incorporated pseudouridine parameters (proof of principle: stacks only, for now)
+
+### Changed
+- Switched to supplying parameters in source / no more parameter files.
+
 ## [0.3.1] - 2026-02-06
 ### Fixed
 - fix the evaluation of exterior-loops of length 1: '.' 

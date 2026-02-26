@@ -2,6 +2,11 @@
 
 All notable changes to this crate will be documented in this file.
 
+## [0.4.1] - 2026-02-26
+## Changed
+- Updates for energy evaluation (compiled parameters only, P support)
+- Updates for rate model selection (Arrhenius only)
+
 ## [0.4.0] - 2026-02-06
 ## Added 
 - ff-trajectory silent mode.

@@ -6,6 +6,7 @@ All notable changes to this crate will be documented in this file.
 - added Arrhenius, removed Metropolis/Kawasaki
 - removed lifetimes and added Arc<EnergyModel> for Python exports.
 - LoopTable now owns it's sequence! 
+- compatibility-updates to ff_energy v0.4
 
 ## [0.4.0] - 2026-02-06
 ### Added
