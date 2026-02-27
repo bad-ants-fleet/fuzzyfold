@@ -53,11 +53,12 @@ fn main() -> Result<()> {
     let emodel = Arc::new(cli.energy.build_model());
     let rmodel = cli.kinetics.build_model(emodel.temperature());
 
+    let is_rna = cli.energy.dna.is_none();
     let (header, sequence, structure) =
         if cli.t_ext.is_some() {
-            read_cotr_input(&cli.input)?
+            read_cotr_input(&cli.input, is_rna)?
         } else {
-            match read_eval_input(&cli.input) {
+            match read_eval_input(&cli.input, is_rna) {
                 Ok(v) => v,
                 Err(e) => return Err(anyhow::anyhow!("{e} (or use --t-ext?)")),
             }

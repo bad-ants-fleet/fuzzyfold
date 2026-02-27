@@ -702,7 +702,7 @@ mod tests {
     macro_rules! setup_loop_table {
         ($name:ident, $seq:expr, $db:expr) => {
             let model = ViennaRNA::default();
-            let sequence = NucleotideVec::from_lossy($seq);
+            let sequence = NucleotideVec::try_from($seq).unwrap();
             let pairings = PairTable::try_from($db)
                 .expect("Invalid structure");
             let $name = LoopTable::try_from((sequence, &pairings, Arc::new(model)))
@@ -826,7 +826,7 @@ mod tests {
     #[test]
     fn test_development_bug03() {
         let model = ViennaRNA::default();
-        let sequence = NucleotideVec::from_lossy("GACGCUAUGU");
+        let sequence = NucleotideVec::try_from("GACGCUAUGU").unwrap();
         let pairings =       PairTable::try_from("...(.....)").unwrap();
         let ltab = LoopTable::try_from((sequence, &pairings, Arc::new(model))).unwrap();
         let mut adm = LoopNeighbors::from((ltab, ThreeWayOnly));
@@ -877,7 +877,7 @@ mod tests {
     #[test]
     fn test_development_bug04() {
         let model = ViennaRNA::default();
-        let sequence = NucleotideVec::from_lossy("AAAGCAAAAGCAAAAAAGAAAC");
+        let sequence = NucleotideVec::try_from_rna("AAAGCAAAAGCAAAAAAGAAAC").unwrap();
         let pairings =       PairTable::try_from("...((....))......(...)").unwrap();
         let ltab = LoopTable::try_from((sequence, &pairings, Arc::new(model))).unwrap();
         let mut adm = LoopNeighbors::from((ltab, ThreeAndFour));

@@ -58,7 +58,8 @@ fn main() -> Result<()> {
 
     let model = cli.energy.build_model();
 
-    let (header, sequence, structure) = read_eval_input(&cli.eval.input)?;
+    let is_rna = cli.energy.dna.is_none();
+    let (header, sequence, structure) = read_eval_input(&cli.eval.input, is_rna)?;
     if let Some(h) = header {
         println!("{}", h.yellow())
     }

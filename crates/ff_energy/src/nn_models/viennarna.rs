@@ -571,7 +571,7 @@ mod tests {
         ($model:expr, $seq:expr, $val:expr) => {
             assert_eq!(
                 $model
-                .hairpin(&NucleotideVec::from_lossy($seq))
+                .hairpin(&NucleotideVec::try_from_rna($seq).unwrap())
                 .unwrap(),
                 $val
             );
@@ -582,8 +582,8 @@ mod tests {
         ($model:expr, $seq1:expr, $seq2:expr, $val:expr) => {
             assert_eq!(
                 $model
-                .interior(&NucleotideVec::from_lossy($seq1),
-                          &NucleotideVec::from_lossy($seq2))
+                .interior(&NucleotideVec::try_from($seq1).unwrap(),
+                          &NucleotideVec::try_from($seq2).unwrap())
                 .unwrap(),
                 $val
             );
@@ -705,14 +705,14 @@ mod tests {
     #[test]
     fn test_vrna_multibranch() {
         let model = ViennaRNA::default();
-        let seg1 = &NucleotideVec::from_lossy("GAAC");
-        let seg2 = &NucleotideVec::from_lossy("GAC");
-        let seg3 = &NucleotideVec::from_lossy("GAAAC");
+        let seg1 = &NucleotideVec::try_from("GAAC").unwrap();
+        let seg2 = &NucleotideVec::try_from("GAC").unwrap();
+        let seg3 = &NucleotideVec::try_from("GAAAC").unwrap();
         let energy = model.multibranch(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, 330);
-        let seg1 = &NucleotideVec::from_lossy("GAAC");
-        let seg2 = &NucleotideVec::from_lossy("GAC");
-        let seg3 = &NucleotideVec::from_lossy("GAAAAAAAAAAAAAAAAAAC");
+        let seg1 = &NucleotideVec::try_from("GAAC").unwrap();
+        let seg2 = &NucleotideVec::try_from("GAC").unwrap();
+        let seg3 = &NucleotideVec::try_from("GAAAAAAAAAAAAAAAAAAC").unwrap();
         let energy = model.multibranch(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, 330);
     }
@@ -721,23 +721,23 @@ mod tests {
     fn test_vrna_exterior_single_branch() {
         let model = ViennaRNA::default();
 
-        let seg1 = &NucleotideVec::from_lossy("AUG");
-        let seg2 = &NucleotideVec::from_lossy("CUG");
+        let seg1 = &NucleotideVec::try_from("AUG").unwrap();
+        let seg2 = &NucleotideVec::try_from("CUG").unwrap();
         let energy = model.exterior(&[seg1, seg2]).unwrap();
         assert_eq!(energy, -120);
 
-        let seg1 = &NucleotideVec::from_lossy("UG");
-        let seg2 = &NucleotideVec::from_lossy("CU");
+        let seg1 = &NucleotideVec::try_from("UG").unwrap();
+        let seg2 = &NucleotideVec::try_from("CU").unwrap();
         let energy = model.exterior(&[seg1, seg2]).unwrap();
         assert_eq!(energy, -120); 
 
-        let seg1 = &NucleotideVec::from_lossy("G");
-        let seg2 = &NucleotideVec::from_lossy("CU");
+        let seg1 = &NucleotideVec::try_from("G").unwrap();
+        let seg2 = &NucleotideVec::try_from("CU").unwrap();
         let energy = model.exterior(&[seg1, seg2]).unwrap();
         assert_eq!(energy, -120);
  
-        let seg1 = &NucleotideVec::from_lossy("UG");
-        let seg2 = &NucleotideVec::from_lossy("C");
+        let seg1 = &NucleotideVec::try_from("UG").unwrap();
+        let seg2 = &NucleotideVec::try_from("C").unwrap();
         let energy = model.exterior(&[seg1, seg2]).unwrap();
         assert_eq!(energy, 0); 
     }
@@ -746,33 +746,33 @@ mod tests {
     fn test_vrna_exterior_two_branches() {
         let model = ViennaRNA::default();
 
-        let seg1 = &NucleotideVec::from_lossy("AUG");
-        let seg2 = &NucleotideVec::from_lossy("CUG");
-        let seg3 = &NucleotideVec::from_lossy("CUG");
+        let seg1 = &NucleotideVec::try_from("AUG").unwrap();
+        let seg2 = &NucleotideVec::try_from("CUG").unwrap();
+        let seg3 = &NucleotideVec::try_from("CUG").unwrap();
         let energy = model.exterior(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, -240);
 
-        let seg1 = &NucleotideVec::from_lossy("AUG");
-        let seg2 = &NucleotideVec::from_lossy("CUUG");
-        let seg3 = &NucleotideVec::from_lossy("CUG");
+        let seg1 = &NucleotideVec::try_from("AUG").unwrap();
+        let seg2 = &NucleotideVec::try_from("CUUG").unwrap();
+        let seg3 = &NucleotideVec::try_from("CUG").unwrap();
         let energy = model.exterior(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, -240);
 
-        let seg1 = &NucleotideVec::from_lossy("AUG");
-        let seg2 = &NucleotideVec::from_lossy("CUUG");
-        let seg3 = &NucleotideVec::from_lossy("C");
+        let seg1 = &NucleotideVec::try_from("AUG").unwrap();
+        let seg2 = &NucleotideVec::try_from("CUUG").unwrap();
+        let seg3 = &NucleotideVec::try_from("C").unwrap();
         let energy = model.exterior(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, -120);
 
-        let seg1 = &NucleotideVec::from_lossy("AUG");
-        let seg2 = &NucleotideVec::from_lossy("CG");
-        let seg3 = &NucleotideVec::from_lossy("CU");
+        let seg1 = &NucleotideVec::try_from("AUG").unwrap();
+        let seg2 = &NucleotideVec::try_from("CG").unwrap();
+        let seg3 = &NucleotideVec::try_from("CU").unwrap();
         let energy = model.exterior(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, -290);
 
-        let seg1 = &NucleotideVec::from_lossy("ACA");
-        let seg2 = &NucleotideVec::from_lossy("UGG");
-        let seg3 = &NucleotideVec::from_lossy("CUG");
+        let seg1 = &NucleotideVec::try_from("ACA").unwrap();
+        let seg2 = &NucleotideVec::try_from("UGG").unwrap();
+        let seg3 = &NucleotideVec::try_from("CUG").unwrap();
         let energy = model.exterior(&[seg1, seg2, seg3]).unwrap();
         assert_eq!(energy, -130);
     }
@@ -781,21 +781,31 @@ mod tests {
     fn test_vrna_exterior_three_branches() {
         let model = ViennaRNA::default();
 
-        let seg1 = &NucleotideVec::from_lossy("AUG");
-        let seg2 = &NucleotideVec::from_lossy("CUG");
-        let seg3 = &NucleotideVec::from_lossy("CUG");
-        let seg4 = &NucleotideVec::from_lossy("CUG");
+        let seg1 = &NucleotideVec::try_from("AUG").unwrap();
+        let seg2 = &NucleotideVec::try_from("CUG").unwrap();
+        let seg3 = &NucleotideVec::try_from("CUG").unwrap();
+        let seg4 = &NucleotideVec::try_from("CUG").unwrap();
         let energy = model.exterior(&[seg1, seg2, seg3, seg4]).unwrap();
         assert_eq!(energy, -360);
 
-        let seg1 = &NucleotideVec::from_lossy("AUG");
-        let seg2 = &NucleotideVec::from_lossy("CUG");
-        let seg3 = &NucleotideVec::from_lossy("UUG");
-        let seg4 = &NucleotideVec::from_lossy("CUG");
+        let seg1 = &NucleotideVec::try_from("AUG").unwrap();
+        let seg2 = &NucleotideVec::try_from("CUG").unwrap();
+        let seg3 = &NucleotideVec::try_from("UUG").unwrap();
+        let seg4 = &NucleotideVec::try_from("CUG").unwrap();
         let energy = model.exterior(&[seg1, seg2, seg3, seg4]).unwrap();
         assert_eq!(energy, -240);
     }
 
+    macro_rules! assert_eos {
+        ($model:expr, $seq:expr, $dbr:expr, $val:expr) => {
+            assert_eq!(
+                $model
+                .energy_of_structure(&NucleotideVec::try_from($seq).unwrap(),
+                          &PairTable::try_from($dbr).unwrap()).unwrap(),
+                $val
+            );
+        };
+    }
  
     #[test]
     fn test_evaluations() {
@@ -804,29 +814,40 @@ mod tests {
         let seq = "GAAAAC";
         let dbr = "(....)";
         let e37 = 450;
-        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")).unwrap(), e37);
+        assert_eos!(model, seq, dbr, e37);
 
         let seq = "ACGUUAAAGACGU";
         let dbr = "(((((...)))))";
         let e37 = -170;
-        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")).unwrap(), e37);
+        assert_eos!(model, seq, dbr, e37);
 
         let seq = "AGACGACAAGGUUGAAUCGC";
         let dbr = ".(.(((.(....)...))))";
         let e37 = 420;
-        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")).unwrap(), e37);
+        assert_eos!(model, seq, dbr, e37);
 
         let seq = "GAGUAGUGGAACCAGGCUAU";
         let dbr = ".((...((....))..))..";
         let e37 = 190;
-        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")).unwrap(), e37);
+        assert_eos!(model, seq, dbr, e37);
 
         let seq = "UCUACUAUUCCGGCUUGACAUAAAUAUCGAGUGCUCGACC";
         let dbr = "...........(.(((((........)))))..)......";
         let e37 = -210;
-        assert_eq!(model.energy_of_structure(&NucleotideVec::from_lossy(seq), &PairTable::try_from(dbr).expect("valid")).unwrap(), e37);
+        assert_eos!(model, seq, dbr, e37);
     }
  
+    macro_rules! assert_meos {
+        ($model:expr, $seq:expr, $dbr:expr, $val:expr) => {
+            assert_eq!(
+                $model
+                .energy_of_structure(&NucleotideVec::try_from($seq).unwrap(),
+                          &MultiPairTable::try_from($dbr).unwrap()).unwrap(),
+                $val
+            );
+        };
+    }
+
     #[test]
     fn test_multi_evaluations() {
         let model = ViennaRNA::default();
@@ -834,45 +855,32 @@ mod tests {
         let seq = "GAAAAC";
         let dbr = "(....)";
         let e37 = 450;
-        assert_eq!(model.energy_of_structure(
-                &NucleotideVec::from_lossy(seq), 
-                &MultiPairTable::try_from(dbr).expect("valid")).unwrap(), e37);
+        assert_meos!(model, seq, dbr, e37);
 
-        let fseq = "GA+AAAC";
-        let fdbr = "(.+...)";
+        let seq = "GA+AAAC";
+        let dbr = "(.+...)";
+        let e37 = 300;
+        assert_meos!(model, seq, dbr, e37);
  
-        let rseq = "AAAC+GA";
-        let rdbr = "...(+).";
-        assert_eq!(
-            model.energy_of_structure(
-                &NucleotideVec::from_lossy(fseq), 
-                &MultiPairTable::try_from(fdbr).expect("valid")).unwrap(), 
-            model.energy_of_structure(
-                &NucleotideVec::from_lossy(rseq), 
-                &MultiPairTable::try_from(rdbr).expect("valid")).unwrap()
-        );
+        let seq = "AAAC+GA";
+        let dbr = "...(+).";
+        let e37 = 300;
+        assert_meos!(model, seq, dbr, e37);
 
         let seq = "GAA+AAC";
         let dbr = "(..+..)";
         let e37 = 300;
-        assert_eq!(model.energy_of_structure(
-                &NucleotideVec::from_lossy(seq), 
-                &MultiPairTable::try_from(dbr).expect("valid")).unwrap(), e37);
+        assert_meos!(model, seq, dbr, e37);
 
         let seq = "GC+UUUUAGU+AU+AC";
         let dbr = "((+(...)).+..+.)";
         let e37 = 1140;
-        assert_eq!(model.energy_of_structure(
-                &NucleotideVec::from_lossy(seq), 
-                &MultiPairTable::try_from(dbr).expect("valid")).unwrap(), e37);
+        assert_meos!(model, seq, dbr, e37);
 
         let seq = "GC&UUUUAGU&AGAAACU&AGAAACU&AC";
         let dbr = "((&(...)).&.(...).&.(...).&.)";
         let e37 = 2020;
-        assert_eq!(model.energy_of_structure(
-                &NucleotideVec::from_lossy(seq), 
-                &MultiPairTable::try_from(dbr).expect("valid")).unwrap(), e37);
- 
+        assert_meos!(model, seq, dbr, e37);
     }
 
 }

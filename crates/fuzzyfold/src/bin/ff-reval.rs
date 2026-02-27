@@ -6,7 +6,7 @@ use anyhow::anyhow;
 
 use ff_energy::EnergyModel;
 use ff_energy::NucleotideVec;
-use ff_structure::PairTable;
+use fuzzyfold::structure::MultiPairTable;
 use ff_structure::DotBracketVec;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
 
@@ -63,7 +63,7 @@ fn main() -> Result<()> {
 
     let mut parts = first.split_whitespace();
     let token = parts.next().ok_or_else(|| anyhow!("Missing sequence"))?;
-    let sequence = NucleotideVec::from_lossy(token);
+    let sequence = NucleotideVec::try_from(token)?;
     let _: Vec<f64> = parts.map(|s| s.parse().unwrap()).collect();
     println!("{}", sequence);
 
@@ -76,8 +76,8 @@ fn main() -> Result<()> {
         let structure = DotBracketVec::try_from(token)?;
         let ref_en: f64 = parts.next().ok_or_else(|| anyhow!("Missing energy"))?.parse()?;
 
-        let pairings = PairTable::try_from(&structure)?;
-        let energy = model.energy_of_structure(&sequence, &pairings);
+        let pairings = MultiPairTable::try_from(&structure)?;
+        let energy = model.energy_of_structure(&sequence, &pairings).unwrap();
 
         let mark = if (ref_en * 100f64).round() as i32 != energy { "*" } else { "" };
         if mark == "*" {

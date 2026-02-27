@@ -5,8 +5,10 @@ use std::ops::Deref;
 #[derive(Debug)]
 pub enum SequenceError {
     Plain(String),
-    InvalidChar(char),
     Separator(char),
+    InvalidBase(char),
+    InvalidRnaBase(Base),
+    InvalidDnaBase(Base),
 }
 
 impl fmt::Display for SequenceError {
@@ -15,11 +17,17 @@ impl fmt::Display for SequenceError {
             SequenceError::Plain(s) => {
                 write!(f, "ERROR: {}", s)
             }
-            SequenceError::InvalidChar(c) => {
-                write!(f, "Unsupported nucleotide: '{}'", c)
-            }
             SequenceError::Separator(c) => {
                 write!(f, "Unexpected strand separation character '{}'", c)
+            }
+            SequenceError::InvalidBase(c) => {
+                write!(f, "Unsupported nucleotide: '{}'", c)
+            }
+            SequenceError::InvalidRnaBase(c) => {
+                write!(f, "Unsupported nucleotide for RNA: '{}'", c)
+            }
+            SequenceError::InvalidDnaBase(c) => {
+                write!(f, "Unsupported nucleotide for DNA: '{}'", c)
             }
         }
     }
@@ -53,6 +61,17 @@ impl Base {
             _ => self as usize,
         }
     }
+
+    #[inline(always)]
+    pub const fn canonical_dna_index(self) -> usize {
+        match self {
+            Base::A => Base::A as usize,
+            Base::C => Base::C as usize,
+            Base::G => Base::G as usize,
+            Base::T => Base::U as usize,
+            _ => panic!("Invalid base in DNA!"),
+        }
+    }
 }
 
 impl TryFrom<char> for Base {
@@ -66,7 +85,7 @@ impl TryFrom<char> for Base {
             'T' => Ok(Base::T),
             'P' => Ok(Base::PU),
             '&' | '+' => Ok(Base::SB),
-            _ => Err(SequenceError::InvalidChar(c)),
+            _ => Err(SequenceError::InvalidBase(c)),
         }
     }
 }
@@ -125,11 +144,31 @@ impl fmt::Display for NucleotideVec {
 }
 
 impl NucleotideVec {
-    pub fn from_lossy(s: &str) -> Self {
-        let vec = s.chars().map(|c| {
-            Base::try_from(c).unwrap_or_else(|c| panic!("There's an unknown character {} in your sequence.", c))
-        }).collect();
-        NucleotideVec(vec)
+    pub fn try_from_rna(s: &str) -> Result<Self, SequenceError> {
+        let vec = s.chars()
+            .map(|c| {
+                let base = Base::try_from(c)?;
+                match base {
+                    Base::T => Err(SequenceError::InvalidRnaBase(base)),
+                    _ => Ok(base),
+                }
+            })
+        .collect::<Result<Vec<_>, _>>()?;
+        Ok(NucleotideVec(vec))
+    }
+
+    pub fn try_from_dna(s: &str) -> Result<Self, SequenceError> {
+        let vec = s.chars()
+            .map(|c| {
+                let base = Base::try_from(c)?;
+                match base {
+                    Base::U => Err(SequenceError::InvalidDnaBase(base)),
+                    Base::PU => Err(SequenceError::InvalidDnaBase(base)),
+                    _ => Ok(base),
+                }
+            })
+        .collect::<Result<Vec<_>, _>>()?;
+        Ok(NucleotideVec(vec))
     }
 
     pub fn has_indistinguishable_strands(&self) -> bool {
@@ -243,7 +282,7 @@ impl PairTypeRNA {
     }
 
     /// TODO: Is not used at the moment.
-    pub fn is_ap(&self) -> bool {
+    pub fn is_modified(&self) -> bool {
        matches!(self, PairTypeRNA::AP | PairTypeRNA::PA)
     }
 

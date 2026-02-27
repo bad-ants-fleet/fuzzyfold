@@ -61,7 +61,8 @@ fn main() -> Result<()> {
     let emodel = cli.energy.build_model();
     let rmodel = cli.kinetics.build_model(emodel.temperature());
 
-    let (header, sequence, structure) = read_eval_input(&cli.input)?;
+    let is_rna = cli.energy.dna.is_none();
+    let (header, sequence, structure) = read_eval_input(&cli.input, is_rna)?;
     let pairings = PairTable::try_from(&structure)?;
 
     if let Some(h) = header {

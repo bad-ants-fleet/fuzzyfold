@@ -84,7 +84,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     init_logging(cli.lmin.verbose);
     let emodel = Arc::new(cli.energy.build_model());
-    let (header, sequence, structure) = read_eval_input(&cli.lmin.input)?;
+    let is_rna = cli.energy.dna.is_none();
+    let (header, sequence, structure) = read_eval_input(&cli.lmin.input, is_rna)?;
     let pairings = PairTable::try_from(&structure)?;
 
     let (delta, distance, info) = match (cli.lmin.delta, cli.lmin.maxdist) {

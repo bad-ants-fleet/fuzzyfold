@@ -17,6 +17,7 @@ enum NAMode {
 fn parse_na_format<R: BufRead>(
     reader: R,
     mode: NAMode,
+    is_rna: bool,
 ) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
     let mut header: Option<String> = None;
     let mut sequence: Option<NucleotideVec> = None;
@@ -37,8 +38,11 @@ fn parse_na_format<R: BufRead>(
             header = Some(line.to_string());
         } else if sequence.is_none() {
             let token = line.split_whitespace().next().unwrap();
-            sequence = Some(NucleotideVec::from_lossy(token));
-            //sequence = Some(NucleotideVec::try_from(token)?);
+            if is_rna {
+                sequence = Some(NucleotideVec::try_from_rna(token)?);
+            } else {
+                sequence = Some(NucleotideVec::try_from_dna(token)?);
+            }
         } else if structure.is_none() {
             let token = line.split_whitespace().next().unwrap();
             structure = Some(DotBracketVec::try_from(token)?);
@@ -84,12 +88,12 @@ fn parse_na_format<R: BufRead>(
 //  Base parser functions (lenient and strict variants)
 // ============================================================
 
-pub fn read_cotr<R: BufRead>(reader: R) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
-    parse_na_format(reader, NAMode::Lenient)
+pub fn read_cotr<R: BufRead>(reader: R, is_rna: bool) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
+    parse_na_format(reader, NAMode::Lenient, is_rna)
 }
 
-pub fn read_eval<R: BufRead>(reader: R) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
-    parse_na_format(reader, NAMode::Strict)
+pub fn read_eval<R: BufRead>(reader: R, is_rna: bool) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
+    parse_na_format(reader, NAMode::Strict, is_rna)
 }
 
 // ============================================================
@@ -112,28 +116,28 @@ macro_rules! define_input_variants {
     ($base:ident, $ret:ty) => {
         paste! {
             /// Read from a string buffer.
-            pub fn [<$base _string>](s: &str) -> $ret {
-                $base(Cursor::new(s))
+            pub fn [<$base _string>](s: &str, rna: bool) -> $ret {
+                $base(Cursor::new(s), rna)
             }
 
             /// Read from a file path.
-            pub fn [<$base _file>]<P: AsRef<Path>>(path: P) -> $ret {
+            pub fn [<$base _file>]<P: AsRef<Path>>(path: P, rna: bool) -> $ret {
                 let reader = BufReader::new(File::open(path)?);
-                $base(reader)
+                $base(reader, rna)
             }
 
             /// Read from stdin.
-            pub fn [<$base _stdin>]() -> $ret {
+            pub fn [<$base _stdin>](rna: bool) -> $ret {
                 let reader = BufReader::new(stdin());
-                $base(reader)
+                $base(reader, rna)
             }
 
             /// Read either from stdin ("-") or a file path.
-            pub fn [<$base _input>](s: &str) -> $ret {
+            pub fn [<$base _input>](s: &str, rna: bool) -> $ret {
                 if s == "-" {
-                    [<$base _stdin>]()
+                    [<$base _stdin>](rna)
                 } else {
-                    [<$base _file>](s)
+                    [<$base _file>](s, rna)
                 }
             }
         }
@@ -193,13 +197,13 @@ mod tests {
     #[test]
     fn test_read_cotr_input() {
         let input = ">test\nACGU\n....\n";
-        let (hdr, seq, dbv) = read_cotr_string(input).unwrap();
+        let (hdr, seq, dbv) = read_cotr_string(input, true).unwrap();
         assert_eq!(hdr, Some(">test".into()));
         assert_eq!(seq.to_string(), "ACGU");
         assert_eq!(dbv.to_string(), "....");
 
         let input = ">test\nACGU";
-        let (hdr, seq, dbv) = read_cotr_string(input).unwrap();
+        let (hdr, seq, dbv) = read_cotr_string(input, true).unwrap();
         assert_eq!(hdr, Some(">test".into()));
         assert_eq!(seq.to_string(), "ACGU");
         assert_eq!(dbv.to_string(), ".");
@@ -208,11 +212,11 @@ mod tests {
     #[test]
     fn test_read_eval_input() {
         let input = ">test\nACGU\n....\n";
-        let ok = read_eval_string(input);
+        let ok = read_eval_string(input, true);
         assert!(ok.is_ok());
 
         let missing = ">test\nACGU\n";
-        let err = read_eval_string(missing);
+        let err = read_eval_string(missing, true);
         assert!(err.is_err(), "Missing structure line should fail in strict mode");
     }
 }

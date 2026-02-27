@@ -225,7 +225,8 @@ impl<'a, E: EnergyModel> MacrostateRegistry<'a, E> {
             .trim()
             .to_string();
 
-        let file_seq = NucleotideVec::from_lossy(&seq_line);
+        let file_seq = NucleotideVec::try_from(seq_line.as_str())
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         if &file_seq != self.sequence {
             return Err(io_err("Sequence does not match input sequence", source));
         }

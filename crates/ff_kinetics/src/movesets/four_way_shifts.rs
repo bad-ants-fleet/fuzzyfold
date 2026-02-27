@@ -168,7 +168,7 @@ mod tests {
     macro_rules! setup_loop_table {
         ($name:ident, $seq:expr, $db:expr) => {
             let model = ViennaRNA::default();
-            let sequence = NucleotideVec::from_lossy($seq);
+            let sequence = NucleotideVec::try_from($seq).unwrap();
             let pairings = PairTable::try_from($db)
                 .expect("Invalid structure");
             let $name = LoopTable::try_from((sequence, &pairings, Arc::new(model)))
