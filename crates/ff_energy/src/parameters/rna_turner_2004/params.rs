@@ -1,5 +1,5 @@
-use crate::parameters::ThermoParams;
-use crate::parameters::rna_various::extended_stacks::*;
+use crate::parameters::RNAThermoParams;
+use crate::parameters::rna_turner_2004::turner2004_stacks::*;
 use crate::parameters::rna_turner_2004::turner2004_mimas::*;
 use crate::parameters::rna_turner_2004::turner2004_int11::*;
 use crate::parameters::rna_turner_2004::turner2004_int21::*;
@@ -8,7 +8,7 @@ use crate::parameters::rna_turner_2004::turner2004_loops::*;
 use crate::parameters::rna_turner_2004::turner2004_dangles::*;
 use crate::parameters::rna_turner_2004::turner2004_hairpins::*;
 
-pub static RNA_TURNER_2004: ThermoParams = ThermoParams {
+pub static RNA_TURNER_2004: RNAThermoParams = RNAThermoParams {
     stack_en37: &STACK_EN37,
     stack_enth: &STACK_ENTH,
 
@@ -48,6 +48,8 @@ pub static RNA_TURNER_2004: ThermoParams = ThermoParams {
     duplex_init_enth: 360,
     terminal_ru_en37:  50,
     terminal_ru_enth: 370,
+    terminal_ap_en37:  50, // Dummy
+    terminal_ap_enth: 370, // Dummy
     lxc: 107.856,
 
     ninio_en37:  60,

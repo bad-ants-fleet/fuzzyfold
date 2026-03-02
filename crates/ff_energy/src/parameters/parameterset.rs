@@ -5,7 +5,7 @@ pub const MAX_LOOP: usize = 30;
 pub const B: usize = 4;  // A, C, G, U
 pub const P: usize = 6;  // AU, UA, CG, GC, GU, UG
                          
-//pub type StackParams = [[i32; P]; P]; 
+pub type StackParams = [[i32; P]; P]; 
 pub type LoopParams = [i32; MAX_LOOP + 1];
 pub type MismatchParams = [[[i32; B]; B]; P];
 pub type DangleParams = [[i32; B]; P];
@@ -15,7 +15,7 @@ pub type Int21Params = [[[[[i32; B]; B]; B]; P]; P];
 pub type Int22Params = [[[[[[i32; B]; B]; B]; B]; P]; P];
 
 pub const E: usize = 8;  // AU, UA, CG, GC, GU, UG, AP, PA
-pub type ExtendedStackParams = [[i32; E]; E];
+pub type ExtendedStackParams = [[Option<i32>; E]; E];
 
 #[derive(Copy, Clone, Debug)]
 pub struct LoopEntry {
@@ -23,7 +23,15 @@ pub struct LoopEntry {
     pub val: i32,
 }
 
-pub struct ThermoParams {
+/* NOTE: With the next modification, we may want to switch to a more
+ * general format for end-penalties?:
+ * ...but are these energies or penalties?
+pub static CLOSING_PEN37: [i32; 8] = 
+    /* [cl]:   AU     UA     CG     GC     GU     UG     AP     PA */
+           [   50,    50,     0,     0,    50,    50,    31,    31];
+*/
+
+pub struct RNAThermoParams {
     pub stack_en37: &'static ExtendedStackParams,
     pub stack_enth: &'static ExtendedStackParams,
     pub mismatch_hairpin_en37: &'static MismatchParams,
@@ -59,6 +67,8 @@ pub struct ThermoParams {
     pub duplex_init_enth: i32,
     pub terminal_ru_en37: i32,
     pub terminal_ru_enth: i32,
+    pub terminal_ap_en37: i32,
+    pub terminal_ap_enth: i32,
     pub lxc: f64,
     // NINIO parameters
     pub ninio_en37: i32,
@@ -80,36 +90,4 @@ pub struct ThermoParams {
     pub hexaloops_enth: &'static [LoopEntry],
 }
 
-pub struct FittedParams {
-    pub stack: &'static ExtendedStackParams,
-    pub mismatch_hairpin: &'static MismatchParams,
-    pub mismatch_interior: &'static MismatchParams,
-    pub mismatch_interior_1n: &'static MismatchParams,
-    pub mismatch_interior_23: &'static MismatchParams,
-    pub mismatch_multi: &'static MismatchParams,
-    pub mismatch_exterior: &'static MismatchParams,
-    pub dangle5: &'static DangleParams,
-    pub dangle3: &'static DangleParams,
-    pub int11: &'static Int11Params,
-    pub int21: &'static Int21Params,
-    pub int22: &'static Int22Params,
-    pub hairpin: &'static LoopParams,
-    pub bulge: &'static LoopParams,
-    pub interior: &'static LoopParams,
-    // Misc parameters
-    pub duplex_init: i32,
-    pub terminal_ru: i32,
-    pub lxc: f64,
-    // NINIO parameters
-    pub ninio: i32,
-    pub ninio_max: i32,
-    // Multi-loop parameters
-    pub ml_base: i32,
-    pub ml_closing: i32,
-    pub ml_intern: i32,
-    // Special haipin parameters
-    pub triloops: &'static [LoopEntry],
-    pub tetraloops: &'static [LoopEntry],
-    pub hexaloops: &'static [LoopEntry],
-}
 

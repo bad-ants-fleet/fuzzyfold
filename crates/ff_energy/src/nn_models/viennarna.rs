@@ -10,40 +10,57 @@ use crate::parameters::*;
 use crate::LoopDecomposition;
 use crate::NearestNeighborLoop;
 use crate::K0;
-use crate::nucleotides::BCOUNT;
 
+/// The union of different parameterizations,
+/// may contain redundant fallback parameters.
 pub struct ViennaRNA {
+    /// Steric constraint on minimum hairpin length. (Always three.)
     min_hp_size: usize,
-    temperature: f64, //TODO: make this optional for fitted params?
 
+    /// Intramolecular initiation free energy.
+    duplex_init: i32,
+
+    /// The temperature of measured parameters. 
+    /// (Nonensical for fitted parameters.)
+    temperature: f64, 
+
+    /// An extended parameter table for stacks. 
     stack: ExtendedStackParams,
+
     mismatch_hairpin: MismatchParams,
     mismatch_interior: MismatchParams,
     mismatch_interior_1n: MismatchParams,
     mismatch_interior_23: MismatchParams,
     mismatch_multi: MismatchParams,
     mismatch_exterior: MismatchParams,
-                                   
     dangle5: DangleParams,
     dangle3: DangleParams,
-                                                                              
     int11: Int11Params,
     int21: Int21Params,
     int22: Int22Params,
 
+    /// Paramters for loops with len <= 30.
     hairpin: LoopParams,
     bulge: LoopParams,
     interior: LoopParams,
 
-    duplex_init: i32,
-    terminal_ru: i32,
+    /// Extrapolation constant for loops with len > 30 based on polymer theory.
     lxc: f64,
 
+    /// Terminal AU and GU penalty.
+    terminal_ru: i32,
+    /// Terminal pseudo-Uridine evaluation.
+    terminal_ap: i32,
+
+    /// Asymmetric internal loop correction.
     ninio: i32,
     ninio_max: i32,
 
+    /// Multiloop penalty for unpaired bases.
     ml_base: i32,
+    /// Multiloop initiation penalty.
     ml_closing: i32,
+    /// Multiloop penalty per outgoing stem.
     ml_intern: i32,
 
     triloops: Vec<LoopEntry>,
@@ -79,7 +96,7 @@ impl Default for ViennaRNA {
 impl ViennaRNA {
     /// Initializes a model from fitted parameters, which means there
     /// is no possiblity to change the temperature.
-    pub fn from_fitted_params(params: &'static FittedParams) -> Self {
+    pub fn from_andrunescu_params(params: &'static AndronescuParams) -> Self {
         Self {
             min_hp_size: 3,
             temperature: 37.0,
@@ -105,6 +122,7 @@ impl ViennaRNA {
 
             duplex_init: params.duplex_init,
             terminal_ru: params.terminal_ru,
+            terminal_ap: params.terminal_ru,
             lxc: params.lxc,
 
             ninio: params.ninio,
@@ -121,7 +139,7 @@ impl ViennaRNA {
     }
 
     /// Initializes a model from thermodynamic parameters. That's the default!
-    pub fn from_thermo_params(params: &'static ThermoParams, celsius: f64) -> Self {
+    pub fn from_thermo_params(params: &'static RNAThermoParams, celsius: f64) -> Self {
         if (celsius - T_REF).abs() < 1e-6 {
             Self {
                 min_hp_size: 3,
@@ -148,6 +166,7 @@ impl ViennaRNA {
 
                 duplex_init: params.duplex_init_en37,
                 terminal_ru: params.terminal_ru_en37,
+                terminal_ap: params.terminal_ap_en37,
                 lxc: params.lxc,
 
                 ninio: params.ninio_en37,
@@ -189,6 +208,7 @@ impl ViennaRNA {
 
                 duplex_init: rescale_param!(duplex_init, params, scale),
                 terminal_ru: rescale_param!(terminal_ru, params, scale),
+                terminal_ap: rescale_param!(terminal_ap, params, scale),
                 lxc: params.lxc * celsius,
 
                 ninio: rescale_param!(ninio, params, scale),
@@ -233,8 +253,8 @@ impl ViennaRNA {
             return Ok(en);
         }
 
-        let closing = PairTypeRNA::from_fallback((seq[0], *seq.last().unwrap()));
-        if !closing.can_pair() {
+        let fb_closing = PairTypeRNA::from_fallback((seq[0], *seq.last().unwrap()));
+        if !fb_closing.can_pair() {
             return Err(EnergyError::InvalidClosingPair);
         }
 
@@ -245,78 +265,89 @@ impl ViennaRNA {
             self.hairpin[30] + (self.lxc * ((n as f64) / 30.).ln()) as i32
         };
 
-        if n == 3 && closing.is_ru() {
+        if n == 3 && fb_closing.is_ru() {
             en += self.terminal_ru;
         } else if n > 3 {
             en += self.mismatch_hairpin
-                [closing as usize]
+                [fb_closing as usize]
                 [seq[1].canonical_rna_index()]
                 [seq[n].canonical_rna_index()];
+        }
+
+        if PairTypeRNA::from((seq[0], *seq.last().unwrap())).is_ap() {
+            en -= self.terminal_ru;
+            en += self.terminal_ap;
         }
 
         Ok(en)
     }
 
     fn interior(&self, fwdseq: &[Base], revseq: &[Base]) -> Result<i32, EnergyError> {
-        let outer = PairTypeRNA::from_fallback((*fwdseq.first().unwrap(), *revseq.last().unwrap()));
-        let inner = PairTypeRNA::from_fallback((*revseq.first().unwrap(), *fwdseq.last().unwrap()));
-        if !outer.can_pair() || !inner.can_pair() {
+        let fb_outer = PairTypeRNA::from_fallback((*fwdseq.first().unwrap(), *revseq.last().unwrap()));
+        let fb_inner = PairTypeRNA::from_fallback((*revseq.first().unwrap(), *fwdseq.last().unwrap()));
+        if !fb_outer.can_pair() || !fb_inner.can_pair() {
             return Err(EnergyError::InvalidClosingPair);
         }
 
+        let outer = PairTypeRNA::from((*fwdseq.first().unwrap(), *revseq.last().unwrap()));
+        let inner = PairTypeRNA::from((*revseq.first().unwrap(), *fwdseq.last().unwrap()));
+        let pg1 = if outer.is_ap() { self.terminal_ap - self.terminal_ru } else { 0 };
+        let pg2 = if inner.is_ap() { self.terminal_ap - self.terminal_ru } else { 0 };
+
         let res = match (fwdseq.len(), revseq.len()) {
             (2, 2) => {
-                let outer = PairTypeRNA::from((*fwdseq.first().unwrap(), *revseq.last().unwrap()));
-                let inner = PairTypeRNA::from((*revseq.first().unwrap(), *fwdseq.last().unwrap()));
                 self.stack[outer as usize][inner as usize]
+                    .ok_or(EnergyError::UnsupportedStacking { outer, inner })?
             },
             (3, 2) | (2, 3) => { //NOTE: SpecialC if C adjacent to paired C missing!
                 self.bulge[1] + 
-                self.stack[outer as usize][inner as usize]},
+                    self.stack[outer as usize][inner as usize]
+                    .ok_or(EnergyError::UnsupportedStacking { outer, inner })?
+            },
             (3, 3) => 
-                self.int11[outer as usize][inner as usize]
+                self.int11[fb_outer as usize][fb_inner as usize]
                 [fwdseq[1].canonical_rna_index()]
-                [revseq[1].canonical_rna_index()],
+                [revseq[1].canonical_rna_index()] + pg1 + pg2,
             (3, 4) => 
                 self.int21
-                [outer as usize][inner as usize]
+                [fb_outer as usize][fb_inner as usize]
                 [fwdseq[1].canonical_rna_index()]
                 [revseq[1].canonical_rna_index()]
-                [revseq[2].canonical_rna_index()],
+                [revseq[2].canonical_rna_index()] + pg1 + pg2,
             (4, 3) => 
                 self.int21
-                [inner as usize][outer as usize]
+                [fb_inner as usize][fb_outer as usize]
                 [revseq[1].canonical_rna_index()]
                 [fwdseq[1].canonical_rna_index()]
-                [fwdseq[2].canonical_rna_index()],
+                [fwdseq[2].canonical_rna_index()] + pg1 + pg2,
             (4, 4) => 
                 self.int22
-                [outer as usize][inner as usize]
+                [fb_outer as usize][fb_inner as usize]
                 [fwdseq[1].canonical_rna_index()]
                 [fwdseq[2].canonical_rna_index()]
                 [revseq[1].canonical_rna_index()]
-                [revseq[2].canonical_rna_index()],
+                [revseq[2].canonical_rna_index()] + pg1 + pg2,
             (l, 2) | (2, l) => { // General Bulge case
                 let n = l - 2;
-                let pg1 = if outer.is_ru() { self.terminal_ru } else { 0 };
-                let pg2 = if inner.is_ru() { self.terminal_ru } else { 0 };
+                let ru_pg1 = if fb_outer.is_ru() { self.terminal_ru } else { 0 };
+                let ru_pg2 = if fb_inner.is_ru() { self.terminal_ru } else { 0 };
                 if n <= 30 {
-                    self.bulge[n] + pg1 + pg2
+                    self.bulge[n] + ru_pg1 + ru_pg2 + pg1 + pg2
                 } else {
-                    self.bulge[30] + pg1 + pg2
+                    self.bulge[30] + ru_pg1 + ru_pg2 + pg1 + pg2
                     + (self.lxc * ((n as f64) / 30.).ln()) as i32
                 }
             },
             (l, 3) | (3, l) => { // 1-n interior looop
                 let mut en = 
                     self.mismatch_interior_1n
-                    [outer as usize]
+                    [fb_outer as usize]
                     [fwdseq[1].canonical_rna_index()]
                     [revseq[revseq.len() - 2].canonical_rna_index()] +
                     self.mismatch_interior_1n
-                    [inner as usize]
+                    [fb_inner as usize]
                     [revseq[1].canonical_rna_index()]
-                    [fwdseq[fwdseq.len() - 2].canonical_rna_index()];
+                    [fwdseq[fwdseq.len() - 2].canonical_rna_index()] + pg1 + pg2;
 
                 en += self.ninio_max.min(
                     (l - 3) as i32 * self.ninio);
@@ -332,26 +363,26 @@ impl ViennaRNA {
             (5, 4) | (4, 5) => { // 2-3 interior looop
                 let mut en = 
                     self.mismatch_interior_23
-                    [outer as usize]
+                    [fb_outer as usize]
                     [fwdseq[1].canonical_rna_index()]
                     [revseq[revseq.len() - 2].canonical_rna_index()] +
                     self.mismatch_interior_23
-                    [inner as usize]
+                    [fb_inner as usize]
                     [revseq[1].canonical_rna_index()]
-                    [fwdseq[fwdseq.len() - 2].canonical_rna_index()];
+                    [fwdseq[fwdseq.len() - 2].canonical_rna_index()] + pg1 + pg2;
                 en += self.ninio;
                 en += self.interior[5];
                 en
             }
             (lfwd, lrev) => { 
                 let mut en = self.mismatch_interior
-                    [outer as usize]
+                    [fb_outer as usize]
                     [fwdseq[1].canonical_rna_index()]
                     [revseq[lrev - 2].canonical_rna_index()] +
                     self.mismatch_interior
-                    [inner as usize]
+                    [fb_inner as usize]
                     [revseq[1].canonical_rna_index()]
-                    [fwdseq[lfwd - 2].canonical_rna_index()];
+                    [fwdseq[lfwd - 2].canonical_rna_index()] + pg1 + pg2;
 
                 let asy = (lfwd as isize - lrev as isize).abs() as i32;
                 en += self.ninio_max.min(asy * self.ninio);
@@ -381,32 +412,36 @@ impl ViennaRNA {
         let mut en = 0;
         for i in 0..n {
             let j = (i + 1) % n; 
-            let pair = PairTypeRNA::from_fallback((*segments[i].last().unwrap(), segments[j][0]));
+            let pair = PairTypeRNA::from((*segments[i].last().unwrap(), segments[j][0]));
             if !pair.can_pair() {
                 return Err(EnergyError::InvalidClosingPair);
             }
             if pair.is_ru() { 
                 en += self.terminal_ru;
+            } else if pair.is_ap() {
+                en += self.terminal_ap;
             }
             let d5 = segments.get(i)
                 .and_then(|seg| seg.len().checked_sub(2).and_then(|d| seg.get(d)));
             let d3 = segments.get(j).and_then(|seg| seg.get(1));
 
+            let fb_pair = PairTypeRNA::from_fallback((*segments[i].last().unwrap(), segments[j][0]));
             //NOTE: This does not take the minimum over all options, it always
             // prefers terminal mismatch over single dangling.
+            // Also, in contrast to other mismatch conributions, it is also corrected for GU??
             let den = match (d5, d3) { 
                 (Some(&b5), Some(&b3)) => 
                     self.mismatch_multi
-                    [pair as usize]
+                    [fb_pair as usize]
                     [b5.canonical_rna_index()]
                     [b3.canonical_rna_index()],
                 (Some(&b5), None) => 
                     self.dangle5
-                     [pair as usize]
+                     [fb_pair as usize]
                      [b5.canonical_rna_index()].min(0),
                 (None, Some(&b3)) => 
                     self.dangle3
-                    [pair as usize]
+                    [fb_pair as usize]
                     [b3.canonical_rna_index()].min(0),
                 _ => 0,
             };
@@ -426,30 +461,33 @@ impl ViennaRNA {
         for i in 0..n {
             let j = i + 1; 
             
-            let pair = PairTypeRNA::from_fallback((*segments[i].last().unwrap(), segments[j][0]));
+            let pair = PairTypeRNA::from((*segments[i].last().unwrap(), segments[j][0]));
             if !pair.can_pair() {
                 return Err(EnergyError::InvalidClosingPair);
             }
             if pair.is_ru() { 
                 en += self.terminal_ru;
+            } else if pair.is_ap() {
+                en += self.terminal_ap;
             }
 
             let d5 = segments.get(i)
                 .and_then(|seg| seg.len().checked_sub(2).and_then(|d| seg.get(d)));
             let d3 = segments.get(j).and_then(|seg| seg.get(1));
 
+            let fb_pair = PairTypeRNA::from_fallback((*segments[i].last().unwrap(), segments[j][0]));
             //NOTE: This does not take the minimum over all options, it always
             // prefers terminal mismatch over single dangling.
             let den = match (d5, d3) { 
                 (Some(&b5), Some(&b3)) => 
                     self.mismatch_exterior
-                    [pair as usize][b5.canonical_rna_index()][b3.canonical_rna_index()],
+                    [fb_pair as usize][b5.canonical_rna_index()][b3.canonical_rna_index()],
                 (Some(&b5), None) => 
                     self.dangle5
-                    [pair as usize][b5.canonical_rna_index()].min(0),
+                    [fb_pair as usize][b5.canonical_rna_index()].min(0),
                 (None, Some(&b3)) => 
                      self.dangle3
-                    [pair as usize][b3.canonical_rna_index()].min(0),
+                    [fb_pair as usize][b3.canonical_rna_index()].min(0),
                 _ => 0,
             };
             en += den;
@@ -458,19 +496,15 @@ impl ViennaRNA {
     }
 }
 
-const CAN_PAIR: [[bool; BCOUNT]; BCOUNT] = {
+const CAN_PAIR: [[bool; 4]; 4] = {
     use Base::*;
-    let mut table = [[false; BCOUNT]; BCOUNT];
+    let mut table = [[false; 4]; 4];
     table[A as usize][U as usize] = true;
     table[U as usize][A as usize] = true;
     table[C as usize][G as usize] = true;
     table[G as usize][C as usize] = true;
     table[G as usize][U as usize] = true;
     table[U as usize][G as usize] = true;
-    table[A as usize][PU as usize] = true;
-    table[PU as usize][A as usize] = true;
-    table[G as usize][PU as usize] = true;
-    table[PU as usize][G as usize] = true;
     table
 };
 
@@ -481,7 +515,9 @@ impl EnergyModel for ViennaRNA {
     }
 
     fn can_pair(&self, b1: Base, b2: Base) -> bool {
-        CAN_PAIR[b1 as usize][b2 as usize]
+        CAN_PAIR
+            [b1.canonical_rna_index()]
+            [b2.canonical_rna_index()]
     }
 
     fn min_hairpin_size(&self) -> usize { self.min_hp_size }
@@ -493,7 +529,7 @@ impl EnergyModel for ViennaRNA {
         let mut total = 0;
         structure.for_each_loop(|l| {
             let en = self.energy_of_loop(sequence, l).unwrap_or_else(|e| {
-                panic!("Energy evaluation error: {:?} {:?} {:?}.", sequence, l, e);
+                panic!("Energy evaluation error: {:?} {:?}.", l, e);
             });
             total += en;
             info!("{:<41} {}", format!("{}:", l), format!("{:>6.2}", en as f64 / 100.).green());

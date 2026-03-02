@@ -2,6 +2,7 @@ use std::fmt;
 
 use crate::NearestNeighborLoop;
 use crate::LoopDecomposition;
+use crate::PairTypeRNA;
 use crate::Base;
 
 pub const K0: f64 = 273.15;
@@ -9,6 +10,7 @@ pub const K0: f64 = 273.15;
 #[derive(Debug)]
 pub enum EnergyError {
     HairpinTooSmall { size: usize, min: usize },
+    UnsupportedStacking { outer: PairTypeRNA, inner: PairTypeRNA},
     InvalidClosingPair,
 }
 
@@ -17,6 +19,9 @@ impl fmt::Display for EnergyError {
         match self {
             EnergyError::HairpinTooSmall { size, min } => {
                 write!(f, "Hairpin too small: size {}, minimum allowed is {}", size, min)
+            }
+            EnergyError::UnsupportedStacking{ outer, inner } => {
+                write!(f, "Stacking interaction [{}][{}] not supported by current energy model.", outer, inner)
             }
             EnergyError::InvalidClosingPair => {
                 write!(f, "Invalid closing base pair")

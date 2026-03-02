@@ -1,4 +1,4 @@
-use crate::parameters::FittedParams;
+use crate::parameters::*;
 use crate::parameters::rna_andronescu_2007::andronescu2007_stacks::*;
 use crate::parameters::rna_andronescu_2007::andronescu2007_mimas::*;
 use crate::parameters::rna_andronescu_2007::andronescu2007_dangles::*;
@@ -8,7 +8,40 @@ use crate::parameters::rna_andronescu_2007::andronescu2007_int22::*;
 use crate::parameters::rna_andronescu_2007::andronescu2007_loops::*;
 use crate::parameters::rna_andronescu_2007::andronescu2007_hairpins::*;
 
-pub static RNA_ANDRONESCU_2007: FittedParams = FittedParams {
+pub struct AndronescuParams {
+    pub stack: &'static ExtendedStackParams,
+    pub mismatch_hairpin: &'static MismatchParams,
+    pub mismatch_interior: &'static MismatchParams,
+    pub mismatch_interior_1n: &'static MismatchParams,
+    pub mismatch_interior_23: &'static MismatchParams,
+    pub mismatch_multi: &'static MismatchParams,
+    pub mismatch_exterior: &'static MismatchParams,
+    pub dangle5: &'static DangleParams,
+    pub dangle3: &'static DangleParams,
+    pub int11: &'static Int11Params,
+    pub int21: &'static Int21Params,
+    pub int22: &'static Int22Params,
+    pub hairpin: &'static LoopParams,
+    pub bulge: &'static LoopParams,
+    pub interior: &'static LoopParams,
+    // Misc parameters
+    pub duplex_init: i32,
+    pub terminal_ru: i32,
+    pub lxc: f64,
+    // NINIO parameters
+    pub ninio: i32,
+    pub ninio_max: i32,
+    // Multi-loop parameters
+    pub ml_base: i32,
+    pub ml_closing: i32,
+    pub ml_intern: i32,
+    // Special haipin parameters
+    pub triloops: &'static [LoopEntry],
+    pub tetraloops: &'static [LoopEntry],
+    pub hexaloops: &'static [LoopEntry],
+}
+
+pub static RNA_ANDRONESCU_2007: AndronescuParams = AndronescuParams {
     stack: &STACK,
     mismatch_hairpin: &MISMATCH_HAIRPIN,
     mismatch_interior: &MISMATCH_INTERIOR,

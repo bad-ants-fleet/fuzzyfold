@@ -1,4 +1,4 @@
-use crate::parameters::ThermoParams;
+use crate::parameters::RNAThermoParams;
 use crate::parameters::dna_mathews_2004::mathews2004_stacks::*;
 use crate::parameters::dna_mathews_2004::mathews2004_mimas::*;
 use crate::parameters::dna_mathews_2004::mathews2004_int11::*;
@@ -10,7 +10,9 @@ use crate::parameters::parameterset::LoopEntry;
 
 pub static LOOPS: &[LoopEntry] = &[ ];
 
-pub static DNA_MATHEWS_2004: ThermoParams = ThermoParams {
+/// DNA parameters squeezed into the RNA parameter format. 
+/// (Note that G-T is considered a canonical base-pair.)
+pub static DNA_MATHEWS_2004: RNAThermoParams = RNAThermoParams {
     stack_en37: &STACK_EN37,
     stack_enth: &STACK_ENTH,
 
@@ -50,6 +52,8 @@ pub static DNA_MATHEWS_2004: ThermoParams = ThermoParams {
     duplex_init_enth: -720,
     terminal_ru_en37:    0,
     terminal_ru_enth:  320,
+    terminal_ap_en37:    0, // DUMMY
+    terminal_ap_enth:  320, // DUMMY
     lxc: 107.856,
 
     ninio_en37: 40,

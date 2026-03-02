@@ -139,8 +139,8 @@ pub static BULGE_ENTH: LoopParams = [
 pub static INTERIOR_EN37: LoopParams = [
     i32::MAX, /*   0 */
     i32::MAX, /*   1 */
-         100, /*   2 */
-         100, /*   3 */
+    i32::MAX, /*   2 */
+    i32::MAX, /*   3 */
          110, /*   4 */
          200, /*   5 */
          200, /*   6 */
@@ -173,8 +173,8 @@ pub static INTERIOR_EN37: LoopParams = [
 pub static INTERIOR_ENTH: LoopParams = [
     i32::MAX, /*   0 */
     i32::MAX, /*   1 */
-        -720, /*   2 */
-        -720, /*   3 */
+    i32::MAX, /*   2 */
+    i32::MAX, /*   3 */
         -720, /*   4 */
         -680, /*   5 */
         -130, /*   6 */

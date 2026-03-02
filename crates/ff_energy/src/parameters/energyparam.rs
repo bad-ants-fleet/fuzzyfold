@@ -27,6 +27,18 @@ impl<T: EnergyParameter<Output = T> + Copy, const N: usize> EnergyParameter for 
     }
 }
 
+impl<T: EnergyParameter<Output = T> + Copy> EnergyParameter for Option<T> {
+    type Output = Option<T>;
+
+    #[inline]
+    fn rescale(&self, enthalpies: &Self, scale: f64) -> Self {
+        match (self, enthalpies) {
+            (Some(g), Some(h)) => Some(g.rescale(h, scale)),
+            _ => None,
+        }
+    }
+}
+
 impl EnergyParameter for LoopEntry {
     type Output = LoopEntry;
     #[inline]

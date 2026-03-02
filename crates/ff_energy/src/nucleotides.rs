@@ -281,8 +281,7 @@ impl PairTypeRNA {
             | PairTypeRNA::AU | PairTypeRNA::UA)
     }
 
-    /// TODO: Is not used at the moment.
-    pub fn is_modified(&self) -> bool {
+    pub fn is_ap(&self) -> bool {
        matches!(self, PairTypeRNA::AP | PairTypeRNA::PA)
     }
 
