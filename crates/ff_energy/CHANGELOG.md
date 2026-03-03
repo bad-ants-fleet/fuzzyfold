@@ -2,13 +2,17 @@
 
 All notable changes to this crate will be documented in this file.
 
-## [0.4.0] - 2026-02-26
+## [0.4.0] - 2026-03-04
 ### Fixed
-- Mayor compile-time boost
-- Incorporated pseudouridine parameters (proof of principle: stacks only, for now)
+- Mayor compile-time boost.
 
 ### Changed
 - Switched to supplying parameters in source / no more parameter files.
+
+### Added
+- Incorporated pseudouridine parameters (P).
+- Added distinctions between RNA vs DNA, Thermodynamic vs Fitted parameters.
+- Added fallback modes for smaller parameter-sets.
 
 ## [0.3.1] - 2026-02-06
 ### Fixed

@@ -4,8 +4,10 @@ All notable changes to this crate will be documented in this file.
 
 ## [0.4.1] - 2026-02-26
 ## Changed
-- Updates for energy evaluation (compiled parameters only, P support)
-- Updates for rate model selection (Arrhenius only)
+- Updates for energy evaluation (compiled parameters only, P support).
+- Parameters default to "extended" with additional haipin energies and modifications.
+- Updates for rate model selection (Arrhenius only).
+- Restricted alphabets for RNA {A, C, G, U, P} and DNA {A, C, G, T}.
 
 ## [0.4.0] - 2026-02-06
 ## Added 

@@ -89,7 +89,7 @@ macro_rules! rescale_param {
 
 impl Default for ViennaRNA {
     fn default() -> Self {
-        Self::from_thermo_params(&RNA_TURNER_2004, 37.0)
+        Self::from_thermo_params(&RNA_EXTENDED, 37.0)
     }
 }
 
@@ -628,7 +628,7 @@ mod tests {
 
     #[test]
     fn test_vrna_hairpin_evaluation() {
-        let model = ViennaRNA::default();
+        let model = ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0);
         assert_hp!(model, "GAAAC", 540);
         assert_hp!(model, "CCGAGG", 350);
         assert_hp!(model, "CCAAGG", 330);
@@ -886,7 +886,7 @@ mod tests {
 
     #[test]
     fn test_multi_evaluations() {
-        let model = ViennaRNA::default();
+        let model = ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0);
 
         let seq = "GAAAAC";
         let dbr = "(....)";

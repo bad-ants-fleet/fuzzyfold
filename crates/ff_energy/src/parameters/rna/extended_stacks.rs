@@ -17,7 +17,7 @@
 //! - All unspecified pseudouridine interactions are treated as **U**.
 //! - [AP][AP] = [AP][AU]
 //! - [AP][GU] = [AU][GU]
-//! - [GP] = [GU] (not even shown in table.
+//! - [GP] = [GU] (not even shown in table.)
 //!
 //!
 use crate::parameters::parameterset::ExtendedStackParams;

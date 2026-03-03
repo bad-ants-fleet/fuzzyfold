@@ -6,7 +6,6 @@ use rand::SeedableRng;
 use rand::rngs::SmallRng;
 
 use ff_structure::DotBracketVec;
-use ff_energy::parameters::RNA_TURNER_2004;
 use ff_structure::PairTable;
 use ff_energy::NucleotideVec;
 use ff_energy::ViennaRNA;
@@ -15,6 +14,9 @@ use ff_kinetics::shift_policy;
 use ff_kinetics::Arrhenius;
 use ff_kinetics::Walker;
 use ff_kinetics::LoopNeighbors;
+use ff_energy::parameters::RNA_EXTENDED;
+use ff_energy::parameters::RNA_TURNER_2004;
+use ff_energy::parameters::DNA_MATHEWS_2004;
 
 //TODO: support shifts, rename to arrhenius
 
@@ -22,6 +24,7 @@ use ff_kinetics::LoopNeighbors;
 pub struct Simulator {
     energy_model: Arc<ViennaRNA>,
     rate_model: Arrhenius,
+    is_rna: bool,
 }
 
 
@@ -29,17 +32,37 @@ pub struct Simulator {
 impl Simulator {
     #[new]
     #[pyo3(signature = (
+        params = "rna_default",
         celsius=37.0,
         k0=1e5,
         k3ws=0.0,
         k4ws=0.0,
     ))]
     fn new(
+        params: &str,
         celsius: f64,
         k0: f64,
         k3ws: f64,
         k4ws: f64,
     ) -> PyResult<Self> {
+        let mut is_rna = true;
+        let thermo = match params {
+            "rna_default" => &RNA_TURNER_2004,
+            "rna_extended" => &RNA_EXTENDED,
+            "dna" => {
+                is_rna = false;
+                &DNA_MATHEWS_2004
+            },
+            _ => {
+                return Err(PyValueError::new_err(
+                    format!(
+                        "Unknown parameter set '{}'. \
+                         Valid options are: 'rna_default', 'rna_extended', 'dna'.",
+                        params
+                    )
+                ));
+            }
+        };
 
         if k0 < 0.0 || k3ws < 0.0 || k4ws < 0.0 {
             return Err(PyValueError::new_err(
@@ -47,9 +70,7 @@ impl Simulator {
             ));
         }
 
-        let energy_model = ViennaRNA::from_thermo_params(
-            &RNA_TURNER_2004, celsius
-        );
+        let energy_model = ViennaRNA::from_thermo_params(thermo, celsius);
         let rate_model = Arrhenius::new(
             celsius,
             k0,
@@ -60,6 +81,7 @@ impl Simulator {
         Ok(Self {
             energy_model: Arc::new(energy_model),
             rate_model,
+            is_rna,
         })
     }
 
@@ -77,8 +99,12 @@ impl Simulator {
         t_end: f64,
     ) -> PyResult<SimulationIterator> {
 
-        let seq = NucleotideVec::try_from(sequence)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let sequence = match self.is_rna {
+            true => NucleotideVec::try_from_rna(sequence)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?,
+            false => NucleotideVec::try_from_dna(sequence)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?,
+        };
 
         let start_db = match start {
             Some(s) => DotBracketVec::try_from(s)
@@ -87,7 +113,7 @@ impl Simulator {
                 .map_err(|e| PyValueError::new_err(e.to_string()))?,
         };
 
-        if start_db.len() < seq.len() && t_ext.is_none() {
+        if start_db.len() < sequence.len() && t_ext.is_none() {
             return Err(PyValueError::new_err(
                     "t_ext must be provided when start is shorter than sequence",
             ));
@@ -106,7 +132,7 @@ impl Simulator {
 
         match (self.rate_model.k3ws().is_some(), self.rate_model.k4ws().is_some()) {
             (false, false) => build_iterator(
-                seq,
+                sequence,
                 &start_pt,
                 Arc::clone(&self.energy_model),
                 self.rate_model,
@@ -116,7 +142,7 @@ impl Simulator {
             ),
 
             (true, false) => build_iterator(
-                seq,
+                sequence,
                 &start_pt,
                 Arc::clone(&self.energy_model),
                 self.rate_model,
@@ -126,7 +152,7 @@ impl Simulator {
             ),
 
             (false, true) => build_iterator(
-                seq,
+                sequence,
                 &start_pt,
                 Arc::clone(&self.energy_model),
                 self.rate_model,
@@ -136,7 +162,7 @@ impl Simulator {
             ),
 
             (true, true) => build_iterator(
-                seq,
+                sequence,
                 &start_pt,
                 Arc::clone(&self.energy_model),
                 self.rate_model,

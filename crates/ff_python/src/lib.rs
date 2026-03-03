@@ -9,7 +9,6 @@ pub mod kinetics_exports;
 fn fuzzyfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<energy_exports::ViennaRNA>()?;
     m.add_class::<kinetics_exports::Simulator>()?;
-    m.add_function(wrap_pyfunction!(energy_exports::eval, m)?)?;
     Ok(())
 }
 

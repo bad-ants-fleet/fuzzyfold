@@ -695,13 +695,14 @@ mod tests {
     use ff_structure::PairTable;
     use ff_energy::ViennaRNA;
     use ff_energy::NucleotideVec;
+    use ff_energy::parameters::RNA_TURNER_2004;
     use std::collections::HashSet;
     use crate::shift_policy::*;
     use crate::Walker;
 
     macro_rules! setup_loop_table {
         ($name:ident, $seq:expr, $db:expr) => {
-            let model = ViennaRNA::default();
+            let model = ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0);
             let sequence = NucleotideVec::try_from($seq).unwrap();
             let pairings = PairTable::try_from($db)
                 .expect("Invalid structure");

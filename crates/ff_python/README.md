@@ -1,11 +1,11 @@
 # fuzzyfold - Python Interface
 
-This repository provides Python bindings for **fuzzyfold**
+This repository provides (preliminary) Python bindings for **fuzzyfold's** RNA
 energy evaluation and kinetic simulations.
 
 The Python module exposes:
 
-- Energy evaluation (`ViennaRNA`)
+- Energy evaluation (only default RNA parameters)
 - Stochastic kinetic simulation (`Simulator`)
 
 ## Installation (Development)
