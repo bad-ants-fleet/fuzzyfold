@@ -26,7 +26,7 @@ UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 You can run the trajectory simulation as follows:
 
 ```bash
-cat dld3_lm3.in | ff-trajectory --k0 1.0 --t-end 50
+cat dld3_lm3.na | ff-trajectory --k0 1.0 --t-end 50
 ```
 
 The simulation continues until **time = 50** arbitrary time units. Removing the

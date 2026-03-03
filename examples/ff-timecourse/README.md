@@ -89,7 +89,7 @@ timeline parameters do not change between calls!
 For example:
 
 ```bash
-cat dld3_lm3.fa | ff-timecourse --macrostates dld3*.ms --t-end 1 -n 900 --output dld3_lm3_t1
+cat dld3_lm3.na | ff-timecourse --macrostates dld3*.ms --t-end 1 -n 900 --output dld3_lm3_t1
 ```
 
 This command updates `dld3_lm3_t1.tln`, to include the results from the additional 900 simulations.

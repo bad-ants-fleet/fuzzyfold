@@ -18,7 +18,7 @@ are also welcome to reach out directly at this point.
  - **ff-trajectory**: Single stochastic nucleic acid folding trajectories.
  - **ff-timecourse**: Stochastic nucleic acid secondary structure ensemble simulations.
  - **ff-randseq**: Generate a random sequence. 
- - **ff-locmin**: Enumerate secondary structure neighborhoods.
+ - **ff-explore**: Enumerate secondary structure neighborhoods.
 
 (Other software is work in progress and not yet published to crates.io)
 
