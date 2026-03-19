@@ -42,8 +42,10 @@ impl DerefMut for PairTable {
     }
 }
 
-// Implementing indexing for NAIDX and usize allows users to use BOTH types for indexing the PairTable, circumvents casting " index as usize" everywhere in the code, and makes the API more ergonomic. 
-// The internal implementation still uses usize, so we just cast under the hood. This way, users can use NAIDX indexing without worrying about the internal representation.
+// Implementing indexing for NAIDX and usize allows users to use BOTH types for indexing the
+// PairTable, circumvents casting "index as usize" everywhere in the code, and makes the API more
+// ergonomic. The internal implementation still uses usize, so we just cast under the hood. This
+// way, users can use NAIDX indexing without worrying about the internal representation.
 impl Index<NAIDX> for PairTable {
     type Output = Option<NAIDX>;
 
@@ -53,14 +55,13 @@ impl Index<NAIDX> for PairTable {
         &self.0[index as usize]
     }
 }
-// mutable version
+
 impl IndexMut<NAIDX> for PairTable {
     fn index_mut(&mut self, index: NAIDX) -> &mut Self::Output {
-        // We return a mutable reference (&mut) to the inner item
         &mut self.0[index as usize]
     }
 }
-// implement the same traits for usize, for convenience. The internal implementation still uses usize, so this is just a thin wrapper.
+
 impl Index<usize> for PairTable {
     type Output = Option<NAIDX>;
 
@@ -69,7 +70,6 @@ impl Index<usize> for PairTable {
     }
 }
 
-// mutable version
 impl IndexMut<usize> for PairTable {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.0[index]

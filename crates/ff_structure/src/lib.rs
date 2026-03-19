@@ -13,7 +13,7 @@ pub use loop_table::*;
 pub use pair_set::*;
 
 
-/// Nucleic Acid INdeX: we use `u16` (0 to 65k), which is plenty for nucleic acids.
+/// Nucleic Acid Index: we use `u16` (0 to 65k), which is plenty for nucleic acids.
 /// Should you ever want to fold longer sequences, beware that `P1KEY` needs to
 /// be *twice as large* (in bits) as `NAIDX`, since pairs `(NAIDX, NAIDX)` are
 /// compacted into one `P1KEY`.

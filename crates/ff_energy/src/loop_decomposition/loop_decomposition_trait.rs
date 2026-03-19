@@ -33,7 +33,7 @@ impl LoopDecomposition for PairTable {
 
             while p < j {
                 if let Some(q) = pt[p] {
-                    debug_assert!(q > p );
+                    debug_assert!(q > p);
                     branches.push((p, q));
                     recurse(pt, Some((p, q)), None, f);
                     p = q + 1;
@@ -43,7 +43,7 @@ impl LoopDecomposition for PairTable {
             }
             f(&NearestNeighborLoop::classify(ends, closing, branches));
         }
-        recurse(self, None, Some((0 as NAIDX, (self.len() - 1) as NAIDX)), &mut f);
+        recurse(self, None, Some((0, (self.len() - 1) as NAIDX)), &mut f);
     }
 }
 
