@@ -1,6 +1,6 @@
 //! PairTable construction and helper traits.
 
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::convert::TryFrom;
 use crate::NAIDX;
 use crate::StructureError;
@@ -39,6 +39,40 @@ impl Deref for PairTable {
 impl DerefMut for PairTable {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+// Implementing indexing for NAIDX and usize allows users to use BOTH types for indexing the PairTable, circumvents casting " index as usize" everywhere in the code, and makes the API more ergonomic. 
+// The internal implementation still uses usize, so we just cast under the hood. This way, users can use NAIDX indexing without worrying about the internal representation.
+impl Index<NAIDX> for PairTable {
+    type Output = Option<NAIDX>;
+
+    fn index(&self, index: NAIDX) -> &Self::Output {
+        // We cast to usize here under the hood, so we never 
+        // have to think about it again when using the struct.
+        &self.0[index as usize]
+    }
+}
+// mutable version
+impl IndexMut<NAIDX> for PairTable {
+    fn index_mut(&mut self, index: NAIDX) -> &mut Self::Output {
+        // We return a mutable reference (&mut) to the inner item
+        &mut self.0[index as usize]
+    }
+}
+// implement the same traits for usize, for convenience. The internal implementation still uses usize, so this is just a thin wrapper.
+impl Index<usize> for PairTable {
+    type Output = Option<NAIDX>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+// mutable version
+impl IndexMut<usize> for PairTable {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
     }
 }
 
@@ -106,12 +140,12 @@ mod tests {
     fn test_valid_pair_table() {
         let pt = PairTable::try_from("((..))").unwrap();
         assert_eq!(pt.len(), 6);
-        assert_eq!(pt[0], Some(5));
-        assert_eq!(pt[1], Some(4));
-        assert_eq!(pt[2], None);
-        assert_eq!(pt[3], None);
-        assert_eq!(pt[4], Some(1));
-        assert_eq!(pt[5], Some(0));
+        assert_eq!(pt[0 as NAIDX], Some(5));
+        assert_eq!(pt[1 as NAIDX], Some(4));
+        assert_eq!(pt[2 as NAIDX], None);
+        assert_eq!(pt[3 as NAIDX], None);
+        assert_eq!(pt[4 as NAIDX], Some(1));
+        assert_eq!(pt[5 as NAIDX], Some(0));
     }
 
     #[test]
