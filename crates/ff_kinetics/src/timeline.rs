@@ -56,7 +56,7 @@ impl From<serde_json::Error> for TimelineError {
 pub struct Timepoint {
     /// Absolute time in seconds
     pub time: f64,
-    /// Mapping from macrostate index → number of trajectories in this state
+    /// Mapping from macrostate index to number of trajectories in this state
     pub ensemble: IntMap<usize, usize>,
     /// Total number of observations recorded at this timepoint
     pub counter: usize,
@@ -99,17 +99,17 @@ impl Timepoint {
 
 }
 
-pub struct Timeline<'a, E: EnergyModel> {
+pub struct Timeline<E: EnergyModel> {
     /// Registry of all macrostates (used to classify structures)
-    pub registry: Arc<MacrostateRegistry<'a, E>>,
+    pub registry: Arc<MacrostateRegistry<E>>,
 
     /// One `Timepoint` per output time in the simulation
     pub points: Vec<Timepoint>,
 }
 
-impl<'a, E: EnergyModel> Timeline<'a, E> {
+impl<E: EnergyModel> Timeline<E> {
     /// Build a new empty timeline for given times and an existing macrostate registry.
-    pub fn new(times: &[f64], registry: Arc<MacrostateRegistry<'a, E>>) -> Self {
+    pub fn new(times: &[f64], registry: Arc<MacrostateRegistry<E>>) -> Self {
         let points = times.iter().map(|&t| Timepoint::new(t)).collect();
         Self { registry, points }
     }
@@ -131,7 +131,7 @@ impl<'a, E: EnergyModel> Timeline<'a, E> {
         self.points.iter().enumerate()
     }
 
-    pub fn merge(&mut self, other: Timeline<'a, E>) {
+    pub fn merge(&mut self, other: Timeline<E>) {
         assert!(
             Arc::ptr_eq(&self.registry, &other.registry),
             "Cannot merge timelines with different registries"
@@ -148,7 +148,7 @@ impl<'a, E: EnergyModel> Timeline<'a, E> {
     }
 }
 
-impl<'a, E: EnergyModel> fmt::Display for Timeline<'a, E> {
+impl<E: EnergyModel> fmt::Display for Timeline<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // DRF header
         writeln!(f, "{:>13} {:>5} {:>12} {:>10} {:>25}", "time", "id", "occupancy", "energy", "macrostate")?;

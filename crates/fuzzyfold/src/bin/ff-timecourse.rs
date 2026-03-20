@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     cli.simulation.validate()?;
 
     // --- Build simulator ---
-    let emodel = cli.energy.build_model();
+    let emodel = Arc::new(cli.energy.build_model());
     let rmodel = cli.kinetics.build_model(emodel.temperature());
 
     let is_rna = cli.energy.dna.is_none();
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
         cli.num_sims, cli.kinetics, cli.simulation, cli.energy);
 
     let times = cli.simulation.get_output_times();
-    let mut macrostates = MacrostateRegistry::from((&sequence, &emodel));
+    let mut macrostates = MacrostateRegistry::from((sequence.clone(), emodel.clone()));
     macrostates.insert_files(&cli.macrostates)?;
 
     println!("Macrostates:\n{}", macrostates.iter()
@@ -95,30 +95,29 @@ fn main() -> Result<()> {
             println!("A new timeline file will be created: {}", tln_path.display());
             Timeline::new(&times, Arc::clone(&shared_macrostates))
         };
-    let amodel = Arc::new(cli.energy.build_model());
 
     let timelines: Vec<_> =
         match (rmodel.k3ws().is_some(), rmodel.k4ws().is_some()) {
             (false, false) => {
-                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, NoShift))
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, NoShift))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
                 run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
             (true, false) => {
-                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, ThreeWayOnly))
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, ThreeWayOnly))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
                 run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
             (false, true) => {
-                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, FourWayOnly))
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, FourWayOnly))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
                 run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
             },
             (true, true) => {
-                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, amodel, ThreeAndFour))
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, ThreeAndFour))
                     .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
                 run_timecourse(moves, rmodel, cli.simulation.t_end, cli.num_sims as u64,
                     Arc::clone(&shared_macrostates), &times).collect()
@@ -139,18 +138,18 @@ fn main() -> Result<()> {
 }
 
 
-fn run_timecourse<'t, W, K, E>(
+fn run_timecourse<W, K, E>(
     moves: W,
     rmodel: K,
     t_end: f64,
     num_sims: u64,
-    registry: Arc<MacrostateRegistry<'t, E>>,
-    times: &'t [f64],
-) -> impl ParallelIterator<Item = Timeline<'t, E>>
+    registry: Arc<MacrostateRegistry<E>>,
+    times: &[f64],
+) -> impl ParallelIterator<Item = Timeline<E>>
 where
     W: Walker + Clone + Send + Sync,
-    K: RateModel + Sync + Clone + std::marker::Send,
-    E: EnergyModel + Sync,
+    K: RateModel + Clone,
+    E: EnergyModel,
     SSA<W, K>: From<(W, K)>,
 {
     println!("Simulation progress:");

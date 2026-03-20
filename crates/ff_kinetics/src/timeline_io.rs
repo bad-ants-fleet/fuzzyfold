@@ -20,7 +20,7 @@ pub struct SerializableTimePoint {
     counter: usize,
 }
 
-impl<'a, E: EnergyModel> Timeline<'a, E> {
+impl<E: EnergyModel> Timeline<E> {
     pub fn to_serializable(&self) -> SerializableTimeline {
         SerializableTimeline {
             points: self.points.iter().map(|tp| {
@@ -43,7 +43,7 @@ impl<'a, E: EnergyModel> Timeline<'a, E> {
     pub fn from_file<P: AsRef<std::path::Path>>(
         path: P,
         times: &[f64],
-        registry: Arc<MacrostateRegistry<'a, E>>,
+        registry: Arc<MacrostateRegistry<E>>,
     ) -> result::Result<Self, TimelineError> {
         let data = fs::read_to_string(path)?;
         let serial: SerializableTimeline = serde_json::from_str(&data)?;

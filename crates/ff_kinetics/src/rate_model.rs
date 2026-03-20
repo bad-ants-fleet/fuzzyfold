@@ -3,7 +3,7 @@ use crate::Move;
 pub const K0: f64 = 273.15;
 pub const KB: f64 = 0.001987204285; // kcal/(mol*K)
 
-pub trait RateModel {
+pub trait RateModel: Send + Sync {
     /// Given dE (in kcal/mol), return the rate constant.
     fn rate(&self, m: &Move, delta_e: i32) -> f64;
 }
