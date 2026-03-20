@@ -154,7 +154,6 @@ impl<E: EnergyModel> Timeline<E> {
     }
 }
 
-
 impl<E: EnergyModel> fmt::Display for Timeline<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let macrostates = self.registry.macrostates();
