@@ -133,6 +133,15 @@ impl Macrostate {
         self.ensemble.contains_key(structure)
     }
 
+    pub fn get_lowest_microstate(&self) -> Option<&DotBracketVec> {
+        self.ensemble
+            .iter()
+            .min_by(|(_, (e_a, _)), (_, (e_b, _))| {
+                e_a.partial_cmp(e_b).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(dbv, _)| dbv)
+    }
+
     /// Randomly pick a structure according to its probability in the ensemble.
     pub fn get_random_microstate(&self) -> Option<DotBracketVec> {
         if self.ensemble.is_empty() {

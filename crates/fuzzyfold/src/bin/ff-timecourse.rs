@@ -1,12 +1,16 @@
 use std::fs;
+use std::fs::File;
+use std::io::Write;
+use std::io::BufWriter;
 use std::sync::Arc;
 use std::path::Path;
 use std::path::PathBuf;
+
 use rayon::prelude::*;
 use rand::rng;
+use colored::*;
 use clap::Parser;
 use anyhow::Result;
-use colored::*;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 use serde_json::to_string_pretty;
@@ -76,15 +80,27 @@ fn main() -> Result<()> {
     let times = cli.simulation.get_output_times();
     let mut macrostates = MacrostateRegistry::from((sequence.clone(), emodel.clone()));
     macrostates.insert_files(&cli.macrostates)?;
-
-    println!("Macrostates:\n{}", macrostates.iter()
-        .map(|(_, m)| format!(" - {} {:6.2}", m.name(), m.ensemble_energy().unwrap_or(0.0)))
-        .collect::<Vec<_>>().join("\n"));
-
+    // Verbose Output
+    println!("{:>4} {:<10} {} {:>5} {:>8}",
+        "ID",
+        "Macrostate".cyan(), format!("{}", sequence).yellow(), "Size", "Energy");
+    for (id, m) in macrostates.iter() {
+        if m.name() == "Unassigned" {
+            println!("{:4} {:<10}", 0, m.name());
+            continue
+        }
+        println!("{:4} {:<10} {:<} {:>5} {:>8.2}",
+            id, 
+            m.name(),
+            m.get_lowest_microstate().unwrap(),
+            m.len(),
+            m.ensemble_energy().unwrap());
+    }
     let shared_macrostates = Arc::new(macrostates);
 
     let tln_path = cli.output.with_extension("tln");
     let svg_path = cli.output.with_extension("svg");
+    let nxy_path = cli.output.with_extension("nxy");
 
     // If timeline.json exists, reload instead of starting empty
     let mut master = 
@@ -128,11 +144,18 @@ fn main() -> Result<()> {
         master.merge(timeline);
     }
 
-    println!("Final Timeline:\n{}", master);
-    plot_occupancy_over_time(&master, svg_path, cli.simulation.t_ext, cli.simulation.t_end);
+    println!("{}", "Finished simulations!".red());
+
+    // save / print / plot.
+    let mut writer = BufWriter::new(File::create(nxy_path.clone())?);
+    write!(writer, "{}", master)?;
+    println!("Wrote nxy file: {}", format!("{}",nxy_path.display()).green());
+    plot_occupancy_over_time(&master, svg_path.clone(), cli.simulation.t_ext, cli.simulation.t_end);
+    println!("Plotted svg file: {}", svg_path.display());
     let serial = master.to_serializable();
     let json = to_string_pretty(&serial).unwrap();
-    fs::write(tln_path, json).unwrap();
+    fs::write(tln_path.clone(), json).unwrap();
+    println!("Wrote tln file: {}", tln_path.display());
 
     Ok(())
 }
@@ -152,7 +175,6 @@ where
     E: EnergyModel,
     SSA<W, K>: From<(W, K)>,
 {
-    println!("Simulation progress:");
     let pb = ProgressBar::new(num_sims);
     pb.set_style(
         ProgressStyle::default_bar()
