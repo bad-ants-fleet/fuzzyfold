@@ -6,7 +6,7 @@ use plotters::style::Palette99;
 use crate::timeline::Timeline;
 
 pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
-    timeline: &Timeline<'a, E>, 
+    timeline: &Timeline<E>, 
     filename: impl AsRef<Path>,
     t_lin: f64,
     t_log: f64,
@@ -184,5 +184,3 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
     
     root.present().unwrap(); // write the PNG
 }
-
-

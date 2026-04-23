@@ -1,8 +1,9 @@
 use std::fmt;
 use std::sync::Arc;
 use std::error::Error;
-use ff_energy::EnergyModel;
 use nohash_hasher::IntMap;
+
+use ff_energy::EnergyModel;
 use ff_structure::DotBracketVec; 
 
 use crate::macrostates::MacrostateRegistry;
@@ -10,6 +11,7 @@ use crate::macrostates::MacrostateRegistry;
 #[derive(Debug)]
 pub enum TimelineError {
     Io(std::io::Error),
+    Parse(std::num::ParseFloatError),
     Json(serde_json::Error),
     TimepointCountMismatch { found: usize, expected: usize },
     TimeMismatch { file_time: f64, expected_time: f64 },
@@ -20,6 +22,7 @@ impl fmt::Display for TimelineError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(e) => write!(f, "I/O error: {}", e),
+            Self::Parse(e) => write!(f, "Parse error: {}", e),
             Self::Json(e) => write!(f, "JSON parse error: {}", e),
             Self::TimepointCountMismatch { found, expected } =>
                 write!(f, "Timeline file has {found} timepoints, expected {expected}"),
@@ -50,13 +53,16 @@ impl From<serde_json::Error> for TimelineError {
     fn from(e: serde_json::Error) -> Self { Self::Json(e) }
 }
 
+impl From<std::num::ParseFloatError> for TimelineError { 
+    fn from(e: std::num::ParseFloatError) -> Self { Self::Parse(e) } 
+}
 
 /// One time point with its ensemble of macrostates.
 #[derive(Debug)]
 pub struct Timepoint {
     /// Absolute time in seconds
     pub time: f64,
-    /// Mapping from macrostate index → number of trajectories in this state
+    /// Mapping from macrostate index to number of trajectories in this state
     pub ensemble: IntMap<usize, usize>,
     /// Total number of observations recorded at this timepoint
     pub counter: usize,
@@ -99,17 +105,17 @@ impl Timepoint {
 
 }
 
-pub struct Timeline<'a, E: EnergyModel> {
+pub struct Timeline<E: EnergyModel> {
     /// Registry of all macrostates (used to classify structures)
-    pub registry: Arc<MacrostateRegistry<'a, E>>,
+    pub registry: Arc<MacrostateRegistry<E>>,
 
     /// One `Timepoint` per output time in the simulation
     pub points: Vec<Timepoint>,
 }
 
-impl<'a, E: EnergyModel> Timeline<'a, E> {
+impl<E: EnergyModel> Timeline<E> {
     /// Build a new empty timeline for given times and an existing macrostate registry.
-    pub fn new(times: &[f64], registry: Arc<MacrostateRegistry<'a, E>>) -> Self {
+    pub fn new(times: &[f64], registry: Arc<MacrostateRegistry<E>>) -> Self {
         let points = times.iter().map(|&t| Timepoint::new(t)).collect();
         Self { registry, points }
     }
@@ -131,7 +137,7 @@ impl<'a, E: EnergyModel> Timeline<'a, E> {
         self.points.iter().enumerate()
     }
 
-    pub fn merge(&mut self, other: Timeline<'a, E>) {
+    pub fn merge(&mut self, other: Timeline<E>) {
         assert!(
             Arc::ptr_eq(&self.registry, &other.registry),
             "Cannot merge timelines with different registries"
@@ -148,44 +154,26 @@ impl<'a, E: EnergyModel> Timeline<'a, E> {
     }
 }
 
-impl<'a, E: EnergyModel> fmt::Display for Timeline<'a, E> {
+
+impl<E: EnergyModel> fmt::Display for Timeline<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // DRF header
-        writeln!(f, "{:>13} {:>5} {:>12} {:>10} {:>25}", "time", "id", "occupancy", "energy", "macrostate")?;
-        for tp in self.points.iter() {
-            let time = tp.time;
-            let total = tp.counter.max(1);
+        let macrostates = self.registry.macrostates();
 
-            // Collect ensemble into a vector so we can sort it
-            let mut entries: Vec<_> = tp.iter().collect();
+        // Header
+        write!(f, "{:>13}", "time")?;
+        for ms in macrostates.iter() {
+            write!(f, " {:>13}", ms.name())?;
+        }
+        writeln!(f)?;
 
-            // Sort by energy, None last
-            entries.sort_by(|(a_idx, _), (b_idx, _)| {
-                let e_a = self.registry.macrostates()[*a_idx].ensemble_energy();
-                let e_b = self.registry.macrostates()[*b_idx].ensemble_energy(); 
-                e_a.partial_cmp(&e_b).unwrap_or(std::cmp::Ordering::Equal)
-            });
-
-            // Sort ensemble by energy (you could make this configurable)
-            for (m_idx, count) in entries {
-                let occu = count as f64 / total as f64;
-
-                let name = self.registry.macrostates()[m_idx].name();
-                let energy = self.registry.macrostates()[m_idx].ensemble_energy().unwrap_or(0.0);
-
-                writeln!(
-                    f,
-                    "{:13.9} {:5} {:12.8} {:>10} {:>25}",
-                    time,
-                    m_idx,
-                    occu,
-                    format!("{:10.2}", energy),
-                    name,
-                )?;
+        // Data
+        for tp in &self.points {
+            write!(f, "{:13.6e}", tp.time)?;
+            for m_idx in 0..macrostates.len() {
+                write!(f, " {:13.6e}", tp.occupancy(m_idx))?;
             }
+            writeln!(f)?;
         }
         Ok(())
     }
 }
-
-

@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io;
+use std::sync::Arc;
 use std::path::PathBuf;
 use rustc_hash::FxHashMap;
 use rand::Rng;
@@ -76,11 +77,11 @@ impl Macrostate {
         }
     }
 
-    pub fn from_list<'a, E: EnergyModel>(
+    pub fn from_list<E: EnergyModel>(
         name: &str, 
-        sequence: &'a NucleotideVec,
+        sequence: &NucleotideVec,
         structures: &[DotBracketVec], 
-        energy_model: &'a E, 
+        energy_model: &E, 
     ) -> Self {
         let mut ensemble = FxHashMap::default();
         let rt = KB * (K0 + energy_model.temperature());
@@ -132,6 +133,15 @@ impl Macrostate {
         self.ensemble.contains_key(structure)
     }
 
+    pub fn get_lowest_microstate(&self) -> Option<&DotBracketVec> {
+        self.ensemble
+            .iter()
+            .min_by(|(_, (e_a, _)), (_, (e_b, _))| {
+                e_a.partial_cmp(e_b).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(dbv, _)| dbv)
+    }
+
     /// Randomly pick a structure according to its probability in the ensemble.
     pub fn get_random_microstate(&self) -> Option<DotBracketVec> {
         if self.ensemble.is_empty() {
@@ -157,15 +167,15 @@ impl Macrostate {
 }
 
 /// A registy to collect macrostate definitions.
-pub struct MacrostateRegistry<'a, E: EnergyModel> {
-    sequence: &'a NucleotideVec,
-    energy_model: &'a E,
+pub struct MacrostateRegistry<E: EnergyModel> {
+    sequence: NucleotideVec,
+    energy_model: Arc<E>,
     /// By convention: macrostates[0] = unassigned.
     macrostates: Vec<Macrostate>,
 }
 
-impl<'a, E: EnergyModel> From<(&'a NucleotideVec, &'a E)> for MacrostateRegistry<'a, E> {
-    fn from((sequence, energy_model): (&'a NucleotideVec, &'a E)) -> Self {
+impl<E: EnergyModel> From<(NucleotideVec, Arc<E>)> for MacrostateRegistry<E> {
+    fn from((sequence, energy_model): (NucleotideVec, Arc<E>)) -> Self {
         let macrostates = vec![Macrostate::new_catch_all("Unassigned")];
 
         MacrostateRegistry {
@@ -180,7 +190,7 @@ fn io_err(msg: &str, src: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, format!("{} in {}", msg, src))
 }
 
-impl<'a, E: EnergyModel> MacrostateRegistry<'a, E> {
+impl<E: EnergyModel> MacrostateRegistry<E> {
 
     /// High-level entry: read one or more macrostate files from disk.
     pub fn insert_files(&mut self, files: &[PathBuf]) -> io::Result<()> {
@@ -194,67 +204,62 @@ impl<'a, E: EnergyModel> MacrostateRegistry<'a, E> {
 
     pub fn insert_from_reader<R: BufRead>(&mut self, reader: R, source: &str
     ) -> io::Result<()> {
+
         let mut lines = reader.lines();
 
-        let header_line = lines
-            .next()
-            .ok_or_else(|| io_err("Missing header line", source))??
-            .trim()
-            .to_string();
-
         let name = {
-            let token = header_line
+            let line = lines
+                .next()
+                .ok_or_else(|| io_err("Missing first input line (header)", source))??;
+            let token = line
+                .trim()
                 .strip_prefix('>')
-                .ok_or_else(|| io_err("First line must start with '>'", source))?
+                .ok_or_else(|| io_err("Header line must start with '>'", source))?
                 .split_whitespace()
                 .next()
                 .ok_or_else(|| io_err("Header line is empty", source))?;
             if token.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
                 token.to_string()
             } else {
-                return Err(io_err(
-                        "Header name must be alphanumeric",
-                        source,
-                ));
+                return Err(io_err("Header name must be alphanumeric", source));
             }
         };
 
-        let seq_line = lines
-            .next()
-            .ok_or_else(|| io_err("Missing sequence line", source))??
-            .trim()
-            .to_string();
+        let file_seq = {
+            let seq_line = lines
+                .next()
+                .ok_or_else(|| io_err("Missing second input line (sequence)", source))??;
+            NucleotideVec::try_from(seq_line.trim())
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+        };
 
-        let file_seq = NucleotideVec::try_from(seq_line.as_str())
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        if &file_seq != self.sequence {
+        if file_seq != self.sequence {
             return Err(io_err("Sequence does not match input sequence", source));
         }
 
         let mut structures = Vec::new();
         let mut warned_trailing = false;
-        for (lineno, line) in lines.enumerate() {
-            let line = line?;
-            let line = line.trim();
+        for (lineno, line_raw) in lines.enumerate() {
+            let line = line_raw?.trim().to_string();
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            // Take only the first whitespace-separated token
-            let (structure_str, had_trailing) = match line.split_once(char::is_whitespace) {
-                Some((s, _rest)) => (s, true),
-                None => (line, false),
+            let structure_str = match line.split_once(char::is_whitespace) {
+                Some((s, _)) => {
+                    if !warned_trailing {
+                        eprintln!("Warning: trailing data after dot-bracket structures is ignored in {}.", source);
+                        warned_trailing = true;
+                    }
+                    s
+                },
+                None => &line,
             };
-
-            if had_trailing && !warned_trailing {
-                eprintln!("Warning: trailing data after dot-bracket structures is ignored in {}.", source);
-                warned_trailing = true;
-            }
 
             match DotBracketVec::try_from(structure_str) {
                 Ok(dbv) => structures.push(dbv),
                 Err(e) => {
                     return Err(io_err(
-                        &format!("Invalid dot-bracket at line {}: {:?}", lineno + 3, e),
+                        &format!("Invalid secondary structure at line {}: {:?}", lineno + 3, e),
                         source,
                     ));
                 }
@@ -267,9 +272,9 @@ impl<'a, E: EnergyModel> MacrostateRegistry<'a, E> {
 
         self.macrostates.push(Macrostate::from_list(
             &name,
-            self.sequence,
+            &self.sequence,
             &structures,
-            self.energy_model,
+            &*self.energy_model,
         ));
         Ok(())
     }
@@ -298,11 +303,7 @@ impl<'a, E: EnergyModel> MacrostateRegistry<'a, E> {
     }
 
     pub fn sequence(&self) -> &NucleotideVec {
-        self.sequence
-    }
-
-    pub fn energy_model(&self) -> &E {
-        self.energy_model
+        &self.sequence
     }
 
     pub fn macrostates(&self) -> &Vec<Macrostate> {
@@ -384,7 +385,7 @@ mod tests {
         let energy_model = ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0);
         let seq = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").unwrap();
 
-        let mut registry = MacrostateRegistry::from((&seq, &energy_model));
+        let mut registry = MacrostateRegistry::from((seq, Arc::new(energy_model)));
 
         // By convention: one unassigned macrostate
         assert_eq!(registry.len(), 1);
