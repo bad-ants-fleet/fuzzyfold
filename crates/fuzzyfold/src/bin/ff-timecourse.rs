@@ -47,6 +47,9 @@ pub struct Cli {
     #[arg(short, long, value_name = "FILE")]
     output: PathBuf,
 
+    #[arg(short, long)]
+    title: Option<String>,
+
     #[command(flatten, next_help_heading = "Simulation parameters")]
     simulation: TimelineParameters,
 
@@ -150,12 +153,34 @@ fn main() -> Result<()> {
     let mut writer = BufWriter::new(File::create(nxy_path.clone())?);
     write!(writer, "{}", master)?;
     println!("Wrote nxy file: {}", format!("{}",nxy_path.display()).green());
-    plot_occupancy_over_time(&master, svg_path.clone(), cli.simulation.t_ext, cli.simulation.t_end);
-    println!("Plotted svg file: {}", svg_path.display());
+
     let serial = master.to_serializable();
     let json = to_string_pretty(&serial).unwrap();
     fs::write(tln_path.clone(), json).unwrap();
     println!("Wrote tln file: {}", tln_path.display());
+
+    let numsim = master.points[0].counter;
+    let title = cli.title.unwrap_or({
+        format!("ff-timecourse ({} simulations)", 
+        {
+            if numsim >= 10000 {
+                let s = numsim.to_string();
+                let mut out = String::new();
+                for (i, c) in s.chars().rev().enumerate() {
+                    if i > 0 && i % 3 == 0 {
+                        out.push('_');
+                    }
+                    out.push(c);
+                }
+                out.chars().rev().collect::<String>()
+            } else { 
+                numsim.to_string()
+            }
+        })
+    });
+
+    plot_occupancy_over_time(&master, svg_path.clone(), &title, cli.simulation.t_ext, cli.simulation.t_end);
+    println!("Plotted svg file: {}", svg_path.display());
 
     Ok(())
 }

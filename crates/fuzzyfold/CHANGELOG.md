@@ -2,6 +2,10 @@
 
 All notable changes to this crate will be documented in this file.
 
+## development
+- preliminary ff-tledit interface
+- changed ff-timecoures output to *.nxy
+
 ## [0.4.1] - 2026-02-26
 ## Changed
 - Updates for energy evaluation (compiled parameters only, P support).
