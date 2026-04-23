@@ -33,10 +33,6 @@ path = "src/bin/ff-trajectory.rs"
 name = "ff-explore"
 path = "src/bin/ff-explore.rs"
 
-[[bin]]
-name = "ff-tledit"
-path = "src/bin/ff-tledit.rs"
-
 [dependencies]
 ff_structure.workspace = true
 ff_energy.workspace = true
