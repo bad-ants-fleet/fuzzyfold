@@ -22,9 +22,9 @@ use ff_kinetics::Walker;
 use ff_kinetics::LoopNeighbors;
 use ff_kinetics::shift_policy::*;
 use ff_kinetics::SSA;
-use ff_kinetics::timeline::Timeline;
+use ff_kinetics::timeline_pl::Timeline;
 use ff_kinetics::timeline_plotting::plot_occupancy_over_time;
-use ff_kinetics::MacrostateRegistry;
+use ff_kinetics::MacrostateRegistryPL;
 
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
@@ -77,8 +77,8 @@ fn main() -> Result<()> {
     println!("Output after {} simulations: \n - {:?}\n - {:?}\n - {:?}",
         cli.num_sims, cli.kinetics, cli.simulation, cli.energy);
 
-    let times = cli.simulation.get_output_times();
-    let mut macrostates = MacrostateRegistry::from((sequence.clone(), emodel.clone()));
+    let times = cli.simulation.get_output_times(&sequence, Some(&structure));
+    let mut macrostates = MacrostateRegistryPL::from((sequence.clone(), emodel.clone()));
     macrostates.insert_files(&cli.macrostates)?;
     // Verbose Output
     println!("{:>4} {:<10} {} {:>5} {:>8}",
@@ -112,7 +112,9 @@ fn main() -> Result<()> {
             Timeline::new(&times, Arc::clone(&shared_macrostates))
         };
 
-    let timelines: Vec<_> =
+
+    if cli.simulation.t_ext == 0.0 { // full length simulation 
+        let timelines: Vec<_> =
         match (rmodel.k3ws().is_some(), rmodel.k4ws().is_some()) {
             (false, false) => {
                 let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, NoShift))
@@ -140,10 +142,56 @@ fn main() -> Result<()> {
             },
         };
 
-    for timeline in timelines {
-        master.merge(timeline);
+        for timeline in timelines {
+            master.merge(timeline);
+        }
+
+    } else { // cotranscrptional folding simulation
+
+        let mut start_len = structure.len();
+
+        if structure.len() == sequence.len() {
+            let start_len = 1;
+        } 
+
+        let mut sim_times = vec![cli.simulation.t_ext; sequence.len() - start_len];
+        sim_times.push(cli.simulation.t_end);
+
+        let timelines: Vec<_> =
+        match (rmodel.k3ws().is_some(), rmodel.k4ws().is_some()) {
+            (false, false) => {
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, NoShift))
+                    .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+                run_cotimecourse(moves, rmodel, &sim_times, cli.num_sims as u64,
+                    Arc::clone(&shared_macrostates), &times).collect()
+            },
+            (true, false) => {
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, ThreeWayOnly))
+                    .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+                run_cotimecourse(moves, rmodel, &sim_times, cli.num_sims as u64,
+                    Arc::clone(&shared_macrostates), &times).collect()
+            },
+            (false, true) => {
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, FourWayOnly))
+                    .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+                run_cotimecourse(moves, rmodel, &sim_times, cli.num_sims as u64,
+                    Arc::clone(&shared_macrostates), &times).collect()
+            },
+            (true, true) => {
+                let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, ThreeAndFour))
+                    .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
+                run_cotimecourse(moves, rmodel, &sim_times, cli.num_sims as u64,
+                    Arc::clone(&shared_macrostates), &times).collect()
+            },
+        };
+
+        for timeline in timelines {
+            master.merge(timeline);
+        }
+
     }
 
+    
     println!("{}", "Finished simulations!".red());
 
     // save / print / plot.
@@ -166,7 +214,7 @@ fn run_timecourse<W, K, E>(
     rmodel: K,
     t_end: f64,
     num_sims: u64,
-    registry: Arc<MacrostateRegistry<E>>,
+    registry: Arc<MacrostateRegistryPL<E>>,
     times: &[f64],
 ) -> impl ParallelIterator<Item = Timeline<E>>
 where
@@ -211,3 +259,59 @@ where
             },
         )
 }
+
+
+fn run_cotimecourse<W, K, E>(
+    moves: W,
+    rmodel: K,
+    sim_times: &[f64],
+    num_sims: u64,
+    registry: Arc<MacrostateRegistryPL<E>>,
+    times: &[f64],
+) -> impl ParallelIterator<Item = Timeline<E>>
+where
+    W: Walker + Clone + Send + Sync,
+    K: RateModel + Clone + Send + Sync,
+    E: EnergyModel + Send + Sync,
+    SSA<W, K>: From<(W, K)>,
+{
+    let pb = ProgressBar::new(num_sims);
+    pb.set_style(
+        ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+        .unwrap()
+        .progress_chars("#>-"),
+    );
+
+    (0..num_sims)
+    .into_par_iter()
+    .map_init(
+        move || pb.clone(), // each thread gets a clone
+        move |pb, _| {
+            let registry = Arc::clone(&registry);
+            let mut timeline = Timeline::new(times, registry);
+
+            let mut simulator = SSA::from((moves.clone(), rmodel.clone()));
+            let mut t_idx = 0;
+            simulator.co_simulate(
+                &mut rng(),
+                sim_times,
+                |t, tinc, _, w| {
+                    while t_idx < times.len() && t + tinc >= times[t_idx] {
+                        let structure = w.current_structure();
+                        timeline.assign_structure(t_idx, &structure);
+                        t_idx += 1;
+                    }
+                    true
+                },
+            );
+
+            pb.inc(1);
+            timeline
+        },
+    )
+
+}
+
+
+

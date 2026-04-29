@@ -111,6 +111,9 @@ impl TryFrom<&DotBracketVec> for PairList {
         if let Some(i) = stack.pop() {
             return Err(StructureError::UnmatchedOpen(i));
         }
+
+        pairs.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        
         Ok(PairList {pairs})
     }
 }
