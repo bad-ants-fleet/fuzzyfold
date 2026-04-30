@@ -1,3 +1,73 @@
+//! Stochastic folding simulator 
+//! 
+//! This binary performs stochastic folding simulations both at full sequence length and 
+//! cotrnacriptional, running multiple simulations in parallel and merging them into a master timeline. 
+//! This timeline is used to produce an occupancy plot. The plot shows the occupancy of predefined 
+//! macrostates in average over time. 
+//! 
+//! Mode: 
+//! Full length simulation: give structure of full sequence length 
+//! Cotranscriptonal simulation: give no structure or structure shorter than sequence length
+//! 
+//! --- Full length simulation --- 
+//! 
+//! Parameters:
+//!  
+//! - t-end: total simulationt time 
+//! - t-sep: last timepoint on linear scale (timepoint where linear scale in occupany plot switches
+//! to logarithmic scale and seperator is placed)
+//! - t-lin: timepoints on linear time scale [0...t-sep]
+//! - t-log: time points on logarithmic timescale [t-sep...t-log]
+//! - num-sims: number of simulations performed
+//! - k0: kinetic rate constant 
+//! 
+//! Input
+//! - user has to give structure and t-sep
+//! - t-lin and t-log are optional (default: 100)
+//! - num-sim optional (default: 1)
+//! 
+//! --- Cotranscriptional simulation ---
+//! 
+//! Parameters
+//!  
+//! - t-ext: extension time (simulation time per transcript length)
+//! - t-end: time of postranscriptional simulation
+//! - t-sep: last timepoint on linear scale (timepoint where linear scale in occupany plot switches
+//! to logarithmic scale and seperator is placed)
+//! - t-lin: recorded time steps per transcript length [without t-sep]/ timepoints recorded on linear timescale [with t-sep]
+//! - t-log: time points recorded for the posttranscriptional simulation on a logarithmic timescale [without t-sep]/
+//! timepoints recorded on logarithmic timescale [with t-sep]
+//! - num-sims: number of simulations performed
+//! - k0: kinetic rate constant 
+//! 
+//! Input & mode 
+//! - Cotranscriptional simulation 
+//! -> user has to give either no structure or a structure, that is shorter then full length, that 
+//!     will be used as the start structure and t-ext (extension time)
+//! - optional: t-sep 
+//! -> no t-sep: linear scale ends at end of transcription (t-lin: timepoints recorded per extension step;
+//! t-log: timepoints recorded during posttranscriptional folding)
+//! -> t-sep: linear timescale ends at t-sep (t-lin: timepoints recorded on linear timescale; t-log: time points recorded on
+//! logarithmic timescale)
+//! - optional: t-lin and t-log are optional (default: 100)
+//! - optional: num-sim (default: 1)
+//! 
+//! --- General ---
+//! 
+//! Output: 
+//! - user has to give output file
+//! - output formats: 
+//! -> svg (occupancy plot)
+//! -> nxy (occupancies)
+//! -. tln (timeline)
+//! 
+//! Load timeline:
+//! The 'tln' file can be used to accumulate results incrementially. Existing timlines can be reloaded and when a simulation is
+//! run with it, it gets updated. (Parameters have to be set to the same values!)
+//! 
+
+
+
 use std::fs;
 use std::fs::File;
 use std::io::Write;
@@ -6,6 +76,7 @@ use std::sync::Arc;
 use std::path::Path;
 use std::path::PathBuf;
 
+use plotters::prelude::LogScalable;
 use rayon::prelude::*;
 use rand::rng;
 use colored::*;
@@ -23,10 +94,10 @@ use ff_kinetics::LoopNeighbors;
 use ff_kinetics::shift_policy::*;
 use ff_kinetics::SSA;
 use ff_kinetics::timeline_pl::Timeline;
-use ff_kinetics::timeline_plotting::plot_occupancy_over_time;
+use ff_kinetics::timeline_plotting_pl::plot_occupancy_over_time;
 use ff_kinetics::MacrostateRegistryPL;
 
-use fuzzyfold::input_parsers::read_eval_input;
+use fuzzyfold::input_parsers::read_cotr_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
 use fuzzyfold::kinetics_parsers::RateModelArguments;
 use fuzzyfold::kinetics_parsers::TimelineParameters;
@@ -66,18 +137,47 @@ fn main() -> Result<()> {
     let rmodel = cli.kinetics.build_model(emodel.temperature());
 
     let is_rna = cli.energy.dna.is_none();
-    let (header, sequence, structure) = read_eval_input(&cli.input, is_rna)?;
+    let (header, sequence, structure) = read_cotr_input(&cli.input, is_rna)?;
     let pairings = PairTable::try_from(&structure)?;
+
+    // --- Check input ---
+    if structure.len() < sequence.len() && cli.simulation.t_ext.is_none() {
+        panic!("Error:'t-ext' (extension time) missing for cotranscriptional simulation!"); 
+    }
+
+    if structure.len() == sequence.len() && cli.simulation.t_sep.is_none() {
+        panic!("Error: 't-sep' (last timepoint of the linear scale) missing for cotranscriptional simulation!")
+    }
+
+    if structure.len() == sequence.len() && cli.simulation.t_ext.is_some() {
+        panic!("Error: 't-ext' (extension time) given in combination full length structure.For cotranscriptional simulation give either 
+        shorter start structure or no structure!");
+    }
+
+    if cli.simulation.t_ext.is_some() && cli.simulation.t_sep.is_some() {
+        if cli.simulation.t_sep.unwrap() >= (cli.simulation.t_ext.unwrap() * (sequence.len() - structure.len()).as_f64() + cli.simulation.t_end) {
+            panic!("Error: 't_sep' must be smaller than the total simulation time!");
+        } 
+    }
+
+    let n = header.clone();
+    let name = n
+        .as_deref()
+        .map(|h| h.trim_start_matches('>'))
+        .and_then(|h| h.split_whitespace().next())
+        .unwrap_or("unnamed_sequence");
 
     if let Some(h) = header {
         println!("{}", h.yellow());
-    } 
+    }
+
     println!("{}", sequence);
 
     println!("Output after {} simulations: \n - {:?}\n - {:?}\n - {:?}",
         cli.num_sims, cli.kinetics, cli.simulation, cli.energy);
 
-    let times = cli.simulation.get_output_times(&sequence, Some(&structure));
+    let times = cli.simulation.get_output_times(&sequence, Some(&structure)); // build times vector for output times 
+
     let mut macrostates = MacrostateRegistryPL::from((sequence.clone(), emodel.clone()));
     macrostates.insert_files(&cli.macrostates)?;
     // Verbose Output
@@ -98,6 +198,8 @@ fn main() -> Result<()> {
     }
     let shared_macrostates = Arc::new(macrostates);
 
+
+    // Output paths 
     let tln_path = cli.output.with_extension("tln");
     let svg_path = cli.output.with_extension("svg");
     let nxy_path = cli.output.with_extension("nxy");
@@ -113,7 +215,7 @@ fn main() -> Result<()> {
         };
 
 
-    if cli.simulation.t_ext == 0.0 { // full length simulation 
+    if cli.simulation.t_ext.is_none() { // full length simulation 
         let timelines: Vec<_> =
         match (rmodel.k3ws().is_some(), rmodel.k4ws().is_some()) {
             (false, false) => {
@@ -145,16 +247,13 @@ fn main() -> Result<()> {
         for timeline in timelines {
             master.merge(timeline);
         }
+        
+        plot_occupancy_over_time(&master, svg_path.clone(), &format!("Timecourse {}", name),cli.simulation.t_sep.unwrap(), cli.simulation.t_end);
 
-    } else { // cotranscrptional folding simulation
 
-        let mut start_len = structure.len();
+    } else { // cotranscriptional folding simulation
 
-        if structure.len() == sequence.len() {
-            let start_len = 1;
-        } 
-
-        let mut sim_times = vec![cli.simulation.t_ext; sequence.len() - start_len];
+        let mut sim_times = vec![cli.simulation.t_ext.unwrap(); sequence.len() - structure.len()];
         sim_times.push(cli.simulation.t_end);
 
         let timelines: Vec<_> =
@@ -189,16 +288,28 @@ fn main() -> Result<()> {
             master.merge(timeline);
         }
 
+        let co_time = cli.simulation.t_ext.unwrap() * (sequence.len() - structure.len()).as_f64();
+        let post_time = co_time + cli.simulation.t_end;
+
+        if cli.simulation.t_sep.is_none() { // No t-sep given
+            
+            plot_occupancy_over_time(&master, svg_path.clone(), &format!("Cotimecourse {}", name),co_time, post_time);
+
+        } else { // t-sep given 
+
+            plot_occupancy_over_time(&master, svg_path.clone(), &format!("Cotimecourse {}", name), cli.simulation.t_sep.unwrap(), post_time);  
+        }
+
     }
 
-    
+
     println!("{}", "Finished simulations!".red());
 
     // save / print / plot.
     let mut writer = BufWriter::new(File::create(nxy_path.clone())?);
     write!(writer, "{}", master)?;
     println!("Wrote nxy file: {}", format!("{}",nxy_path.display()).green());
-    plot_occupancy_over_time(&master, svg_path.clone(), cli.simulation.t_ext, cli.simulation.t_end);
+    
     println!("Plotted svg file: {}", svg_path.display());
     let serial = master.to_serializable();
     let json = to_string_pretty(&serial).unwrap();
@@ -209,6 +320,7 @@ fn main() -> Result<()> {
 }
 
 
+/// full length folding simulation 
 fn run_timecourse<W, K, E>(
     moves: W,
     rmodel: K,
@@ -261,6 +373,7 @@ where
 }
 
 
+/// Cotranscriptional folding simulation 
 fn run_cotimecourse<W, K, E>(
     moves: W,
     rmodel: K,

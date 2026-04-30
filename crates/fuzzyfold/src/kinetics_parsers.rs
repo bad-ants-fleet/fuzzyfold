@@ -32,8 +32,8 @@ impl RateModelArguments {
 #[derive(Debug, Args)]
 pub struct TimelineParameters {
     /// Extension time during transcription.
-    #[arg(long, default_value_t = 0.0)]
-    pub t_ext: f64,
+    #[arg(long)]
+    pub t_ext: Option<f64>,   
 
     /// Simulation stop time/ Posttranscriptional simulation time (in cotranscriptional simulations).
     #[arg(long, default_value_t = 1.0)]
@@ -57,11 +57,17 @@ pub struct TimelineParameters {
 impl TimelineParameters {
     /// Validate that all parameters make sense.
     pub fn validate(&self) -> Result<()> {
-        if let Some(sep) = self.t_sep {
-            if self.t_end <= sep {
-                bail!("t_end ({}) must be greater than t_sep ({})", self.t_end, sep);
+        
+        if self.t_ext.is_none() { 
+
+            if let Some(sep) = self.t_sep {
+
+                if self.t_end <= sep {
+                    bail!("t_end ({}) must be greater than t_sep ({})", self.t_end, sep);
+                }
             }
         }
+        
         if self.t_lin == 0 && self.t_log > 1 {
             bail!("t_lin must be > 0 if t_log > 1 (got t_lin={}, t_log={})", self.t_lin, self.t_log);
         }
@@ -76,29 +82,8 @@ impl TimelineParameters {
         let t_sep = self.t_sep;
         let mut times = vec![0.0];
 
-        if t_ext == 0.0 { // full length simulation
-            if t_sep.is_none() { // no t_sep given => t_lin and t_log are applied globally
-
-                // Linear time points: append `t_lin` evenly spaced points between 0...t-end 
-                let start = *times.last().unwrap();
-                let step = t_end / t_lin as f64;
-                for i in 1..=t_lin {
-                    times.push(start + i as f64 * step);
-                }
-
-                // Logarithmic time points:  append `t_log` evenly spaced points between 0...t-end 
-                let s: f64 = 1e-12;
-                let log_start = s.ln();
-                let log_end = t_end.ln();
-                for i in 1..t_log {
-                    let frac = i as f64 / t_log as f64;
-                    let value = (log_start + frac * (log_end - log_start)).exp();
-                    times.push(value);
-                }
-                times.push(t_end);
-                times
-
-            } else { 
+        if t_ext.is_none() { // full length simulation
+            
             // t_sep given => t_lin evenly spaced timepoints on a linear timescale between 0 and t-sep and 
             // t_log timepoints on a logarithmic timescale 
 
@@ -121,7 +106,6 @@ impl TimelineParameters {
                 times.push(t_end);
 
                 times
-            }
 
         } else {  // Co-transcriptional simulation 
             
@@ -137,7 +121,7 @@ impl TimelineParameters {
 
                 while len < total_len {
                     let start = *times.last().unwrap();
-                    let step = t_ext / t_lin as f64;
+                    let step = t_ext.unwrap() / t_lin as f64;
                     for i in 1..= t_lin {
                         times.push(start + i as f64 * step);
                     }
@@ -174,7 +158,7 @@ impl TimelineParameters {
                 // Logarithmic tail
                 let start = *times.last().unwrap();
                 let log_start = start.ln();
-                let end = (t_ext * (total_len - start_len - 1).as_f64()) + t_end;
+                let end = (t_ext.unwrap() * (total_len - start_len).as_f64()) + t_end;
                 let log_end = end.ln();
                 for i in 1..t_log {
                     let frac = i as f64 / t_log as f64;
