@@ -25,7 +25,7 @@ pub enum DnaParams {
 #[derive(Debug, Args)]
 pub struct EnergyModelArguments {
     /// Temperature in Celsius
-    #[arg(long, default_value = "37.0")]
+    #[arg(long, default_value = "37.0", allow_hyphen_values = true)]
     pub celsius: f64,
 
     /// Built-in RNA parameter set (default: turner2004ext).

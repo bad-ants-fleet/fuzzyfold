@@ -2,6 +2,11 @@
 
 All notable changes to this crate will be documented in this file.
 
+## development
+- removed lifetimes for macrostate interface -> preparing exports to python.
+- tweaked timeline visualization.
+- provided preliminary interface to merge timelines
+
 ## 0.4.1 - 2026-03-04
 ### Changed
 - added Arrhenius, removed Metropolis/Kawasaki

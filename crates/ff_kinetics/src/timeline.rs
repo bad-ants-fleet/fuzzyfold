@@ -177,3 +177,4 @@ impl<E: EnergyModel> fmt::Display for Timeline<E> {
         Ok(())
     }
 }
+
