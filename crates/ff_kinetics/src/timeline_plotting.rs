@@ -164,5 +164,3 @@ pub fn plot_occupancy_over_time<E: EnergyModel>(
     
     root.present().unwrap(); // write the PNG
 }
-
-
