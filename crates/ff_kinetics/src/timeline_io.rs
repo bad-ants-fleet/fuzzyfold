@@ -205,5 +205,3 @@ impl<E: EnergyModel> Timeline<E> {
         );
     }
 }
-
-
