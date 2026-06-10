@@ -1,7 +1,7 @@
 //! Stochastic folding simulator 
 //! 
 //! This binary performs stochastic folding simulations both at full sequence length and 
-//! cotrnacriptional, running multiple simulations in parallel and merging them into a master timeline. 
+//! cotranscriptional, running multiple simulations in parallel and merging them into a master timeline. 
 //! This timeline is used to produce an occupancy plot. The plot shows the occupancy of predefined 
 //! macrostates in average over time. 
 //! 
@@ -13,9 +13,8 @@
 //! 
 //! Parameters:
 //!  
-//! - t-end: total simulationt time 
-//! - t-sep: last timepoint on linear scale (timepoint where linear scale in occupany plot switches
-//! to logarithmic scale and seperator is placed)
+//! - t-end: total simulation time 
+//! - t-sep: last timepoint on linear scale (timepoint where linear scale in occupany plot switches to logarithmic scale and seperator is placed)
 //! - t-lin: timepoints on linear time scale [0...t-sep]
 //! - t-log: time points on logarithmic timescale [t-sep...t-log]
 //! - num-sims: number of simulations performed
@@ -23,8 +22,9 @@
 //! 
 //! Input
 //! - user has to give structure and t-sep
-//! - t-lin and t-log are optional (default: 100)
-//! - num-sim optional (default: 1)
+//! - optional: t-lin and t-log (default: 100)
+//! - optional: t-end (default: 1.0)
+//! - optional: num-sim (default: 1)
 //! 
 //! --- Cotranscriptional simulation ---
 //! 
@@ -32,24 +32,20 @@
 //!  
 //! - t-ext: extension time (simulation time per transcript length)
 //! - t-end: time of postranscriptional simulation
-//! - t-sep: last timepoint on linear scale (timepoint where linear scale in occupany plot switches
-//! to logarithmic scale and seperator is placed)
+//! - t-sep: last timepoint on linear scale (timepoint where linear scale in occupany plot switches to logarithmic scale and seperator is placed)
 //! - t-lin: recorded time steps per transcript length [without t-sep]/ timepoints recorded on linear timescale [with t-sep]
-//! - t-log: time points recorded for the posttranscriptional simulation on a logarithmic timescale [without t-sep]/
-//! timepoints recorded on logarithmic timescale [with t-sep]
+//! - t-log: time points recorded for the posttranscriptional simulation on a logarithmic timescale [without t-sep]/ timepoints recorded on logarithmic timescale [with t-sep]
 //! - num-sims: number of simulations performed
 //! - k0: kinetic rate constant 
 //! 
 //! Input & mode 
 //! - Cotranscriptional simulation 
-//! -> user has to give either no structure or a structure, that is shorter then full length, that 
-//!     will be used as the start structure and t-ext (extension time)
+//! -> user has to give either no structure or a structure, that is shorter than full length (start structure) and t-ext (extension time)
 //! - optional: t-sep 
-//! -> no t-sep: linear scale ends at end of transcription (t-lin: timepoints recorded per extension step;
-//! t-log: timepoints recorded during posttranscriptional folding)
-//! -> t-sep: linear timescale ends at t-sep (t-lin: timepoints recorded on linear timescale; t-log: time points recorded on
-//! logarithmic timescale)
-//! - optional: t-lin and t-log are optional (default: 100)
+//! -> no t-sep: linear scale ends at end of transcription (t-lin: timepoints recorded per extension step; t-log: timepoints recorded during posttranscriptional folding)
+//! -> t-sep: linear timescale ends at t-sep (t-lin: timepoints recorded on linear timescale; t-log: time points recorded on logarithmic timescale)
+//! - optional: t-lin and t-log (default: 100)
+//! - optional: t-end (default: 1.0)
 //! - optional: num-sim (default: 1)
 //! 
 //! --- General ---
@@ -59,7 +55,7 @@
 //! - output formats: 
 //! -> svg (occupancy plot)
 //! -> nxy (occupancies)
-//! -. tln (timeline)
+//! -> tln (timeline)
 //! 
 //! Load timeline:
 //! The 'tln' file can be used to accumulate results incrementially. Existing timlines can be reloaded and when a simulation is
@@ -146,11 +142,11 @@ fn main() -> Result<()> {
     }
 
     if structure.len() == sequence.len() && cli.simulation.t_sep.is_none() {
-        panic!("Error: 't-sep' (last timepoint of the linear scale) missing for cotranscriptional simulation!")
+        panic!("Error: 't-sep' (last timepoint of the linear scale) missing for full length simulation!")
     }
 
     if structure.len() == sequence.len() && cli.simulation.t_ext.is_some() {
-        panic!("Error: 't-ext' (extension time) given in combination full length structure.For cotranscriptional simulation give either 
+        panic!("Error: 't-ext' (extension time) given in combination with full length structure. For cotranscriptional simulation give either 
         shorter start structure or no structure!");
     }
 
@@ -288,7 +284,9 @@ fn main() -> Result<()> {
             master.merge(timeline);
         }
 
-        let co_time = cli.simulation.t_ext.unwrap() * (sequence.len() - structure.len()).as_f64();
+        // cotranscriptional simulation time
+        let co_time = cli.simulation.t_ext.unwrap() * (sequence.len() - structure.len()).as_f64(); 
+        // total simulation time
         let post_time = co_time + cli.simulation.t_end;
 
         if cli.simulation.t_sep.is_none() { // No t-sep given

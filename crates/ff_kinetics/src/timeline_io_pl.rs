@@ -66,7 +66,7 @@ impl<E: EnergyModel> Timeline<E> {
         let mut timeline = Timeline::new(times, Arc::clone(&registry));
 
         for (tp, serial_tp) in timeline.points.iter_mut().zip(serial.points) {
-            if same_time(tp.time, serial_tp.time) {
+            if !same_time(tp.time, serial_tp.time) {
                 return Err(TimelineError::TimeMismatch {
                     file_time: serial_tp.time,
                     expected_time: tp.time,

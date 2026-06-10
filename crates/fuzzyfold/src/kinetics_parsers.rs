@@ -165,7 +165,7 @@ impl TimelineParameters {
                     let value = (log_start + frac * (log_end - log_start)).exp();
                     times.push(value);
                 }
-                times.push(t_end);
+                times.push(end);
 
                 times
             }
