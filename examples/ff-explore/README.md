@@ -2,10 +2,10 @@
 
 ## Example
 
-The file `dld3_lm3.na` provides a sequence and a starting structure in the following format:
+The file `dld1_lm3.na` provides a sequence and a starting structure in the following format:
 
 ```fasta
->lm3 (dld3)
+>lm3 (dld1)
 UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 .((((....)))).((((........))))...............
 ```
@@ -14,12 +14,12 @@ Use this file as input to enumerate the neighborhood using base-pair moves. The 
 command returns all reachable structures with energy smaller or equal E(s) + 2.80 kcal/mol:
 
 ```bash
-cat dld3_lm3.na | ff-explore --delta 2.8 --sorted
+cat dld1_lm3.na | ff-explore --delta 2.8 --sorted
 ```
 
 
 ```
->lm3 (dld3) (delta = 2.80)
+>lm3 (dld1) (delta = 2.80)
 UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 .((((....)))).((((........))))............... -3.90
 .(((......))).((((........))))............... -2.60

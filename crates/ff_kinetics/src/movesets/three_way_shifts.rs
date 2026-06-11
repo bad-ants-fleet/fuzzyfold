@@ -155,10 +155,33 @@ impl ThreeWayNeighbors {
         let (outer0_idx, inner0_idx, 
              outer1, inner1) = self.get_loops(ltab, mv);
 
-        let (_, outer0_en) = ltab.get(outer0_idx);
-        let (_, inner0_en) = ltab.get(inner0_idx);
+        let (_o, outer0_en) = ltab.get(outer0_idx);
+        let (_i, inner0_en) = ltab.get(inner0_idx);
         let outer1_en = ltab.energy_of_loop(&outer1);
         let inner1_en = ltab.energy_of_loop(&inner1);
+
+        // // A hack for a Figure in Badelt et al. 2026
+        // let dE = (outer1_en + inner1_en) - (outer0_en + inner0_en);
+        // let aE = (outer1_en - outer0_en).max(inner1_en - inner0_en);
+        // let bm = match (_o.is_stack(), _i.is_stack(), outer1.is_stack(), inner1.is_stack()) 
+        // {
+        //     (true, false, false, true) => "neutral_trans",
+        //     (false, true, true, false) => "neutral_trans",
+        //     (false, true, false, true) => "neutral_cis", // loop
+        //     (true, false, false, false) => "del_stack",
+        //     (false, true, false, false) => "del_stack",
+        //     (false, false, true, false) => "add_stack",
+        //     (false, false, false, true) => "add_stack",
+        //     (false, false, false, false) => "other",
+        //     _ => panic!("strange rearrangement"),
+        // };
+        // if bm == "neutral_c" {
+        //     //println!("{:?} {} {} {} {}", mv, dE, aE, 0.max(dE).max(aE), bm);
+        //     //println!("{:?} {:?} {:?} {:?}", _o, _i, outer1, inner1);
+        //     //println!("{} {} {} {}", 
+        //     //    _o.is_stack(), _i.is_stack(), outer1.is_stack(), inner1.is_stack());
+        // }
+        // println!("tw {} {} {} {}", dE, aE, 0.max(dE).max(aE), bm);
 
         ((outer1_en + inner1_en) - (outer0_en + inner0_en))
             .max(outer1_en - outer0_en)

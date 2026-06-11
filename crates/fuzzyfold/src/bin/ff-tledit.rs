@@ -14,7 +14,7 @@ use serde_json::to_string_pretty;
 
 use ff_energy::NucleotideVec;
 use ff_kinetics::timeline::Timeline;
-use ff_kinetics::timeline_plotting::plot_occupancy_over_time;
+use ff_kinetics::timeline_editing::plot_occupancy_over_time;
 use ff_kinetics::MacrostateRegistry;
 
 use fuzzyfold::energy_parsers::EnergyModelArguments;
@@ -121,7 +121,7 @@ fn main() -> Result<()> {
     let mut writer = BufWriter::new(File::create(nxy_path.clone())?);
     write!(writer, "{}", timeline)?;
     println!("Wrote nxy file: {}", format!("{}",nxy_path.display()).green());
-    plot_occupancy_over_time(&timeline, svg_path.clone(), &cli.title, 1e-5, 1e2);
+    plot_occupancy_over_time(&timeline, svg_path.clone(), &cli.title, 1e-1, 1e2);
     println!("Plotted svg file: {}", svg_path.display());
     let serial = timeline.to_serializable();
     let json = to_string_pretty(&serial).unwrap();

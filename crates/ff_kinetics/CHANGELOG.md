@@ -3,9 +3,14 @@
 All notable changes to this crate will be documented in this file.
 
 ## development
-- removed lifetimes for macrostate interface -> preparing exports to python.
-- tweaked timeline visualization.
-- provided preliminary interface to merge timelines
+### Changed
+- no more lifetimes for macrostate interface to facilitate exports to python.
+- default timeline visualization.
+
+### Added
+- preliminary interface to merge timelines.
+- comments to show how to report shift-move activation energies as they are calculated.
+- preliminary timeline-editing file that can be used to compile customized visualizations.
 
 ## 0.4.1 - 2026-03-04
 ### Changed

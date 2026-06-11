@@ -2,6 +2,17 @@
 
 All notable changes to this crate will be documented in this file.
 
+## development
+### Fixed
+- Revised duplicate hairpin free-energy parameters.
+
+### Added
+- is_stack for NearestNeighborLoop (helper for shift-classification).
+
+### Changed
+- Added Send + Sync supertrait for Energy-model.
+
+
 ## [0.4.0] - 2026-03-04
 ### Fixed
 - Mayor compile-time boost.
