@@ -45,7 +45,6 @@ pub fn plot_occupancy_over_time<E: EnergyModel>(
         .x_labels(6)
         .y_labels(10)
         .light_line_style(RGBColor(220, 220, 220))
-        .light_line_style(TRANSPARENT)
         .axis_desc_style(("sans-serif", 22))
         .label_style(("sans-serif", 18))
         .draw()
@@ -75,7 +74,6 @@ pub fn plot_occupancy_over_time<E: EnergyModel>(
         .x_label_formatter(&|x| if *x < 0.01 {format!("{:.1e}", x)} else {format!("{}", x)})  // scientific notation
         .y_labels(10) // hide y ticks on right
         .light_line_style(RGBColor(220, 220, 220))
-        .light_line_style(TRANSPARENT)
         .label_style(("sans-serif", 18))
         .draw().unwrap();
 

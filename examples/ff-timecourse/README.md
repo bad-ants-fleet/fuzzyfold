@@ -67,13 +67,11 @@ ff-timecourse --help
 ```
 
 During execution, the program prints simulation parameters to `STDOUT`,
-displays a **progress bar**, and outputs **time-course data** once all runs are
-completed.  The time course is also plotted automatically as an SVG file, 
-where the plot name is derived from the input file. For example:
-
-```
-dld1_lm3_t1.svg
-```
+displays a **progress bar**, and finally reports the results in different output 
+file formats: 
+ - dld1_lm3_t1.tln: The "timeline" data that gets reloaded when another run is performed.
+ - dld1_lm3_t1.nxy: The simulation result in nxy format (for custom plotting).
+ - dld1_lm3_t1.svg: A default SVG plot of the simulation results.
 
 ---
 
