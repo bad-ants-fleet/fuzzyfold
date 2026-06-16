@@ -14,7 +14,7 @@ use serde_json::to_string_pretty;
 
 use ff_energy::NucleotideVec;
 use ff_kinetics::timeline::Timeline;
-use ff_kinetics::timeline_editing::plot_occupancy_over_time;
+use ff_kinetics::timeline_plotting::plot_occupancy_over_time;
 use ff_kinetics::MacrostateRegistry;
 
 use fuzzyfold::energy_parsers::EnergyModelArguments;

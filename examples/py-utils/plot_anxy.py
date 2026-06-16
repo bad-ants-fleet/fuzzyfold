@@ -300,7 +300,6 @@ def _plot_split(time, series_list, basename, formats,
 
     ax_log.legend(facecolor='white', framealpha=0.8, ncols=2,
                   loc='upper right', fontsize=LEGEND)
-                  #bbox_to_anchor=(-0.15, 0.5))  # x=left edge, y=75% up the axis
     if title:
         fig.suptitle(title, fontsize=TITLE, y=1.0, va='bottom')
 

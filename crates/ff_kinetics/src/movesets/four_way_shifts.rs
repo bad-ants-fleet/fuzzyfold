@@ -150,39 +150,35 @@ impl FourWayNeighbors {
         let outer1_en = ltab.energy_of_loop(&outer1);
         let outer2_en = ltab.energy_of_loop(&outer2);
 
-        // // A hack for a Figure in Badelt et al. 2026
-        // let dE = (inside_en + outer1_en + outer2_en) - (center_en + merge1_en + merge2_en);
-        // let aE = (outer1_en + outer2_en - center_en).max(inside_en - merge1_en - merge2_en);
-        // let bm = match (_m1.is_stack(), _m2.is_stack(), outer1.is_stack(), outer2.is_stack())
-        // {
-        //     (true, true, true, true) => "neutral_2s",
-        //     (true, false, true, false) => "neutral_1s",
-        //     (true, false, false, true) => "neutral_1s",
-        //     (false, true, true, false) => "neutral_1s",
-        //     (false, true, false, true) => "neutral_1s",
+        #[cfg(feature = "shift_analysis")] // For a Figure in Badelt et al. 2026
+        {
+            let d_en = (inside_en + outer1_en + outer2_en) - (center_en + merge1_en + merge2_en);
+            let a_en = (outer1_en + outer2_en - center_en).max(inside_en - merge1_en - merge2_en);
+            let bm = match (_m1.is_stack(), _m2.is_stack(), outer1.is_stack(), outer2.is_stack())
+            {
+                (true, true, true, true) => "neutral_2s",
+                (true, false, true, false) => "neutral_1s",
+                (true, false, false, true) => "neutral_1s",
+                (false, true, true, false) => "neutral_1s",
+                (false, true, false, true) => "neutral_1s",
 
-        //     (true, false, true, true) => "add_stack",
-        //     (false, true, true, true) => "add_stack",
-        //     (false, false, true, false) => "add_stack",
-        //     (false, false, false, true) => "add_stack",
-        //     (false, false, true, true) => "add_stack",
+                (true, false, true, true) => "add_stack",
+                (false, true, true, true) => "add_stack",
+                (false, false, true, false) => "add_stack",
+                (false, false, false, true) => "add_stack",
+                (false, false, true, true) => "add_stack",
 
-        //     (true, false, false, false) => "del_stack",
-        //     (false, true, false, false) => "del_stack",
-        //     (true, true, true, false) => "del_stack",
-        //     (true, true, false, true) => "del_stack",
-        //     (true, true, false, false) => "del_stack",
-        //     _ => "other",
-        //     //(false, false, false, false) => "other",
-        //     //_ => panic!("strange rearrangement"),
-        // };
-        // //if bm == "other" {
-        // //    println!("{:?} {} {} {} {}", mv, dE, aE, 0.max(dE).max(aE), bm);
-        // ////    println!("{:?} {:?} {:?} {:?}", outer1, inner1, _o, _i);
-        // //    println!("{} {} {} {}", 
-        // //        outer1.is_stack(), outer2.is_stack(), _m1.is_stack(), _m2.is_stack());
-        // //}
-        // println!("fw {} {} {} {}", dE, aE, 0.max(dE).max(aE), bm);
+                (true, false, false, false) => "del_stack",
+                (false, true, false, false) => "del_stack",
+                (true, true, true, false) => "del_stack",
+                (true, true, false, true) => "del_stack",
+                (true, true, false, false) => "del_stack",
+                _ => "other",
+                //(false, false, false, false) => "other",
+                //_ => panic!("strange rearrangement"),
+            };
+            println!("fw {} {} {} {}", d_en, a_en, 0.max(d_en).max(a_en), bm);
+        }
 
         ((inside_en + outer1_en + outer2_en) - (center_en + merge1_en + merge2_en))
             .max(outer1_en + outer2_en - center_en)
