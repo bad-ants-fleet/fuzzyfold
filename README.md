@@ -58,8 +58,8 @@ cargo install ff_kinetics
 | `ff-eval` | Free-energy evaluation for secondary structures |
 | `ff-randseq` | Generate a random nucleic acid sequence |
 
-See directory [examples](/examples/) for basic usage of command-line software,
-as well as [examples/workflows](/examples/workflows/) to reproduce published analyses.
+See directory [examples] for basic usage of command-line software,
+as well as [examples/workflows] to reproduce published analyses.
 
 ## Crates
 
@@ -77,7 +77,7 @@ Additional crates are in development and will be published to
 
 Python bindings are available for all major simulation and analysis components,
 enabling rapid prototyping before contributing high-performance Rust code. See
-the [crates/ff_python](crates/ff_python/) directory for examples and installation instructions.
+the [crates/ff_python] directory for examples and installation instructions.
 
 ## Repository structure
 
@@ -109,9 +109,9 @@ request.
 
 If you use `fuzzyfold` in your research, please cite:
 
-> Badelt S. (2025). fuzzyfold: a high-performance framework for stochastic
-> RNA folding kinetics. 
+Stefan Badelt: **fuzzyfold: a high-performance framework for stochastic RNA folding kinetics**, 2026,
+[https://doi.org/]
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE] for details.
