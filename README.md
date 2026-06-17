@@ -58,7 +58,8 @@ cargo install ff_kinetics
 | `ff-eval` | Free-energy evaluation for secondary structures |
 | `ff-randseq` | Generate a random nucleic acid sequence |
 
-See directory `examples` for usage of command-line software.
+See directory [examples](/examples/) for basic usage of command-line software,
+as well as [examples/workflows](/examples/workflows/) to reproduce published analyses.
 
 ## Crates
 
@@ -67,6 +68,7 @@ See directory `examples` for usage of command-line software.
 | `ff_structure` | Nucleic acid secondary structure data structures |
 | `ff_energy` | Free-energy evaluation using nearest-neighbor parameters |
 | `ff_kinetics` | Stochastic folding kinetics engine |
+| `fuzzyfold` | Command-line interfaces |
 
 Additional crates are in development and will be published to
 [crates.io](https://crates.io) as they mature.
@@ -75,7 +77,7 @@ Additional crates are in development and will be published to
 
 Python bindings are available for all major simulation and analysis components,
 enabling rapid prototyping before contributing high-performance Rust code. See
-the `crates/ff_python/` directory for examples and installation instructions.
+the [crates/ff_python](crates/ff_python/) directory for examples and installation instructions.
 
 ## Repository structure
 
@@ -87,11 +89,12 @@ the `crates/ff_python/` directory for examples and installation instructions.
 
 ## Contributing
 
-Contributions are welcome! Bug fixes, performance improvements,
-documentation, examples, and new features. The goal of the workspace is a
-coherent, well-documented ecosystem for RNA and DNA secondary-structure
-modeling and kinetic simulation, with each crate covering a clearly separated
-aspect of the workflow.
+Contributions are welcome! Please start with small contributions, such as bug
+fixes, performance improvements, documentation, or examples. For new features
+or new crates associated with fuzzyfold, please reach out before submitting a
+pull request. The goal of the workspace is a coherent, well-documented
+ecosystem for RNA and DNA secondary-structure modeling and kinetic simulation,
+with each crate covering a clearly separated aspect of the workflow.
 
 To run the benchmark suite:
 
