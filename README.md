@@ -1,53 +1,114 @@
-# The fuzzyfold workspace
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+# fuzzyfold
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/bad-ants-fleet/fuzzyfold/blob/development/LICENSE)
 [![fuzzyfold](https://img.shields.io/crates/v/fuzzyfold.svg?label=fuzzyfold)](https://crates.io/crates/fuzzyfold)
 [![ff_structure](https://img.shields.io/crates/v/ff_structure.svg?label=ff_structure)](https://crates.io/crates/ff_structure)
 [![ff_energy](https://img.shields.io/crates/v/ff_energy.svg?label=ff_energy)](https://crates.io/crates/ff_energy)
 [![ff_kinetics](https://img.shields.io/crates/v/ff_kinetics.svg?label=ff_kinetics)](https://crates.io/crates/ff_kinetics)
-[![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)]()
+[![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/bad-ants-fleet/fuzzyfold/blob/development)
 
-An open-source collection of nucleic acid folding algorithms.
+A high-performance framework for stochastic RNA folding kinetics.
 
-**Note**: This is a _very_ early stage, rapidly developing coding project. You
-are welcome to use it for research, but be prepared for frustration from
-drastic interface changes. You may use GitHub issues for suggestions, but you
-are also welcome to reach out directly at this point.
+`fuzzyfold` is an open-source Rust workspace for nucleic acid secondary
+structure analysis with an explicit focus on kinetic modeling. It combines
+a Gillespie-type stochastic simulation engine with a flexible move set 
+(including three-way and four-way shift moves) and provides both command-line
+tools for end users and a library interface with Python bindings for custom
+workflows.
 
-## Current fuzzyfold software
- - **ff-eval**: Free-energy evaluation for secondary structures.
- - **ff-trajectory**: Single stochastic nucleic acid folding trajectories.
- - **ff-timecourse**: Stochastic nucleic acid secondary structure ensemble simulations.
- - **ff-randseq**: Generate a random sequence. 
- - **ff-explore**: Enumerate secondary structure neighborhoods.
+## Features
 
-(Other software is work in progress and not yet published to crates.io)
+- Stochastic simulation of RNA and DNA secondary structure folding at
+  base-pair resolution
+- Three-way and four-way shift moves with Arrhenius-based activation energy
+  parameterization
+- Ensemble-level occupancy analysis via aggregation of parallel trajectories
+- Co-transcriptional folding trajectories
+- Thermodynamic parameters: RNA (Turner 2004), DNA (RNAstructure), extended
+  sets including modification parameters and special hairpin parameters
+- Energy evaluation fully consistent with ViennaRNA
+- Pure Rust workspace: straightforward installation via `cargo`, reproducible
+  builds, no external runtime dependencies
+- Python bindings for rapid prototyping and custom analysis workflows
 
-## Current fuzzyfold crates
- - ff_structure: Nucleic acid secondary structure data structures.
- - ff_energy: Secondary structure free energy evaluation.
- - ff_kinetics: Stochastic folding kinetics for nucleic acids.
+## Installation
 
-(Other crates are work in progress and not yet published to crates.io)
+`fuzzyfold` requires a working [Rust toolchain](https://rustup.rs). To install
+all command-line tools:
 
-## Developer notes
-Thank you for considering contributing! The goal of the fuzzyfold workspace is
-to provide a coherent, well-documented ecosystem for RNA and DNA
-secondary-structure modeling, kinetic simulations, and analysis. Each crate
-focuses on a clearly separated aspect of the workflow: structure, energy
-evaluation, and/or kinetic modeling. 
+```bash
+cargo install fuzzyfold
+```
 
-We welcome improvements of any kind, from bug fixes and performance
-enhancements to documentation, examples, and new features. Feel free to reach
-out with specific ideas.
+Individual crates can also be installed separately:
 
-For benchmarking of the stochastic simulation algorithm:
+```bash
+cargo install ff_structure
+cargo install ff_energy
+cargo install ff_kinetics
+```
 
-```cargo bench --workspace```
+## Command-line tools
 
-### Git branches (work in progress)
- - **main**: well-structured, well-documented, high-coverage, publication-ready code.
- - **development**: well-integrated, some documentation, some coverage, experimental code.
- - **dev_feature**: early code/crate proposals.
+| Program | Description |
+|---|---|
+| `ff-trajectory` | Single stochastic folding trajectory |
+| `ff-timecourse` | Ensemble occupancy analysis over multiple parallel trajectories |
+| `ff-explore` | Enumerate secondary structure neighborhoods and macrostates |
+| `ff-eval` | Free-energy evaluation for secondary structures |
+| `ff-randseq` | Generate a random nucleic acid sequence |
 
+See directory `examples` for usage of command-line software.
 
+## Crates
 
+| Crate | Description |
+|---|---|
+| `ff_structure` | Nucleic acid secondary structure data structures |
+| `ff_energy` | Free-energy evaluation using nearest-neighbor parameters |
+| `ff_kinetics` | Stochastic folding kinetics engine |
+
+Additional crates are in development and will be published to
+[crates.io](https://crates.io) as they mature.
+
+## Python bindings
+
+Python bindings are available for all major simulation and analysis components,
+enabling rapid prototyping before contributing high-performance Rust code. See
+the `crates/ff_python/` directory for examples and installation instructions.
+
+## Repository structure
+
+| Branch | Description |
+|---|---|
+| `main` | Stable, well-documented, publication-ready code |
+| `development` | Integrated development branch; some experimental features |
+| `dev_feature` | Early crate or feature proposals |
+
+## Contributing
+
+Contributions are welcome! Bug fixes, performance improvements,
+documentation, examples, and new features. The goal of the workspace is a
+coherent, well-documented ecosystem for RNA and DNA secondary-structure
+modeling and kinetic simulation, with each crate covering a clearly separated
+aspect of the workflow.
+
+To run the benchmark suite:
+
+```bash
+cargo bench --workspace
+```
+
+Please open a GitHub issue to discuss larger changes before submitting a pull
+request.
+
+## Citation
+
+If you use `fuzzyfold` in your research, please cite:
+
+> Badelt S. (2025). fuzzyfold: a high-performance framework for stochastic
+> RNA folding kinetics. 
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
