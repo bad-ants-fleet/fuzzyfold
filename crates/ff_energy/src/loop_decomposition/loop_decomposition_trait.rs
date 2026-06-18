@@ -26,24 +26,24 @@ impl LoopDecomposition for PairTable {
             let mut branches = Vec::new();
 
             let (mut p, j) = if let Some((i, j)) = closing {
-                (i as usize + 1, j as usize) 
+                (i + 1, j) 
             } else { 
-                (0, pt.len())
+                (0, pt.len() as NAIDX)
             };
 
             while p < j {
                 if let Some(q) = pt[p] {
-                    debug_assert!(q > p as NAIDX);
-                    branches.push((p as NAIDX, q));
-                    recurse(pt, Some((p as NAIDX, q)), None, f);
-                    p = q as usize + 1;
+                    debug_assert!(q > p);
+                    branches.push((p, q));
+                    recurse(pt, Some((p, q)), None, f);
+                    p = q + 1;
                 } else {
                     p += 1;
                 }
             }
             f(&NearestNeighborLoop::classify(ends, closing, branches));
         }
-        recurse(self, None, Some((0 as NAIDX, (self.len() - 1) as NAIDX)), &mut f);
+        recurse(self, None, Some((0, (self.len() - 1) as NAIDX)), &mut f);
     }
 }
 

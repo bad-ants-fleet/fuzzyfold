@@ -2,6 +2,15 @@
 
 All notable changes to this crate will be documented in this file.
 
+## 0.4.2 - 2026-06-18
+### Changed
+- no more lifetimes for macrostate interface to facilitate exports to python.
+- default timeline visualization.
+
+### Added
+- preliminary interface to merge timelines.
+- shift_analysis feature to report shift-move activation energies as they are calculated.
+
 ## 0.4.1 - 2026-03-04
 ### Changed
 - added Arrhenius, removed Metropolis/Kawasaki

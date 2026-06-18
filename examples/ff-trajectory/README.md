@@ -14,11 +14,11 @@ energies and transition times.
 You can start a trajectory simulation from a predefined **EVAL file**, which
 contains an optional FASTA-header, a sequence and an initial structure.
 
-For example, the file `dld3_lm3.na` specifies a molecule in a particular
+For example, the file `dld1_lm3.na` specifies a molecule in a particular
 starting conformation:
 
 ```fasta
->dld3
+>dld1
 UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 .((((....)))).((((........))))...............
 ```
@@ -26,7 +26,7 @@ UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
 You can run the trajectory simulation as follows:
 
 ```bash
-cat dld3_lm3.na | ff-trajectory --k0 1.0 --t-end 50
+cat dld1_lm3.na | ff-trajectory --k0 1.0 --t-end 50
 ```
 
 The simulation continues until **time = 50** arbitrary time units. Removing the

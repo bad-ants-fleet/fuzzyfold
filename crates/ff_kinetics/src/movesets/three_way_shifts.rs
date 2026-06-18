@@ -155,10 +155,29 @@ impl ThreeWayNeighbors {
         let (outer0_idx, inner0_idx, 
              outer1, inner1) = self.get_loops(ltab, mv);
 
-        let (_, outer0_en) = ltab.get(outer0_idx);
-        let (_, inner0_en) = ltab.get(inner0_idx);
+        let (_o, outer0_en) = ltab.get(outer0_idx);
+        let (_i, inner0_en) = ltab.get(inner0_idx);
         let outer1_en = ltab.energy_of_loop(&outer1);
         let inner1_en = ltab.energy_of_loop(&inner1);
+
+        #[cfg(feature = "shift_analysis")] // For a Figure in Badelt et al. 2026
+        {
+            let d_en = (outer1_en + inner1_en) - (outer0_en + inner0_en);
+            let a_en = (outer1_en - outer0_en).max(inner1_en - inner0_en);
+            let bm = match (_o.is_stack(), _i.is_stack(), outer1.is_stack(), inner1.is_stack()) 
+            {
+                (true, false, false, true) => "neutral_trans",
+                (false, true, true, false) => "neutral_trans",
+                (false, true, false, true) => "neutral_cis", // loop
+                (true, false, false, false) => "del_stack",
+                (false, true, false, false) => "del_stack",
+                (false, false, true, false) => "add_stack",
+                (false, false, false, true) => "add_stack",
+                (false, false, false, false) => "other",
+                _ => panic!("strange rearrangement"),
+            };
+            println!("tw {} {} {} {}", d_en, a_en, 0.max(d_en).max(a_en), bm);
+        }
 
         ((outer1_en + inner1_en) - (outer0_en + inner0_en))
             .max(outer1_en - outer0_en)

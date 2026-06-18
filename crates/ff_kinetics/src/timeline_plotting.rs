@@ -5,48 +5,28 @@ use plotters::style::Palette99;
 
 use crate::timeline::Timeline;
 
-pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
-    timeline: &Timeline<'a, E>, 
+pub fn plot_occupancy_over_time<E: EnergyModel>(
+    timeline: &Timeline<E>, 
     filename: impl AsRef<Path>,
+    title: &str,
     t_lin: f64,
     t_log: f64,
 ) {
     assert!(t_lin > 0.0 && t_log > t_lin, "Require 0 < t_lin < t_log");
 
-    let numsim = timeline.points[0].counter;
-    let title = format!("ff-timecourse ({} simulations)", 
-        {
-            if numsim >= 10000 {
-                let s = numsim.to_string();
-                let mut out = String::new();
-
-                for (i, c) in s.chars().rev().enumerate() {
-                    if i > 0 && i % 3 == 0 {
-                        out.push('_');
-                    }
-                    out.push(c);
-                }
-
-                out.chars().rev().collect::<String>()
-            } else { 
-                numsim.to_string()
-            }
-        }
-    );
-
     // Image size; tweak as you like
-    //let root = BitMapBackend::new(filename, (1024, 480)).into_drawing_area();
+    // let root = BitMapBackend::new(filename, (1024, 480)).into_drawing_area();
     let root = SVGBackend::new(filename.as_ref(), (1024, 480)).into_drawing_area();
     root.fill(&WHITE).unwrap();
-    root.titled(&title, ("sans-serif", 28)).unwrap();
+    root.titled(title, ("sans-serif", 28)).unwrap();
     root.draw_text(
         "time",
         &("sans-serif", 22).into_font().into_text_style(&root),
-        (496, 450),   // roughly centered at bottom
+        (496, 450), // roughly centered at bottom
     ).unwrap();
 
 
-    let eps = 1e-9; // epsilon for plot labels
+    let eps = 1e-19; // epsilon for plot labels
     // Split into two panels: 50% for linear (left), 50% for log (right)
     let (left, right) = root.split_horizontally(512);
 
@@ -61,7 +41,6 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
         .build_cartesian_2d(0.0..(t_lin+eps), 0.0..1.0).unwrap();
     chart_left
         .configure_mesh()
-        //.x_desc("liner scale")
         .y_desc("occupancy")
         .x_labels(6)
         .y_labels(10)
@@ -91,7 +70,6 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
 
     chart_right
         .configure_mesh()
-        //.x_desc("log scale")
         .x_labels(6)
         .x_label_formatter(&|x| if *x < 0.01 {format!("{:.1e}", x)} else {format!("{}", x)})  // scientific notation
         .y_labels(10) // hide y ticks on right
@@ -121,7 +99,7 @@ pub fn plot_occupancy_over_time<'a, E: EnergyModel>(
             } else { 0.0 };
             series.push((tp.time, occu, se));
         }
-        if series.iter().any(|(_, occu, _)| *occu >= 0.02) { // threshold filter
+        if id == 0 || series.iter().any(|(_, occu, _)| *occu >= 0.02) { // threshold filter
             trajectories.push((id, series));
         }
     }

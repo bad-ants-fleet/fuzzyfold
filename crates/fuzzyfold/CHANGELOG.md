@@ -2,6 +2,15 @@
 
 All notable changes to this crate will be documented in this file.
 
+## [0.4.2] - 2026-02-26
+## Added
+- fasta flag for ff-trajectory
+- title option for ff-timecourse
+
+## Changed
+- ff-timecourse output format is now *.nxy
+- Now allowing negative temperature (Celsius).
+
 ## [0.4.1] - 2026-02-26
 ## Changed
 - Updates for energy evaluation (compiled parameters only, P support).
