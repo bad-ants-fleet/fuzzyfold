@@ -2,7 +2,7 @@
 
 All notable changes to this crate will be documented in this file.
 
-## development
+## [0.4.1] - 2026-06-18
 ### Fixed
 - Revised duplicate hairpin free-energy parameters.
 
@@ -11,7 +11,6 @@ All notable changes to this crate will be documented in this file.
 
 ### Changed
 - Added Send + Sync supertrait for Energy-model.
-
 
 ## [0.4.0] - 2026-03-04
 ### Fixed
