@@ -110,7 +110,7 @@ request.
 If you use `fuzzyfold` in your research, please cite:
 
 > Stefan Badelt (2026): **fuzzyfold: a high-performance framework for stochastic RNA folding kinetics**,
-[https://doi.org/]
+[https://doi.org/10.64898/2026.06.17.732885](https://doi.org/10.64898/2026.06.17.732885)
 
 ## License
 
