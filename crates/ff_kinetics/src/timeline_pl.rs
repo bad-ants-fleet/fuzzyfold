@@ -6,7 +6,7 @@ use nohash_hasher::IntMap;
 use ff_energy::EnergyModel;
 use ff_structure::DotBracketVec; 
 
-use crate::macrostates::MacrostateRegistry;
+use crate::macrostates_pl::MacrostateRegistryPL;
 
 #[derive(Debug)]
 pub enum TimelineError {
@@ -107,7 +107,7 @@ impl Timepoint {
 
 pub struct Timeline<E: EnergyModel> {
     /// Registry of all macrostates (used to classify structures)
-    pub registry: Arc<MacrostateRegistry<E>>,
+    pub registry: Arc<MacrostateRegistryPL<E>>,
 
     /// One `Timepoint` per output time in the simulation
     pub points: Vec<Timepoint>,
@@ -115,7 +115,7 @@ pub struct Timeline<E: EnergyModel> {
 
 impl<E: EnergyModel> Timeline<E> {
     /// Build a new empty timeline for given times and an existing macrostate registry.
-    pub fn new(times: &[f64], registry: Arc<MacrostateRegistry<E>>) -> Self {
+    pub fn new(times: &[f64], registry: Arc<MacrostateRegistryPL<E>>) -> Self {
         let points = times.iter().map(|&t| Timepoint::new(t)).collect();
         Self { registry, points }
     }

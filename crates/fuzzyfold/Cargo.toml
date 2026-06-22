@@ -44,6 +44,7 @@ log.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+plotters.workspace = true
 
 anyhow = "1.0.100"
 clap = { version = "4.5.54", features = ["derive"] }
