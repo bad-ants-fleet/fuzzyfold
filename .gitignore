@@ -1,3 +1,7 @@
 /target
 /bash_benchmarking
 /data
+*.tln
+*.nxy
+*.pdf
+*.svg

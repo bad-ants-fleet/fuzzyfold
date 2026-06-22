@@ -580,8 +580,6 @@ impl<E: EnergyModel, P: ShiftPolicy> LoopNeighbors<E, P> {
                 new_moves.extend(self.maybe_three_way(uj));
                 new_moves.extend(self.maybe_four_way(uj));
             }
-
-
         }
         for &(i, j) in &outer1_pairs {
             if i == p || i == m {

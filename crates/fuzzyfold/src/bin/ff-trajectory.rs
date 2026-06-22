@@ -14,6 +14,7 @@ use ff_kinetics::SSA;
 
 use fuzzyfold::input_parsers::read_cotr_input;
 use fuzzyfold::input_parsers::read_eval_input;
+use fuzzyfold::input_parsers::read_fasta_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
 use fuzzyfold::kinetics_parsers::RateModelArguments;
 //TODO: support seeded rng.
@@ -24,6 +25,10 @@ pub struct Cli {
     /// Input file (FASTA-like), or "-" for stdin
     #[arg(value_name = "INPUT", default_value = "-")]
     input: String,
+
+    /// Read input as standard FASTA (DNA alphabet, multi-line sequence, no structure)
+    #[arg(long)]
+    fasta: bool,
 
     /// Simulation time at the full-length molecule.
     #[arg(long, default_value_t = 1.0)]
@@ -55,7 +60,9 @@ fn main() -> Result<()> {
 
     let is_rna = cli.energy.dna.is_none();
     let (header, sequence, structure) =
-        if cli.t_ext.is_some() {
+        if cli.fasta {
+            read_fasta_input(&cli.input, true)?  // is_rna is ignored, assuming DNA alphabet
+        } else if cli.t_ext.is_some() {
             read_cotr_input(&cli.input, is_rna)?
         } else {
             match read_eval_input(&cli.input, is_rna) {

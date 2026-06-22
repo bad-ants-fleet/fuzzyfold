@@ -124,6 +124,15 @@ impl NearestNeighborLoop {
         }
     }
 
+    pub fn is_stack(&self) -> bool {
+        match self {
+            NearestNeighborLoop::Interior { closing: (i, j), inner: (p, q) } => {
+                *p == i+1 && *j == q+1
+            }
+            _ => false
+        }
+    }
+
     pub fn classify(
         ends: Option<(NAIDX, NAIDX)>, 
         closing: Option<(NAIDX, NAIDX)>, 

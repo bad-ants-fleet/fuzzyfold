@@ -84,6 +84,39 @@ fn parse_na_format<R: BufRead>(
     Ok((header, sequence, structure))
 }
 
+fn read_fasta<R: BufRead>(reader: R, _rna: bool
+) -> Result<(Option<String>, NucleotideVec, DotBracketVec)> {
+    let mut header: Option<String> = None;
+    let mut seq_chars = String::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let line = line.trim();
+        if line.is_empty() {
+            if !seq_chars.is_empty() { break; }
+            continue;
+        }
+        if line.starts_with('>') {
+            if seq_chars.is_empty() {
+                header = Some(line.to_string());
+            } else {
+                break; // next record
+            }
+        } else {
+            seq_chars.push_str(line);
+        }
+    }
+
+    if seq_chars.is_empty() {
+        return Err(anyhow!("Missing sequence"));
+    }
+
+    let sequence = NucleotideVec::try_from_dna(&seq_chars)?;
+    let structure = DotBracketVec::try_from(".").expect("open-chain fallback");
+
+    Ok((header, sequence, structure))
+}
+
 // ============================================================
 //  Base parser functions (lenient and strict variants)
 // ============================================================
@@ -152,6 +185,7 @@ type NAResult = Result<(Option<String>, NucleotideVec, DotBracketVec)>;
 
 define_input_variants!(read_cotr, NAResult);
 define_input_variants!(read_eval, NAResult);
+define_input_variants!(read_fasta, NAResult);
 
 // ============================================================
 //  Example helper: ruler()

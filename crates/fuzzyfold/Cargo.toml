@@ -1,6 +1,6 @@
 [package]
 name = "fuzzyfold"
-version = "0.4.1"
+version = "0.4.2"
 description = "Nucleic acid secondary structure kinetics."
 documentation = "https://docs.rs/fuzzyfold"
 keywords = ["dna", "rna", "secondary-structure", "kinetics", "nearest-neighbor"]
@@ -22,16 +22,16 @@ name = "ff-eval"
 path = "src/bin/ff-eval.rs"
 
 [[bin]]
-name = "ff-explore"
-path = "src/bin/ff-explore.rs"
-
-[[bin]]
 name = "ff-timecourse"
 path = "src/bin/ff-timecourse.rs"
 
 [[bin]]
 name = "ff-trajectory"
 path = "src/bin/ff-trajectory.rs"
+
+[[bin]]
+name = "ff-explore"
+path = "src/bin/ff-explore.rs"
 
 [dependencies]
 ff_structure.workspace = true

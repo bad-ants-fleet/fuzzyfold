@@ -9,10 +9,10 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-TEXT="100000"
+TEXT="1000000"
 
 CALL="ff-trajectory --k0 1 --t-ext ${TEXT} --t-end ${TEXT} --silent"
-#TAG="FF_silent_metropolis_cotr_extended2"
+TAG="FF_silent_cotr"
 
 # Output CSV
 RESULTS="simulate_benchmark_${TAG}_t${TEXT}.csv"

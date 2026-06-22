@@ -32,7 +32,7 @@ impl fmt::Display for EnergyError {
 
 impl std::error::Error for EnergyError {}
 
-pub trait EnergyModel {
+pub trait EnergyModel: Send + Sync {
     fn can_pair(&self, b1: Base, b2: Base) -> bool;
 
     fn min_hairpin_size(&self) -> usize;

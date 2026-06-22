@@ -143,18 +143,47 @@ impl FourWayNeighbors {
              inside, outer1, outer2) = self.get_loops(ltab, mv);
 
         let (_, center_en) = ltab.get(center_idx);
-        let (_, merge1_en) = ltab.get(merge1_idx);
-        let (_, merge2_en) = ltab.get(merge2_idx);
+        let (_m1, merge1_en) = ltab.get(merge1_idx);
+        let (_m2, merge2_en) = ltab.get(merge2_idx);
 
         let inside_en = ltab.energy_of_loop(&inside);
         let outer1_en = ltab.energy_of_loop(&outer1);
         let outer2_en = ltab.energy_of_loop(&outer2);
 
+        #[cfg(feature = "shift_analysis")] // For a Figure in Badelt et al. 2026
+        {
+            let d_en = (inside_en + outer1_en + outer2_en) - (center_en + merge1_en + merge2_en);
+            let a_en = (outer1_en + outer2_en - center_en).max(inside_en - merge1_en - merge2_en);
+            let bm = match (_m1.is_stack(), _m2.is_stack(), outer1.is_stack(), outer2.is_stack())
+            {
+                (true, true, true, true) => "neutral_2s",
+                (true, false, true, false) => "neutral_1s",
+                (true, false, false, true) => "neutral_1s",
+                (false, true, true, false) => "neutral_1s",
+                (false, true, false, true) => "neutral_1s",
+
+                (true, false, true, true) => "add_stack",
+                (false, true, true, true) => "add_stack",
+                (false, false, true, false) => "add_stack",
+                (false, false, false, true) => "add_stack",
+                (false, false, true, true) => "add_stack",
+
+                (true, false, false, false) => "del_stack",
+                (false, true, false, false) => "del_stack",
+                (true, true, true, false) => "del_stack",
+                (true, true, false, true) => "del_stack",
+                (true, true, false, false) => "del_stack",
+                _ => "other",
+                //(false, false, false, false) => "other",
+                //_ => panic!("strange rearrangement"),
+            };
+            println!("fw {} {} {} {}", d_en, a_en, 0.max(d_en).max(a_en), bm);
+        }
+
         ((inside_en + outer1_en + outer2_en) - (center_en + merge1_en + merge2_en))
             .max(outer1_en + outer2_en - center_en)
             .max(inside_en - merge1_en - merge2_en)
     }
-
 }
 
 #[cfg(test)]

@@ -17,9 +17,9 @@ categories = [
 
 [workspace.dependencies]
 # local crates
-ff_energy    = { path = "./crates/ff_energy", version = "0.4.0" }
-ff_structure = { path = "./crates/ff_structure", version = "0.3.0" }
-ff_kinetics  = { path = "./crates/ff_kinetics", version = "0.4.1" }
+ff_energy    = { path = "./crates/ff_energy", version = "0.4.1" }
+ff_structure = { path = "./crates/ff_structure", version = "0.3.1" }
+ff_kinetics  = { path = "./crates/ff_kinetics", version = "0.4.2" }
 
 # shared crates
 colored = "3.1.1"
