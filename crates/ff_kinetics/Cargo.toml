@@ -33,6 +33,10 @@ harness = false
 name = "stochastic_simulation"
 harness = false
 
+[[bench]]
+name = "macrostates"
+harness = false
+
 [features]
 shift_analysis = []
 

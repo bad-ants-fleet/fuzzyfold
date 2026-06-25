@@ -28,16 +28,44 @@ impl RateModelArguments {
     }
 }
 
-
+/// TODO: Timeline parameter parsing.
+///
+/// Any timeline is composed of two regimes: 
+///  - first a linear regime [0 .. t-seq] 
+///  - second a logarithmic regime [t-sep .. t-end].
+/// Each regime is divided into equally spaced time-points for analysis, which
+/// are specified by parameters --t-lin and --t-log respectively.
+///
+/// We distinguish two modes:
+///  - full-length: When the sequence length remains constant all parameters can
+///     be set directly. --t-sep defaults to 1/k0, i.e. the expected waiting time 
+///     for the fastest reactions. All other parameters have constant defaults
+///     and can be adjusted directly.
+///
+///  - co-transcriptional: When sequence length changes over time, then the
+///     additional parameter --t-ext sets the simulation time at each
+///     nucleotide. In this mode, --t-sep defaults to the end-of-transcription,
+///     and t-end = #extensions * --t-ext + --t-end. That is, the --t-end
+///     parameter only effects the simulation time at the last nucleotide.
+///
 #[derive(Debug, Args)]
 pub struct TimelineParameters {
-    /// Extension time during transcription.
+    /// Extension time during transcription. Switches the default full-length to
+    /// co-transcriptional timeline mode.
     #[arg(long)]
     pub t_ext: Option<f64>,   
 
-    /// Simulation stop time/ Posttranscriptional simulation time (in cotranscriptional simulations).
+    /// Simulation time at the full-length sequence.
     #[arg(long, default_value_t = 1.0)]
     pub t_end: f64,
+
+    /// Sets the end of a linear output time regime and start of a logarithmic one,
+    /// s.t. 0 < t-sep <= t-end.
+    ///
+    /// In full-length mode, defaults to 1/k0.
+    /// In a co-transcriptional simulation, defaults to the end of transcription.
+    #[arg(long)]
+    pub t_sep: Option<f64>,   
 
     /// Number of time points on the linear scale.
     #[arg(long, default_value_t = 100)]
@@ -46,22 +74,14 @@ pub struct TimelineParameters {
     /// Number of time points on the logarithmic scale.
     #[arg(long, default_value_t = 100)]
     pub t_log: usize,
-
-    /// Which mode? t_sep given: seperator between linear and logarithimic part at t_sep, 
-    /// t-lin: timepoints recorded on a linear timescale between 0 and t-sep, t-log: timepoints 
-    /// recorded on a logarithmic timescale between t-sep and total time.
-    #[arg(long)]
-    pub t_sep: Option<f64>,   
 }
 
 impl TimelineParameters {
     /// Validate that all parameters make sense.
+    /// Either: t-ext is none: classic-mode
     pub fn validate(&self) -> Result<()> {
-        
         if self.t_ext.is_none() { 
-
             if let Some(sep) = self.t_sep {
-
                 if self.t_end <= sep {
                     bail!("t_end ({}) must be greater than t_sep ({})", self.t_end, sep);
                 }

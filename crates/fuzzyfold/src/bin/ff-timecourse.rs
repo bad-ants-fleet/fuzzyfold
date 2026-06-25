@@ -89,9 +89,9 @@ use ff_kinetics::Walker;
 use ff_kinetics::LoopNeighbors;
 use ff_kinetics::shift_policy::*;
 use ff_kinetics::SSA;
-use ff_kinetics::timeline_pl::Timeline;
-use ff_kinetics::timeline_plotting_pl::plot_occupancy_over_time;
-use ff_kinetics::MacrostateRegistryPL;
+use ff_kinetics::timeline::Timeline;
+use ff_kinetics::timeline_plotting::plot_occupancy_over_time;
+use ff_kinetics::MacrostateRegistry;
 
 use fuzzyfold::input_parsers::read_cotr_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
@@ -177,7 +177,7 @@ fn main() -> Result<()> {
 
     let times = cli.simulation.get_output_times(&sequence, Some(&structure)); // build times vector for output times 
 
-    let mut macrostates = MacrostateRegistryPL::from((sequence.clone(), emodel.clone()));
+    let mut macrostates = MacrostateRegistry::from((sequence.clone(), emodel.clone()));
     macrostates.insert_files(&cli.macrostates)?;
     // Verbose Output
     println!("{:>4} {:<10} {} {:>5} {:>8}",
@@ -314,28 +314,28 @@ fn main() -> Result<()> {
     fs::write(tln_path.clone(), json).unwrap();
     println!("Wrote tln file: {}", tln_path.display());
 
-    let numsim = master.points[0].counter;
-    let title = cli.title.unwrap_or({
-        format!("ff-timecourse ({} simulations)", 
-        {
-            if numsim >= 10000 {
-                let s = numsim.to_string();
-                let mut out = String::new();
-                for (i, c) in s.chars().rev().enumerate() {
-                    if i > 0 && i % 3 == 0 {
-                        out.push('_');
-                    }
-                    out.push(c);
-                }
-                out.chars().rev().collect::<String>()
-            } else { 
-                numsim.to_string()
-            }
-        })
-    });
+    //let numsim = master.points[0].counter;
+    //let title = cli.title.unwrap_or({
+    //    format!("ff-timecourse ({} simulations)", 
+    //    {
+    //        if numsim >= 10000 {
+    //            let s = numsim.to_string();
+    //            let mut out = String::new();
+    //            for (i, c) in s.chars().rev().enumerate() {
+    //                if i > 0 && i % 3 == 0 {
+    //                    out.push('_');
+    //                }
+    //                out.push(c);
+    //            }
+    //            out.chars().rev().collect::<String>()
+    //        } else { 
+    //            numsim.to_string()
+    //        }
+    //    })
+    //});
 
-    plot_occupancy_over_time(&master, svg_path.clone(), &title, cli.simulation.t_ext, cli.simulation.t_end);
-    println!("Plotted svg file: {}", svg_path.display());
+    //plot_occupancy_over_time(&master, svg_path.clone(), &title, cli.simulation.t_ext, cli.simulation.t_end);
+    //println!("Plotted svg file: {}", svg_path.display());
 
     Ok(())
 }
@@ -346,7 +346,7 @@ fn run_timecourse<W, K, E>(
     rmodel: K,
     t_end: f64,
     num_sims: u64,
-    registry: Arc<MacrostateRegistryPL<E>>,
+    registry: Arc<MacrostateRegistry<E>>,
     times: &[f64],
 ) -> impl ParallelIterator<Item = Timeline<E>>
 where
@@ -399,7 +399,7 @@ fn run_cotimecourse<W, K, E>(
     rmodel: K,
     sim_times: &[f64],
     num_sims: u64,
-    registry: Arc<MacrostateRegistryPL<E>>,
+    registry: Arc<MacrostateRegistry<E>>,
     times: &[f64],
 ) -> impl ParallelIterator<Item = Timeline<E>>
 where
@@ -445,6 +445,4 @@ where
     )
 
 }
-
-
 

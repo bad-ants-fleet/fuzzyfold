@@ -8,6 +8,7 @@ use rustc_hash::FxHashMap;
 use rand::Rng;
 
 use ff_structure::DotBracketVec;
+use ff_structure::DotBracket;
 use ff_structure::PairTable;
 use ff_energy::NucleotideVec;
 use ff_energy::EnergyModel;
@@ -62,8 +63,23 @@ use crate::{K0, KB};
 #[derive(Debug)]
 pub struct Macrostate {
     name: String,
+    min_length: usize,
+    max_length: usize,
     ensemble: FxHashMap<DotBracketVec, (i32, f64)>,
     ensemble_energy: Option<f64>,
+}
+
+fn truncate(dbv: &DotBracketVec) -> DotBracketVec {
+    //TODO benchmark
+    let mut truncated = dbv.to_vec();
+    while truncated.last() == Some(&DotBracket::Unpaired) {
+        truncated.pop();
+    }
+    assert!(truncated.is_empty() || 
+        matches!(truncated.last(), Some(&DotBracket::Close)),
+        "Truncated structure must end with ')'"
+    );
+    DotBracketVec(truncated)
 }
 
 impl Macrostate {
@@ -72,6 +88,8 @@ impl Macrostate {
     pub fn new_catch_all(name: &str) -> Self {
         Macrostate { 
             name: name.to_owned(),
+            min_length: 0,
+            max_length: 0,
             ensemble: FxHashMap::default(),
             ensemble_energy: None,
         }
@@ -87,13 +105,19 @@ impl Macrostate {
         let rt = KB * (K0 + energy_model.temperature());
 
         let mut q_sum = 0.0;
+        let mut min_length = usize::MAX;
+        let mut max_length = 0usize;
         for dbv in structures {
             let pt = PairTable::try_from(dbv)
                 .expect("Invalid dot-bracket for energy evaluation");
             let en = energy_model.energy_of_structure(sequence, &pt)
                 .expect("Broken energy evaluation!");
             let q = (-en as f64 / 100.0 / rt).exp();
-            ensemble.insert(dbv.clone(), (en, q));
+            let tdbv = truncate(dbv);
+            let len = tdbv.len();
+            min_length = min_length.min(len);
+            max_length = max_length.max(len);
+            ensemble.insert(tdbv, (en, q));
             q_sum += q;
         }
         // Turn partition function contributions into probabilities.
@@ -102,6 +126,8 @@ impl Macrostate {
         }
         Self {
             name: name.to_owned(),
+            min_length,
+            max_length,
             ensemble,
             ensemble_energy: Some(-rt * q_sum.ln()),
         }
@@ -130,7 +156,13 @@ impl Macrostate {
     
     /// Check if a secondary structure is contained in this macrostate.
     pub fn contains(&self, structure: &DotBracketVec) -> bool {
-        self.ensemble.contains_key(structure)
+        // May speed up co-transcriptional scenarios.
+        if structure.len() < self.min_length {
+            return false
+        }
+        let tdbv = truncate(structure);
+        let len = tdbv.len();
+        self.min_length <= len && len <= self.max_length && self.ensemble.contains_key(&tdbv)
     }
 
     pub fn get_lowest_microstate(&self) -> Option<&DotBracketVec> {
