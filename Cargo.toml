@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/*"]
+members = ["crates/ff_structure",
+           "crates/ff_energy", 
+           "crates/ff_kinetics",
+           "crates/ff_python",
+           "crates/fuzzyfold"]
 default-members = ["crates/fuzzyfold"]
 resolver = "3"
 

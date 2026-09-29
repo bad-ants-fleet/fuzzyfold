@@ -30,6 +30,10 @@ name = "ff-trajectory"
 path = "src/bin/ff-trajectory.rs"
 
 [[bin]]
+name = "ff-ensemble"
+path = "src/bin/ff-ensemble.rs"
+
+[[bin]]
 name = "ff-timecourse"
 path = "src/bin/ff-timecourse.rs"
 
