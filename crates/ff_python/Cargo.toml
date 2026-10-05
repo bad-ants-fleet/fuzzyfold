@@ -15,6 +15,9 @@ crate-type = ["cdylib"]
 ff_structure.workspace = true
 ff_energy.workspace = true
 ff_kinetics.workspace = true
+ff_shared = { path = "../fuzzyfold", package = "fuzzyfold" }
 rand.workspace = true
-pyo3 = { version = "0.21", features = ["extension-module"] }
+rustc-hash.workspace = true
+pyo3 = { version = "0.23", features = ["extension-module"] }
+rayon = "1.11.0"
 
