@@ -104,7 +104,7 @@ impl Simulator {
             t_ext=None,
             t_end=1.0,
     ))]
-    fn simulate(
+    fn simulate_trajectory(
         &self,
         sequence: &str,
         start: Option<&str>,
