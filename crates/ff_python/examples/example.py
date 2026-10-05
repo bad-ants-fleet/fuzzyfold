@@ -27,13 +27,13 @@ db1 = ".((((.((...))))))..."
 
 ssa = ff.Simulator(k0 = 1)
 print(f"{seq}")
-for ss, en, gtime, _tinc, _wtime in ssa.simulate(seq, db1, t_end = 40):
+for ss, en, gtime, _tinc, _wtime in ssa.simulate_trajectory(seq, db1, t_end = 40):
     print(f"{ss} {en/100:6.2f} {gtime:12.8e}")
 print(f"{seq}")
 
 # Co-transcriptional mode:
 print(f"{seq}")
-for ss, en, gtime, _tinc, _wtime in ssa.simulate(seq, None, t_ext = 40, t_end = 40):
+for ss, en, gtime, _tinc, _wtime in ssa.simulate_trajectory(seq, None, t_ext = 40, t_end = 40):
     print(f"{ss} {en/100:6.2f} {gtime:12.8e}")
 print(f"{seq}")
 
@@ -42,7 +42,20 @@ seq = "UGCCUAGAGAGPCAGGPGAU"
 db1 = ".((((.((...))))))..."
 ssa = ff.Simulator(params = "rna_extended", k0 = 1, k3ws = 1, k4ws = 1)
 print(f"{seq}")
-for ss, en, gtime, _tinc, _wtime in ssa.simulate(seq, None, t_ext = 40, t_end = 40):
+for ss, en, gtime, _tinc, _wtime in ssa.simulate_trajectory(seq, None, t_ext = 40, t_end = 40):
     print(f"{ss} {en/100:6.2f} {gtime:12.8e}")
 print(f"{seq}")
+
+# Co-transcriptional ensemble simulation
+seq = "UGCCUAGAGAGUCAGGUGAU"
+ssa = ff.Simulator(k0 = 1, k3ws = 1)
+print(f"{seq}")
+ssa.simulate_ensemble(seq, None, t_ext = 40, t_end = 40, output = "test")
+print(f"Wrote file test.drf")
+
+ssa.simulate_timecourse(seq, db1, t_end = 40, output = "test")
+print(f"Wrote file test.tln")
+print(f"Wrote file test.nxy")
+
+
 

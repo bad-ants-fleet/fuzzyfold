@@ -20,14 +20,14 @@ impl ViennaRNA {
 
     #[new]
     #[pyo3(signature = (
-        params = "rna_default",
+        params = "rna_turner_2004",
         celsius=37.0,
     ))]
  
     fn new(params: &str, celsius: f64) -> PyResult<Self> {
         let mut is_rna = true;
         let thermo = match params {
-            "rna_default" => &RNA_TURNER_2004,
+            "rna_turner_2004" => &RNA_TURNER_2004,
             "rna_extended" => &RNA_EXTENDED,
             "dna" => {
                 is_rna = false;
@@ -37,7 +37,7 @@ impl ViennaRNA {
                 return Err(PyValueError::new_err(
                     format!(
                         "Unknown parameter set '{}'. \
-                         Valid options are: 'rna_default', 'rna_extended', 'dna'.",
+                         Valid options are: 'rna_turner_2004', 'rna_extended', 'dna'.",
                         params
                     )
                 ));

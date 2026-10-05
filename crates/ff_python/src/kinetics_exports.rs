@@ -27,12 +27,10 @@ use ff_energy::parameters::RNA_TURNER_2004;
 use ff_energy::parameters::DNA_MATHEWS_2004;
 use ff_shared::kinetics_parsers::TimelineParameters;
 
-//TODO: support shifts, rename to arrhenius
-
 fn resolve_energy_model(params: &str, celsius: f64) -> PyResult<(ViennaRNA, bool)> {
     let mut is_rna = true;
     let thermo = match params {
-        "rna_default" => &RNA_TURNER_2004,
+        "rna_turner_2004" => &RNA_TURNER_2004,
         "rna_extended" => &RNA_EXTENDED,
         "dna" => {
             is_rna = false;
@@ -42,7 +40,7 @@ fn resolve_energy_model(params: &str, celsius: f64) -> PyResult<(ViennaRNA, bool
             return Err(PyValueError::new_err(
                 format!(
                     "Unknown parameter set '{}'. \
-                     Valid options are: 'rna_default', 'rna_extended', 'dna'.",
+                     Valid options are: 'rna_turner_2004', 'rna_extended', 'dna'.",
                     params
                 )
             ));
@@ -63,7 +61,7 @@ pub struct Simulator {
 impl Simulator {
     #[new]
     #[pyo3(signature = (
-        params = "rna_default",
+        params = "rna_turner_2004",
         celsius=37.0,
         k0=1e5,
         k3ws=0.0,
@@ -167,21 +165,20 @@ impl Simulator {
             t_sep=None,
             num_sims=100,
             output=None,
-    ))]
-    fn simulate_ensemble(
-        &self,
-        py: Python<'_>,
-        sequence: &str,
-        start: Option<&str>,
-        t_ext: Option<f64>,
-        t_end: f64,
-        t_lin: Option<usize>,
-        t_log: usize,
-        t_sep: Option<f64>,
-        num_sims: usize,
-        output: Option<PathBuf>,
-    ) -> PyResult<Vec<(f64, FxHashMap<String, usize>)>> {
-
+   ))]
+   fn simulate_ensemble(
+       &self,
+       py: Python<'_>,
+       sequence: &str,
+       start: Option<&str>,
+       t_ext: Option<f64>,
+       t_end: f64,
+       t_lin: Option<usize>,
+       t_log: usize,
+       t_sep: Option<f64>,
+       num_sims: usize,
+       output: Option<PathBuf>,
+   ) -> PyResult<Vec<(f64, FxHashMap<String, usize>)>> {
        let (sequence, start_pt, times) = parse_inputs(self, sequence, start, t_ext, t_end)?;
 
        let k3ws = self.rate_model.k3ws().is_some();
@@ -190,11 +187,11 @@ impl Simulator {
        let rate_model = self.rate_model;
 
        let mut tl_params = TimelineParameters {
-        t_ext,
-        t_end,
-        t_sep,
-        t_lin,
-        t_log,
+           t_ext,
+           t_end,
+           t_sep,
+           t_lin,
+           t_log,
        };
 
        let num_ext = sequence.len() - start_pt.len();
@@ -248,19 +245,18 @@ impl Simulator {
        let mut energies: FxHashMap<String, i32> = FxHashMap::default();
 
        for structures in results {
-            for (t_idx, (structure, energy)) in structures.into_iter().enumerate() {
-                *counts[t_idx].entry(structure.clone()).or_insert(0) += 1;
-                energies.entry(structure).or_insert(energy);
-            }
-        }
+           for (t_idx, (structure, energy)) in structures.into_iter().enumerate() {
+               *counts[t_idx].entry(structure.clone()).or_insert(0) += 1;
+               energies.entry(structure).or_insert(energy);
+           }
+       }
 
-        if let Some(output) = output {
-            write_drf(&output.with_extension("drf"), &output_times, &counts, &energies,
-                num_sims, sequence.len())?;
-        }
+       if let Some(output) = output {
+           write_drf(&output.with_extension("drf"), &output_times, &counts, &energies,
+           num_sims, sequence.len())?;
+       }
 
-        Ok(output_times.iter().copied().zip(counts).collect())
-
+       Ok(output_times.iter().copied().zip(counts).collect())
     }
 
     #[pyo3(signature = (
@@ -276,8 +272,6 @@ impl Simulator {
             output=None,
             num_threads=None,
     ))]
-
-
     fn simulate_timecourse(
         &self,
         py: Python<'_>,
@@ -302,11 +296,11 @@ impl Simulator {
        let rate_model = self.rate_model;
 
        let mut tl_params = TimelineParameters {
-        t_ext,
-        t_end,
-        t_sep,
-        t_lin,
-        t_log,
+           t_ext,
+           t_end,
+           t_sep,
+           t_lin,
+           t_log,
        };
 
        let num_ext = sequence.len() - start_pt.len();
@@ -383,7 +377,6 @@ impl Simulator {
        }
 
        Ok(timeline_to_occupancy(&master))
-
     }
 
 
@@ -418,7 +411,7 @@ pub struct Explorer {
 impl Explorer {
     #[new]
     #[pyo3(signature = (
-        params = "rna_default",
+        params = "rna_turner_2004",
         celsius=37.0,
         three_way_shifts=false,
         four_way_shifts=false,
@@ -432,7 +425,6 @@ impl Explorer {
             four_way_shifts,
         })
     }
-
 
     #[pyo3(signature = (
             sequence,
