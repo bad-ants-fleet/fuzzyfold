@@ -2,6 +2,10 @@
 
 All notable changes to this crate will be documented in this file.
 
+## [0.4.0] - 2026-10-06
+### Added
+- PairList
+
 ## [0.3.1] - 2026-01-13
 ### Added
 - NAIDX indexing for PairTable

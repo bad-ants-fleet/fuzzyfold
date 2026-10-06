@@ -2,13 +2,12 @@
 
 All notable changes to this crate will be documented in this file.
 
-## development
+## [0.5.0] - 2026-10-06
 ## Added
+- ff-ensemble to produce detailed output from multiple simulations in DRF format.
 - co-transcriptional folding support for ff-timecourse.
 - t-sep commandline parameter for timeline construction.
 - t-lin/t-log logic adapted for timeline construction.
-- preliminary ff-transitions interface to commit-and-delay model.
-- preliminary ff-accessibility interface to compare simulations against probing data.
 
 ## Changed
 - t-ext now explicit for co-transcriptional folding. 

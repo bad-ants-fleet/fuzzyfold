@@ -2,7 +2,7 @@
 
 All notable changes to this crate will be documented in this file.
 
-## development
+## 0.5.0 - 2026-10-06
 ### Changed
 - The same macrostate can now be defined at multiple sequence lengths. A flag
 allows for automatic generation of macrostates for shorter lengths during
@@ -11,9 +11,6 @@ co-transcriptional folding.
 with the same name across different sequence lengths.
 - co_simulate does now modify the callback to reduce tinc in case it goes beyond
 the current transcription step. 
-
-### Added
-- preliminary commit-and-delay model to ensure compatibility with macrostate updates.
 
 ### Removed
 - preliminary interface to merge timelines.

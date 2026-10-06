@@ -2,12 +2,15 @@
 
 All notable changes to this crate will be documented in this file.
 
-## Development
+## 0.5.0 - 2026-10-06
 ### Fixed
 - GU stacking enthalpies.
 
 ### Added
 - Inosine parameters.
+
+### Changed
+- Handling of closing penalties.
 
 ## [0.4.1] - 2026-06-18
 ### Fixed
