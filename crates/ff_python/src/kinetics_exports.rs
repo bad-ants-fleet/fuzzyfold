@@ -202,7 +202,7 @@ impl Simulator {
 
        let output_times = tl_params.get_output_times(num_ext).map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-       let results: Result<Vec<Vec<(String, i32)>>, String> = py.allow_threads (|| {
+       let results: Result<Vec<Vec<(String, i32)>>, String> = py.detach(|| {
             let run_one = |_: usize| -> Result<Vec<(String, i32)>, String> {
                 let mut structures: Vec<(String, i32)> = Vec::new();
 
@@ -322,7 +322,7 @@ impl Simulator {
             None => None,
        };
 
-       let merged: Option<Result<Timeline<ViennaRNA>, String>> = py.allow_threads (|| {
+       let merged: Option<Result<Timeline<ViennaRNA>, String>> = py.detach(|| {
             let run_one = |_: usize| -> Result<Timeline<ViennaRNA>, String> {
                 let thread_registry = Arc::clone(&registry);
                 let mut timeline = Timeline::new(&output_times, thread_registry);
@@ -490,7 +490,7 @@ impl Explorer {
         let three_way_shifts = self.three_way_shifts;
         let four_way_shifts = self.four_way_shifts;
 
-        let mut results: Vec<(String, f64)> = py.allow_threads(move || -> Result<_, String> {
+        let mut results: Vec<(String, f64)> = py.detach(move || -> Result<_, String> {
             let mut out: Vec<(String, f64)> = Vec::new();
 
             macro_rules! run_with_policy {
