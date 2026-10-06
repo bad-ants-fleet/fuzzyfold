@@ -53,7 +53,8 @@ cargo install ff_kinetics
 | Program | Description |
 |---|---|
 | `ff-trajectory` | Single stochastic folding trajectory |
-| `ff-timecourse` | Ensemble occupancy analysis over multiple parallel trajectories |
+| `ff-ensemple` | Ensemble occupancy of microstates over multiple parallel trajectories |
+| `ff-timecourse` | Ensemble occupancy of macrostates over multiple parallel trajectories |
 | `ff-explore` | Enumerate secondary structure neighborhoods and macrostates |
 | `ff-eval` | Free-energy evaluation for secondary structures |
 | `ff-randseq` | Generate a random nucleic acid sequence |
