@@ -3,7 +3,6 @@ pub mod timeline_io;
 pub mod timeline_plotting;
 pub mod rate_tree;
 pub mod enum_neighbors;
-pub mod commit_and_delay;
 
 mod rate_model;
 mod stochastic_simulation;
