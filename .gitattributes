@@ -1,0 +1,2 @@
+# keep macrostate files out of the language statistics
+*.ms  linguist-detectable=false
