@@ -104,7 +104,8 @@ Running the same command again will automatically reload the file, add another
 Try it! This is the recommended way to extend your simulation dataset without
 restarting from scratch.
 
-An output file from $20 000$ aggregated simulations should look like this:
+An output file from $20 000$ aggregated simulations is shown below. Note that default parameters
+may change over time, which may lead to different visualization or even dynamics.
 
 ![Timecourse plot](result_dld1_lm3_t1.svg)
 
