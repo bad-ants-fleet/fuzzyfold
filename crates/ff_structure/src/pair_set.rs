@@ -118,10 +118,8 @@ impl From<&PairTable> for PairSet {
         let mut pairs = IntSet::default();
         for (i, &j_opt) in pt.iter().enumerate() {
             let i = i as NAIDX;
-            if let Some(j) = j_opt {
-                if i < j {
-                    pairs.insert(Pair::new(i, j).key());
-                }
+            if let Some(j) = j_opt && i < j {
+                pairs.insert(Pair::new(i, j).key());
             }
         }
         Self {

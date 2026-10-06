@@ -81,7 +81,7 @@ impl TimelineParameters {
     pub fn validate(&mut self, k0: f64, num_ext: usize) -> Result<()> {
         if (num_ext == 0) != self.t_ext.is_none() {
             // needs better bail warning for different cases.
-            bail!("Inconsistent input!");
+            bail!("Inconsistent input, if t_ext is set, then there must be extensions. If there are extensions, t_ext must be set!");
         }
 
         // Set default values for t_sep in case it is not set by user.
@@ -94,22 +94,20 @@ impl TimelineParameters {
             }
         } 
 
-        // Set default values for t_sep in case it is not set by user.
-        if self.t_sep.is_none() {
-            if self.t_ext.is_none() { // full-length mode
-                self.t_sep = Some(10.0/k0)
-            } else { // co-transcriptional mode
-                self.t_sep = Some(self.t_ext.unwrap() * num_ext.as_f64());
-            }
-        // Verify user-set values for t_sep.
-        } else {
-            if self.t_ext.is_none() {
-                if self.t_end <= self.t_sep.unwrap() {
-                    bail!("t_end ({}) must be greater than t_sep ({})", self.t_end, self.t_sep.unwrap());
+        let total_ext = self.t_ext.map(|t| t * num_ext.as_f64());
+        match (self.t_sep, total_ext) {
+            // Defaults if t_sep is not set by the user.
+            (None, None) => self.t_sep = Some(10.0 / k0),  // full-length mode
+            (None, Some(ext)) => self.t_sep = Some(ext),   // co-transcriptional mode
+            // Verify user-set t_sep.
+            (Some(sep), None) => {
+                if self.t_end <= sep {
+                    bail!("t_end ({}) must be greater than t_sep ({})", self.t_end, sep);
                 }
-            } else {
-                if self.t_ext.unwrap() * num_ext.as_f64() + self.t_end <= self.t_sep.unwrap() {
-                    bail!("Error: 't_sep' must be smaller than the total simulation time!");
+            }
+            (Some(sep), Some(ext)) => {
+                if ext + self.t_end <= sep {
+                    bail!("t_sep ({}) must be smaller than the total simulation time ({})", sep, ext + self.t_end);
                 }
             }
         }

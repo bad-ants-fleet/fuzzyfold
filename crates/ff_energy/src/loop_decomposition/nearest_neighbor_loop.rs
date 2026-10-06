@@ -178,7 +178,7 @@ impl NearestNeighborLoop {
     pub fn inclusive_loop_ranges(&self) -> Vec<RangeInclusive<usize>> {
         match self {
             Self::Hairpin { closing: (i, j) } => 
-                vec![(*i as usize)..=(*j as usize)],
+                vec![RangeInclusive::new(*i as usize, *j as usize)],
             Self::Interior { closing: (i, j),  inner: (p, q) } => 
                 vec![(*i as usize)..=(*p as usize), 
                      (*q as usize)..=(*j as usize)],

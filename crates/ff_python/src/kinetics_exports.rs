@@ -155,6 +155,7 @@ impl Simulator {
         }
    }
    
+   #[allow(clippy::too_many_arguments)]
    #[pyo3(signature = (
             sequence,
             start=None,

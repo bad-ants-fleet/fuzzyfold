@@ -18,6 +18,7 @@ use crate::RateModel;
 use crate::enum_neighbors::ApplyMove;
 use crate::macrostates::pad;
 
+#[allow(clippy::too_many_arguments)]
 fn find_neighbors<E: EnergyModel, R: RateModel>(
     dbr: &DotBracketVec,
     lss_opt: Option<&LoopNeighbors<E, shift_policy::NoShift>>,
@@ -91,7 +92,7 @@ impl<'a, E: EnergyModel, R: RateModel, P: ShiftPolicy> From<
                 &dbr,
                 None,
                 sequence,
-                &energy_model,
+                energy_model,
                 rate_model,
                 parent_macrostate.ensemble(),
                 &mut visited,

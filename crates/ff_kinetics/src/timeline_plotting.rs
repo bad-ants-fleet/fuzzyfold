@@ -104,6 +104,7 @@ pub fn plot_occupancy_over_time<E: EnergyModel>(
         }
 
     // Build data per macrostate name
+    #[allow(clippy::type_complexity)]
     let mut trajectories: Vec<(&str, Vec<(f64, f64, f64)>)> = Vec::new();
     for name in &name_order {
         let indices = &name_to_indices[name];

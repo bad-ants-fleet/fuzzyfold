@@ -79,10 +79,8 @@ impl From<&PairTable> for PairList {
         let mut pairs = Vec::new();
         for (i, &j_opt) in pt.iter().enumerate() {
             let i = i as NAIDX;
-            if let Some(j) = j_opt {
-                if i < j {
-                    pairs.push((i,j));
-                }
+            if let Some(j) = j_opt && i < j {
+                pairs.push((i,j));
             }
         }
         Self {

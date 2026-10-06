@@ -78,8 +78,8 @@ impl ReactiveTrajectoryEnsemble {
             let chunk: Vec<_> = self
                 .successes
                 .iter()
-                .cloned()
                 .filter(|traj| traj.simu_time >= t_low && traj.simu_time < t_high)
+                .cloned()
                 .collect();
 
             if !chunk.is_empty() {

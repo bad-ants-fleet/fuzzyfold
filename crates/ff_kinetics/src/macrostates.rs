@@ -119,7 +119,7 @@ impl Macrostate {
             q_sum += q;
         }
         // Turn partition function contributions into probabilities.
-        for (_dbv, (_en, prob)) in ensemble.iter_mut() {
+        for (_en, prob) in ensemble.values_mut() {
             *prob /= q_sum;
         }
         Self {
