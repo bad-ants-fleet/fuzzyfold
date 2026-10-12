@@ -20,8 +20,3 @@ plotters = { version = "0.3", default-features = false, features = ["svg_backend
 
 [badges]
 maintenance = { status = "actively-developed" }
-
-
-[[bin]]
-name = "ff-arc-diagram"
-path = "src/bin/ff-arc-diagram.rs"
