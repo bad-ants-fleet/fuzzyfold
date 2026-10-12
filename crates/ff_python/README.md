@@ -1,94 +1,90 @@
-# ff_python
+# fuzzyfold - Python Interface (draft)
 
-Python bindings for **fuzzyfold** (energy evaluation + kinetic simulation) and a
-collection of developer tooling for parameter generation, verification, and validation.
+This repository provides Python bindings for the Rust-based **fuzzyfold**
+nucleic acid folding and kinetic simulation engine.
 
----
+The computational core is implemented in Rust.
+The Python layer is a thin wrapper around the Rust engine.
 
-## Python bindings
+The Python module exposes:
 
-The crate is a `cdylib` built with [PyO3](https://pyo3.rs) and
-[maturin](https://www.maturin.rs). It exports:
+- Energy evaluation (`ViennaRNA`)
+- Stochastic kinetic simulation (`Simulator`)
+- Pseudoknot parsing and energies (`region_tree`, `pseudo_energy`)
 
-| Class | Description |
-|---|---|
-| `ViennaRNA` | Nearest-neighbor free energy evaluation |
-| `Simulator` | Gillespie SSA kinetic simulation |
+## Installation (Development)
 
-### Build and install (development)
+The Python extension is built using `maturin`.
+
+### 1. Install maturin
+
+```bash
+pip install maturin
+```
+
+### 2. Build and install locally
+From the Python binding crate directory:
 
 ```bash
 maturin develop --release
 ```
 
-See `example.py` for basic usage.
 
----
+### 3. Basic usage
 
-## Directory layout
+```python
+import fuzzyfold as ff
 
-```
-generate/       scripts that produce artifacts
-  fm363_to_rust.py      convert HotKnots fm363 → Rust parameter source (AndronescuParams)
-  fm363_to_rust.md      documentation for the converter
-  gen_notebook.py       generate notebooks/region_tree_explorer.ipynb
-  gen_bl_notebook.py    generate notebooks/bl_construction_explorer.ipynb
+seq = "UGCCUAGAGAGUCAGGUGAU"
+db1 = ".((((.((...))))))..."
 
-audit/          scripts that verify Rust constants match their source files
-  compare_nn_params.py  diff an fm363 file against a Rust parameter directory
-  compare_pk_params.py  diff HotKnots PK params against pseudoknot_params.rs
+# Energy model
+emodel = ff.ViennaRNA()
+print(emodel.energy_of_structure(seq, db1))
 
-validate/       scripts that evaluate energies and compare to references
-  validate_pseudo.py      T-Train PK (22 pseudoknotted structures)
-  validate_non_pseudo.py  T-Train PKfree (277 single-strand non-PK structures)
+# Kinetic simulator
+ssa = ff.Simulator(k0=1)
 
-data/           reference data (committed)
-  RNA-thermo-db_v1.4.xml        sequences and structures
-  energies_DP03_T-Train.txt     HotKnots v2 DP03 energies for T-Train
-  energies_DP09_T-Train.txt     HotKnots v2 DP09 energies for T-Train
-
-results/        validation output (git-ignored)
-notebooks/      Jupyter notebooks
+for line in ssa.simulate(
+        seq,
+        None,
+        t_ext=4000,
+        t_end=4000,
+        silent=False):
+    print(line)
 ```
 
----
 
-## Parameter tooling (`generate/`, `audit/`)
+## Recommended alternative: uv
+
+[uv](https://docs.astral.sh/uv/) replaces steps 1 and 2 above. It resolves and
+locks quickly, and reads the `pyproject.toml` beside `Cargo.toml`:
 
 ```bash
-make generate-mt09   # regenerate rna_mt09/ from HotKnots DP09 fm363
-make compare         # verify all Rust constants match source files
-make regen           # generate-mt09 + compare in one step
+uv venv --python 3.12          # create the environment
+source .venv/bin/activate
+uv pip install maturin         # the build backend
+maturin develop --release      # run from this crate directory
 ```
 
-Both `validate_pseudo.py` and `validate_non_pseudo.py` accept
-`--pk-params {dp03,dp09,mt09}`, `--binary`, `--xml`, `--results`, `--tol`, `--celsius`.
-Output columns: `exp`, `HotKnots`, `ff-calc`, `Δ(HK−exp)`, `Δ(ff−exp)`, `Δ(ff−HK)`.
+`maturin develop` installs into the *active* environment, hence the `activate`
+step. Having `pyproject.toml` present is also what makes the installed
+distribution `fuzzyfold` matching the import name.
 
----
+## Pseudoknots
 
-## Validation (`validate/`)
+Pseudoknotted structures use extended dot-bracket notation (`([{<` and `ABCD`).
+Parsing follows Rastegari & Condon; energies use the Dirks-Pierce model.
 
-```bash
-make validate        # runs all four combinations; saves to results/
-make summary         # print stats from existing results without re-running
-```
+| Export | Purpose |
+|---|---|
+| `region_tree(structure)` | `(pair_table, region_nodes)` — the closed-region tree |
+| `region_tree_steps(structure)` | the same parse, emitted step by step |
+| `pseudo_energy(seq, structure)` | free energy in kcal/mol |
+| `pseudo_energy_loops(seq, structure)` | per-loop energy breakdown |
+| `RegionNode`, `TreeStep` | the types those functions return |
 
-See `summary.md` for a full write-up of results and error analysis.
+`region_tree_steps` replays the construction rather than only reporting its
+result, which is what drives the notebook visualisations.
 
----
-
-## Makefile targets
-
-```
-make help            # list all targets
-make all             # build + test + validate
-make build           # cargo build --release (ff-calc-pseudo)
-make test            # cargo test -p ff_energy
-make generate-mt09   # regenerate rna_mt09/ from HotKnots fm363
-make compare         # verify all Rust constants match source files
-make regen           # generate-mt09 + compare
-make validate        # run all validations
-make summary         # print stats from existing results/
-make clean-results   # remove results/
-```
+See `example.py` for simple simulations and the energy breakdown of individual loops of an RNA pseudoknot.

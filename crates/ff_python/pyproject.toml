@@ -1,0 +1,21 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "fuzzyfold"
+version = "0.1.1"
+description = "fuzzyfold Python bindings"
+requires-python = ">=3.10,<3.13"
+dependencies = []
+
+[project.optional-dependencies]
+notebooks = [
+    "matplotlib>=3.7",
+    "networkx>=3.0",
+    "ipywidgets>=8.0",
+    "jupyterlab>=4.0",
+]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
