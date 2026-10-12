@@ -15,12 +15,14 @@ categories.workspace = true
 ff_structure.workspace = true
 
 colored.workspace = true
-criterion.workspace = true
 env_logger.workspace = true
 itertools.workspace = true
 rustc-hash.workspace = true
 log.workspace = true
 paste = "1.0.15"
+
+[dev-dependencies]
+criterion.workspace = true
 
 [[bench]]
 name = "energy_models"

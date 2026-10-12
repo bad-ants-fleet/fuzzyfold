@@ -4,7 +4,6 @@
 //! the rest of `ff_energy`.
 //!
 //! The full Dirks-Pierce model has 11 features (Andronescu et al. 2010, Table 6).
-//! See `docs/pseudoknots/DPModelImplementation.md` for the complete description.
 //!
 //! The Pseudoloop energy formula:
 //!
@@ -18,15 +17,29 @@
 //! E = ap + bp × n_branches + cp × n_unpaired
 //! ```
 //!
-//! Stacks / interior loops *inside* a band use scaled Turner energies:
+//! Stacks and interior loops **that span a band** (SpanBand loops in fuzzyfold) use
+//! scaled Turner energies rather than the raw Turner value:
 //! - stacked pair: `round(e_stp × turner_stack)`
 //! - interior loop / bulge: `round(e_intp × turner_interior)`
+//!
+//! This is the multiplicative penalty from Andronescu et al. (2010) §Materials and Methods.
+//! It makes the full DP energy function quadratic in the parameters (the SpanBand count
+//! is multiplied by both `e_stp`/`e_intp` and the underlying Turner parameter), but each
+//! loop is evaluated independently so the implementation remains linear in structure size.
 
 /// Full Dirks-Pierce (DP) energy parameter set for pseudoknots.
 ///
 /// Covers all 11 features described in Andronescu, Pop & Condon (2010), Table 6.
-/// Two static constants are provided: [`RNA_DP03`] (initial 2003 values) and
-/// [`RNA_DP09`] (Andronescu 2010 trained values, identical to HotKnots v2 / Spark).
+/// Two static constants are provided:
+/// - [`RNA_DP03`]: the original Dirks & Pierce 2003 values.
+/// - [`RNA_DP09`]: Andronescu 2010 retrained values.
+///
+/// The DP params are independent of the nearest-neighbor model, so any combination
+/// evaluates. Only one *trained* pairing is reachable from this crate:
+/// DP09 = MT09 + dp09 (Andronescu et al. 2010, Table 3 row 9). The paper's other
+/// named set, DP03 = MT99 + dp03 (row 2), pairs dp03 with Mathews et al. (1999),
+/// which this crate does not carry — so DP03 cannot be expressed here. Turner 2004
+/// is a different nearest-neighbor model, not a stand-in for MT99.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DPParams {
     /// Initiation when the pseudoloop is in an exterior context (dcal/mol).
@@ -37,7 +50,10 @@ pub struct DPParams {
     pub init_pseudoloop: i32,
     /// Per-band (per crossing helix) penalty (dcal/mol).
     pub pb: i32,
-    /// Per-unpaired-base in the junction gaps (dcal/mol).
+    /// Per-free-linker-nucleotide penalty (dcal/mol).
+    /// Applied to `n_pup`: the total count of unpaired bases across all 2n−1
+    /// inter-arm gaps that belong to the pseudoloop itself (i.e. not inside
+    /// any nested child region).
     pub pup: i32,
     /// Per-nested-closed-region inside the pseudoloop (dcal/mol).
     pub pps: i32,
@@ -47,16 +63,20 @@ pub struct DPParams {
     pub bp: i32,
     /// SpanBand multiloop: per-unpaired-base penalty (dcal/mol).
     pub cp: i32,
-    /// Scale factor applied to Turner stacking energies inside a band.
+    /// Multiplicative scale factor for Turner stacking energies that span a band.
+    /// Applied as `round(e_stp × turner_stack)` for each SpanBand Stack loop.
     pub e_stp: f64,
-    /// Scale factor applied to Turner interior-loop / bulge energies inside a band.
+    /// Multiplicative scale factor for Turner interior-loop / bulge energies that span a band.
+    /// Applied as `round(e_intp × turner_interior)` for each SpanBand Interior/Bulge loop.
     pub e_intp: f64,
 }
 
 /// Initial Dirks-Pierce 2003 pseudoknot parameters for RNA at 37 °C.
 ///
 /// Source: Andronescu, Pop & Condon, *RNA* **16** (2010), Table 6, column dp03.
-/// These are the parameter values used in the original HotKnots / NUPACK software.
+/// These are the parameter values used by the original HotKnots / NUPACK software.
+/// Published as DP03 = MT99 + dp03 (Table 3 row 2). MT99 is Mathews et al.
+/// (1999); no MT99 table exists in this crate, so DP03 itself is out of reach.
 pub static RNA_DP03: DPParams = DPParams {
     init_external: 960,    //  9.60 kcal/mol
     init_multiloop: 1500,  // 15.00 kcal/mol
@@ -76,10 +96,25 @@ pub static RNA_DP03: DPParams = DPParams {
 /// Source: Andronescu, Pop & Condon, *RNA* **16** (2010), Table 6, column dp09.
 /// These are the best-performing DP parameters (F-measure 79% vs. 68% for dp03).
 /// They are identical to the HotKnots v2 and Spark `PK_globals.hh` values.
+/// Published as DP09 = MT09 + dp09 ([`RNA_MT09`], Table 3 row 9) — the one
+/// trained pairing this crate can reproduce.
 ///
 /// Key differences from dp03:
 /// - External initiation flips from +960 → −138 (exterior pseudoknots become rewarded)
 /// - Per-band penalty rises from 20 → 246 (discourages over-complex pseudoknots)
+///
+/// NOTE on `init_external`. Table 6 of the published paper prints this value as
+/// `1.38`, without a sign. The authoritative source is negative:
+///
+/// ```text
+/// // HotKnots v2 / Spark, src/PK_globals.hh
+/// int PS_penalty = -138;  // 960;  // exterior pseudoloop initiation penalty
+/// ```
+///
+/// The `// 960` trailing comment is the dp03 value it replaced, which matches
+/// Table 6's dp03 column (9.60) — so the table and the source agree everywhere
+/// except for this dropped minus sign. All eleven values here were verified
+/// field-by-field against `PK_globals.hh`.
 pub static RNA_DP09: DPParams = DPParams {
     init_external: -138,  // -1.38 kcal/mol (slight reward — exterior PK is favorable)
     init_multiloop: 1007, // 10.07 kcal/mol
@@ -94,40 +129,6 @@ pub static RNA_DP09: DPParams = DPParams {
     e_intp: 0.74,
 };
 
-// Cao & Chen 2006 pseudoknot parameters for RNA at 37 °C.
-//
-// The actual Cao & Chen 2006 model (`pkmodelCC2006.dat` in HotKnots v2) uses a
-// 2D lookup table indexed by *both* loop length and stem size, not a linear formula.
-// `DPParams` cannot represent it. A proper implementation requires a dedicated 2D
-// table struct. Deferred.
-//pub struct CaoChen2006Note;
-
-// ---------------------------------------------------------------------------
-// Why CC09 is not implemented (and DP09 is the right choice)
-// ---------------------------------------------------------------------------
-//
-// Andronescu, Pop & Condon (2010) also trained a CC09 parameter set for the
-// Cao-Chen (CC) energy model. CC09 = MT09 + dp09 + cc09, with 920 total
-// features (vs. 374 for DP09). The 546 additional cc09 parameters are:
-//   - 258 loop entropy features for the L1/L2 junction loops of H-type PKs
-//   - 288 coaxial stacking features for H-type PKs (Tyagi & Mathews 2007)
-// The CC features apply only to H-type PKs where Cao & Chen provide values;
-// non-H-type PKs and unparameterised H-type cases fall back to DP.
-//
-// Two fundamental reasons CC09 is not implemented here:
-//
-// 1. Non-linear energy function.
-//    The CC model takes min(coaxial_stack, dangle) at each applicable site,
-//    producing quadratic terms in the parameters. This is incompatible with
-//    the linear loop-sum architecture used throughout ff_energy.
-//
-// 2. Loop entropies are ΔS°, not ΔG°.
-//    Cao & Chen treat enthalpy as zero for junction loops, so their 258
-//    loop entropy parameters are entropy changes that scale as −TΔS°. They
-//    require separate temperature handling, unlike all other parameters.
-//
-// Crucially, CC09 does not outperform DP09. On short pseudoknotted structures
-// (ShPK, the relevant regime for e.g. Zika xrRNA1 at ~70 nt), F-measure is
-// 0.817 for DP09 vs. 0.742 for CC09 (Table 3/4, Andronescu 2010). The paper
-// attributes this to insufficient training data for the large CC feature set.
-// DP09 remains the recommended parameter set for this codebase.
+// Cao & Chen (CC09) is not implemented: its energy function is non-linear
+// (min(coaxial, dangle)) and its loop entropies are ΔS°, neither of which fits
+// the linear loop-sum here. It also does not outperform DP09.
