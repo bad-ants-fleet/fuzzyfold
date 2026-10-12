@@ -1,8 +1,16 @@
 use crate::PairTable;
 
 pub fn arc_diagram_svg(sequence: &str, pt: &PairTable) -> String {
-    let n = sequence.len();
-    assert_eq!(n, pt.len(), "sequence length must match pair table length");
+    arc_diagram_svg_opt(Some(sequence), pt)
+}
+
+/// Arc diagram with an optional sequence. Without one, bases are drawn as
+/// neutral dots and no nucleotide labels are emitted.
+pub fn arc_diagram_svg_opt(sequence: Option<&str>, pt: &PairTable) -> String {
+    let n = pt.len();
+    if let Some(seq) = sequence {
+        assert_eq!(seq.len(), n, "sequence length must match pair table length");
+    }
 
     let margin = 40.0_f64;
     let base_spacing = 20.0_f64;
@@ -59,8 +67,10 @@ pub fn arc_diagram_svg(sequence: &str, pt: &PairTable) -> String {
     // --- SVG ---
     let mut svg = String::new();
 
+    // viewBox lets consumers scale the diagram; the explicit rect is the actual
+    // background -- CSS `background` on the root is not honoured by rasterizers.
     svg.push_str(&format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" style="background:#ffffff;font-family:monospace">"##,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" font-family="monospace"><rect width="{width}" height="{height}" fill="#ffffff"/>"##,
         width = width, height = height
     ));
 
@@ -101,9 +111,13 @@ pub fn arc_diagram_svg(sequence: &str, pt: &PairTable) -> String {
             .unwrap_or("#cdd6f4")
     };
 
-    for (i, ch) in sequence.chars().enumerate() {
+    for i in 0..n {
+        let ch = sequence.and_then(|s| s.chars().nth(i));
         let x = x_pos(i);
-        let color = base_color(ch.to_ascii_uppercase());
+        let color = match ch {
+            Some(c) => base_color(c.to_ascii_uppercase()),
+            None => "#cdd6f4",
+        };
         let stroke = if pt[i].is_some() {
             "#ffffff"
         } else {
@@ -112,12 +126,15 @@ pub fn arc_diagram_svg(sequence: &str, pt: &PairTable) -> String {
 
         svg.push_str(&format!(
             r##"<circle cx="{x}" cy="{y}" r="{r}" fill="{fill}" stroke="{stroke}" stroke-width="1.2"/>"##,
-            x = x, y = base_y, r = base_r, fill = color, stroke = stroke,
+            x = x, y = base_y, r = if ch.is_some() { base_r } else { base_r * 0.6 },
+            fill = color, stroke = stroke,
         ));
-        svg.push_str(&format!(
-            r##"<text x="{x}" y="{ty}" text-anchor="middle" font-size="{fs}" fill="#313244">{ch}</text>"##,
-            x = x, ty = base_y + base_r + font_size + 2.0, fs = font_size, ch = ch,
-        ));
+        if let Some(c) = ch {
+            svg.push_str(&format!(
+                r##"<text x="{x}" y="{ty}" text-anchor="middle" font-size="{fs}" fill="#313244">{ch}</text>"##,
+                x = x, ty = base_y + base_r + font_size + 2.0, fs = font_size, ch = c,
+            ));
+        }
         if i % 5 == 0 {
             svg.push_str(&format!(
                 r##"<text x="{x}" y="{ty}" text-anchor="middle" font-size="9" fill="#6c7086">{i}</text>"##,
@@ -138,4 +155,13 @@ pub fn save_arc_diagram(
 ) -> Result<(), std::io::Error> {
     let svg = arc_diagram_svg(sequence, pt);
     std::fs::write(output_filename, svg)
+}
+
+/// As [`save_arc_diagram`], with an optional sequence.
+pub fn save_arc_diagram_opt(
+    sequence: Option<&str>,
+    pt: &PairTable,
+    output_filename: impl AsRef<std::path::Path>,
+) -> Result<(), std::io::Error> {
+    std::fs::write(output_filename, arc_diagram_svg_opt(sequence, pt))
 }

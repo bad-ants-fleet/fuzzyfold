@@ -1,10 +1,7 @@
 //! loop type definitions
 use std::fmt;
 
-use crate::pseudoknots::{
-    LocationStatus,
-    ClosingDescriptor,
-};
+use crate::pseudoknots::{ClosingDescriptor, LocationStatus};
 
 /// The seven loop categories from Rastegari & Condon's classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,7 +35,10 @@ pub enum PseudoloopContext {
 /// Classifies the loop between a closing pair and a strictly nested inner
 /// pair as a stack, bulge, or interior loop, and returns the number of
 /// unpaired bases on the 5' and 3' sides.
-pub fn interior_loop_type(closing: (usize, usize), inner: (usize, usize)) -> (LoopType, usize, usize) {
+pub fn interior_loop_type(
+    closing: (usize, usize),
+    inner: (usize, usize),
+) -> (LoopType, usize, usize) {
     let (ci, cj) = closing;
     let (ii, ij) = inner;
 
@@ -47,8 +47,8 @@ pub fn interior_loop_type(closing: (usize, usize), inner: (usize, usize)) -> (Lo
         "inner pair {inner:?} must be strictly nested inside closing pair {closing:?}"
     );
 
-    let n5 = ii - ci - 1;
-    let n3 = cj - ij - 1;
+    let n5 = ii - ci - 1; // number of unpaired bases on 5' end
+    let n3 = cj - ij - 1; // number of unpaired bases on 3' end
 
     let loop_type = match (n5, n3) {
         (0, 0) => LoopType::Stack,
@@ -57,7 +57,6 @@ pub fn interior_loop_type(closing: (usize, usize), inner: (usize, usize)) -> (Lo
     };
 
     (loop_type, n5, n3)
-
 }
 
 /// Mirrors the Python `Loop` dataclass.
@@ -166,7 +165,6 @@ impl Loop {
     }
 }
 
-
 impl fmt::Display for Loop {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut parts: Vec<String> = vec![format!("{:?}", self.loop_type)];
@@ -181,31 +179,37 @@ impl fmt::Display for Loop {
             parts.push(format!("inner=({i}, {j})"));
         }
         if !self.children.is_empty() {
-            let children_str = self.children.iter()
+            let children_str = self
+                .children
+                .iter()
                 .map(|c| c.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
             parts.push(format!("children=[{children_str}]"));
         }
         if self.unpaired_5p != 0 || self.unpaired_3p != 0 {
-            parts.push(format!("unpaired=({}, {})", self.unpaired_5p, self.unpaired_3p));
+            parts.push(format!(
+                "unpaired=({}, {})",
+                self.unpaired_5p, self.unpaired_3p
+            ));
         }
         if self.loop_type == LoopType::Pseudoloop {
             parts.push(format!("pup={}", self.n_pup));
             parts.push(format!("bands={}", self.n_bands));
+            parts.push(format!("nested={}", self.n_nested));
+            if let Some(ctx) = self.pk_context {
+                parts.push(format!("ctx={ctx:?}"));
+            }
         }
 
         write!(f, "Loop({})", parts.join(", "))
     }
 }
 
-
-
-
 #[cfg(test)]
 mod interior_loop_tests {
     use super::*;
-    use crate::{closing_pairs, build_closed_regions_tree};
+    use crate::{build_closed_regions_tree, closing_pairs};
     use ff_structure::PairTable;
     use std::convert::TryFrom;
 
@@ -244,12 +248,12 @@ mod interior_loop_tests {
         let pt = PairTable::try_from("((..((..))..))").unwrap();
         let tree = build_closed_regions_tree(&pt);
 
-        let r0 = tree.root_children[0];          // (0,13)
+        let r0 = tree.root_children[0]; // (0,13)
         let r1 = tree.nodes[r0].children[0]; // (1,12)
         let r2 = tree.nodes[r1].children[0]; // (4,9)
 
         let closing = closing_pairs(&tree.nodes[r1], &pt)[0]; // (1,12)
-        let inner   = closing_pairs(&tree.nodes[r2], &pt)[0]; // (4,9)
+        let inner = closing_pairs(&tree.nodes[r2], &pt)[0]; // (4,9)
 
         let (lt, n5, n3) = interior_loop_type(closing, inner);
         assert_eq!(lt, LoopType::Interior);
