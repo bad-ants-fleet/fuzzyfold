@@ -212,8 +212,15 @@ mod tests {
         );
     }
 
+    /// A four-band structure containing a nested pseudoknot: exercises the
+    /// `n>2` band path and the `init_pseudoloop` context together.
+    ///
+    /// No external reference exists for this one — dp09 was trained on 2-band
+    /// structures, so a 4-band value is an extrapolation. The assertion is an
+    /// internal regression baseline: it pins the value so that a change in the
+    /// enumeration or the DP terms shows up rather than passing silently.
     #[test]
-    fn test_dp09_error() {
+    fn test_dp09_four_band_nested_pk() {
         use crate::parameters::{RNA_DP09, RNA_MT09};
 
         let seq = NucleotideVec::try_from_rna(
@@ -224,14 +231,30 @@ mod tests {
             ".((((...[[[[...))))...((((...]]]]...[[[[...))))...((((...[[[[...))))...]]]].]]]].",
         )
         .unwrap();
+
+        // Structural preconditions the energy value depends on.
+        let outer = loops
+            .iter()
+            .find(|l| l.loop_type == LoopType::Pseudoloop && l.n_bands == 4)
+            .expect("outer 4-band pseudoloop");
+        assert_eq!(outer.pk_context, Some(PseudoloopContext::External));
+        assert_eq!(outer.n_nested, 1, "contains one nested pseudoknot");
+
+        let inner = loops
+            .iter()
+            .find(|l| l.pk_context == Some(PseudoloopContext::Pseudoloop))
+            .expect("nested pseudoloop");
+        assert_eq!(inner.n_bands, 2);
+
         let m = ViennaRNA::from_andrunescu_params(&RNA_MT09).with_pseudoknot_params(RNA_DP09);
         let e = m.energy_of_pseudoknotted_structure(&seq, &loops).unwrap();
-        println!("DP09-error energy: {}", e);
-        assert!(false);
+        assert_eq!(e, -446, "internal regression baseline (dp09+mt09)");
     }
 
+    /// Zika xrRNA1 — a real biological pseudoknot, four bands with a nested
+    /// pseudoknot inside. Internal regression baseline, as above.
     #[test]
-    fn test_dp09_xr_rna() {
+    fn test_dp09_zika_xr_rna1() {
         use crate::parameters::{RNA_DP09, RNA_MT09};
 
         let seq = NucleotideVec::try_from_rna(
@@ -241,9 +264,20 @@ mod tests {
         let loops =
             parse_structure(".[[.(((((((((.....)))).((((((((.<<<<<.))))))))]]))))).>>>>>..")
                 .unwrap();
+
+        let pk = loops
+            .iter()
+            .find(|l| l.loop_type == LoopType::Pseudoloop)
+            .expect("pseudoloop");
+        assert_eq!(pk.n_bands, 4);
+
         let m = ViennaRNA::from_andrunescu_params(&RNA_MT09).with_pseudoknot_params(RNA_DP09);
         let e = m.energy_of_pseudoknotted_structure(&seq, &loops).unwrap();
-        println!("DP09-xrRNA energy: {}", e);
-        assert!(false);
+        // Baseline moved -1586 -> -1510 -> -1693 across three fm363 converter
+        // fixes: the hairpin-block loop bound, folding the tetraloop bonus into
+        // an absolute energy, and building MISMATCH_MULTI / MISMATCH_EXTERIOR
+        // from the dangle model instead of copying MISMATCH_INTERIOR. The
+        // external HotKnots reference in test_dp09_total_energy never moved.
+        assert_eq!(e, -1693, "internal regression baseline (dp09+mt09)");
     }
 }

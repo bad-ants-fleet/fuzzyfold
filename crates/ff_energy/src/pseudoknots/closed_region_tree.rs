@@ -260,7 +260,7 @@ pub fn is_pseudo(region: &ClosedRegion, pt: &PairTable) -> bool {
 }
 
 /// The closing pair(s) of a region: 1 pair if non-pseudoknotted, 2 pairs
-/// (the crossing borders) if pseudoknotted. All 0-indexed.
+/// (the crossing borders) if pseudoknotted.
 pub fn closing_pairs(region: &ClosedRegion, pt: &PairTable) -> Vec<(usize, usize)> {
     let (i, j) = (region.i, region.j);
 
