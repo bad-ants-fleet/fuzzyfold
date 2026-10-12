@@ -230,10 +230,10 @@ mod tests {
 
     #[test]
     fn test_invalid_token() {
-        let err = PairTable::try_from("(x)").unwrap_err();
+        let err = PairTable::try_from("(?)").unwrap_err();
         assert_eq!(
             format!("{}", err),
-            "Invalid character 'x' in extended dot-bracket at position 1"
+            "Invalid character '?' in extended dot-bracket at position 1"
         );
     }
 

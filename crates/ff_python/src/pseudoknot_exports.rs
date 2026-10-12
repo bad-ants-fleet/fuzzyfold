@@ -158,7 +158,8 @@ pub fn region_tree(structure: &str) -> PyResult<(Vec<i64>, Vec<RegionNode>)> {
 
 #[allow(clippy::too_many_arguments)]
 fn build_pk_model(
-    nn_params:       &str,
+    nn:              &str,
+    pk:              Option<&str>,
     init_external:   f64,
     init_multiloop:  f64,
     init_pseudoloop: f64,
@@ -184,13 +185,20 @@ fn build_pk_model(
         e_stp,
         e_intp,
     };
-    match nn_params {
-        "mt09"      => Ok(ViennaRNA::from_andrunescu_params(&RNA_MT09).with_pseudoknot_params(dp)),
-        "turner2004"=> Ok(ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0).with_pseudoknot_params(dp)),
-        "dp03"      => Ok(ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0).with_pseudoknot_params(RNA_DP03)),
-        "dp09"      => Ok(ViennaRNA::from_andrunescu_params(&RNA_MT09).with_pseudoknot_params(RNA_DP09)),
-        other => Err(PyValueError::new_err(format!(
-            "Unknown nn_params '{other}'. Valid: 'mt09', 'turner2004', 'dp03', 'dp09'."
+    let base = match nn {
+        "mt09"       => ViennaRNA::from_andrunescu_params(&RNA_MT09),
+        "turner2004" => ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0),
+        other => return Err(PyValueError::new_err(format!(
+            "Unknown nn '{other}'. Valid: 'mt09', 'turner2004'."
+        ))),
+    };
+    // pk = None takes the eleven DP values from the keyword arguments instead.
+    match pk {
+        Some("dp09") => Ok(base.with_pseudoknot_params(RNA_DP09)),
+        Some("dp03") => Ok(base.with_pseudoknot_params(RNA_DP03)),
+        None         => Ok(base.with_pseudoknot_params(dp)),
+        Some(other) => Err(PyValueError::new_err(format!(
+            "Unknown pk '{other}'. Valid: 'dp09', 'dp03', or None."
         ))),
     }
 }
@@ -205,12 +213,19 @@ fn build_pk_model(
 /// sequence : str
 ///     RNA sequence (uppercase A/U/G/C).
 /// structure : str
-///     Dot-bracket structure with pseudoknot notation (`()[]{}<>ABCDabcd`).
-/// nn_params : str
-///     `"dp09"` (default, MT09+dp09), `"dp03"` (Turner2004+dp03),
-///     `"mt09"` or `"turner2004"` (custom DP params via keyword args).
+///     Dot-bracket structure with pseudoknot notation (`()[]{}<>` and the
+///     letter families `Aa` through `Zz`).
+/// nn : str
+///     Nearest-neighbour model: `"mt09"` (default) or `"turner2004"`.
+/// pk : str or None
+///     Dirks-Pierce parameter set: `"dp09"` (default), `"dp03"`, or `None` to
+///     build a custom set from the keyword arguments below. The two are chosen
+///     separately because the DP parameters are independent of the
+///     nearest-neighbour model. Only the default pairing, mt09 + dp09, was
+///     trained together -- that is DP09, Andronescu et al. (2010) Table 3
+///     row 9; the paper's DP03 is MT99 + dp03, and MT99 is not carried here.
 /// init_external, init_multiloop, init_pseudoloop, pb, pup, pps, ap, bp, cp : float
-///     DP penalties in **kcal/mol** (used when nn_params is `"mt09"` or `"turner2004"`).
+///     DP penalties in **kcal/mol** (used only when `pk` is `None`).
 /// e_stp, e_intp : float
 ///     Multiplicative scale factors (dimensionless).
 ///
@@ -222,7 +237,8 @@ fn build_pk_model(
 #[pyo3(signature = (
     sequence,
     structure,
-    nn_params = "dp09",
+    nn = "mt09",
+    pk = "dp09",
     init_external   = -1.38,
     init_multiloop  = 10.07,
     init_pseudoloop = 15.00,
@@ -238,7 +254,8 @@ fn build_pk_model(
 pub fn pseudo_energy(
     sequence:        &str,
     structure:       &str,
-    nn_params:       &str,
+    nn:              &str,
+    pk:              Option<&str>,
     init_external:   f64,
     init_multiloop:  f64,
     init_pseudoloop: f64,
@@ -252,7 +269,7 @@ pub fn pseudo_energy(
     e_intp: f64,
 ) -> PyResult<f64> {
     let model = build_pk_model(
-        nn_params, init_external, init_multiloop, init_pseudoloop,
+        nn, pk, init_external, init_multiloop, init_pseudoloop,
         pb, pup, pps, ap, bp, cp, e_stp, e_intp,
     )?;
     let seq   = NucleotideVec::try_from_rna(sequence)
@@ -292,7 +309,8 @@ pub fn pseudo_energy(
 #[pyo3(signature = (
     sequence,
     structure,
-    nn_params = "dp09",
+    nn = "mt09",
+    pk = "dp09",
     init_external   = -1.38,
     init_multiloop  = 10.07,
     init_pseudoloop = 15.00,
@@ -308,7 +326,8 @@ pub fn pseudo_energy(
 pub fn pseudo_energy_loops(
     sequence:        &str,
     structure:       &str,
-    nn_params:       &str,
+    nn:              &str,
+    pk:              Option<&str>,
     init_external:   f64,
     init_multiloop:  f64,
     init_pseudoloop: f64,
@@ -322,7 +341,7 @@ pub fn pseudo_energy_loops(
     e_intp: f64,
 ) -> PyResult<Vec<(f64, String)>> {
     let model = build_pk_model(
-        nn_params, init_external, init_multiloop, init_pseudoloop,
+        nn, pk, init_external, init_multiloop, init_pseudoloop,
         pb, pup, pps, ap, bp, cp, e_stp, e_intp,
     )?;
     let seq   = NucleotideVec::try_from_rna(sequence)

@@ -73,7 +73,8 @@ distribution `fuzzyfold` matching the import name.
 
 ## Pseudoknots
 
-Pseudoknotted structures use extended dot-bracket notation (`([{<` and `ABCD`).
+Pseudoknotted structures use extended dot-bracket notation (`([{<` and the
+letter families `Aa` through `Zz`).
 Parsing follows Rastegari & Condon; energies use the Dirks-Pierce model.
 
 | Export | Purpose |

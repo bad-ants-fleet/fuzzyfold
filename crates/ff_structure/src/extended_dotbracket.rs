@@ -26,51 +26,51 @@ pub enum BracketKind {
     Square,  // [ ]
     Curly,   // { }
     Angle,   // < >
-    UpperA,  // A a
-    UpperB,  // B b
-    UpperC,  // C c
-    UpperD,  // D d
+    /// Letter families, `0 => A a` through `25 => Z z`.
+    Letter(u8),
 }
+
+/// Number of letter families, `Aa`..`Zz`.
+const N_LETTERS: u8 = 26;
+
+/// `([{<` followed by `Aa`..`Zz`, the conventional pseudoknot-nesting order.
+static ALL: [BracketKind; 4 + N_LETTERS as usize] = {
+    let mut all = [BracketKind::Round; 4 + N_LETTERS as usize];
+    all[1] = BracketKind::Square;
+    all[2] = BracketKind::Curly;
+    all[3] = BracketKind::Angle;
+    let mut k = 0;
+    while k < N_LETTERS {
+        all[4 + k as usize] = BracketKind::Letter(k);
+        k += 1;
+    }
+    all
+};
 
 impl BracketKind {
     pub fn open_char(self) -> char {
         match self {
-            BracketKind::Round  => '(',
-            BracketKind::Square => '[',
-            BracketKind::Curly  => '{',
-            BracketKind::Angle  => '<',
-            BracketKind::UpperA => 'A',
-            BracketKind::UpperB => 'B',
-            BracketKind::UpperC => 'C',
-            BracketKind::UpperD => 'D',
+            BracketKind::Round     => '(',
+            BracketKind::Square    => '[',
+            BracketKind::Curly     => '{',
+            BracketKind::Angle     => '<',
+            BracketKind::Letter(k) => (b'A' + k) as char,
         }
     }
 
     pub fn close_char(self) -> char {
         match self {
-            BracketKind::Round  => ')',
-            BracketKind::Square => ']',
-            BracketKind::Curly  => '}',
-            BracketKind::Angle  => '>',
-            BracketKind::UpperA => 'a',
-            BracketKind::UpperB => 'b',
-            BracketKind::UpperC => 'c',
-            BracketKind::UpperD => 'd',
+            BracketKind::Round     => ')',
+            BracketKind::Square    => ']',
+            BracketKind::Curly     => '}',
+            BracketKind::Angle     => '>',
+            BracketKind::Letter(k) => (b'a' + k) as char,
         }
     }
 
     /// All kinds in their conventional pseudoknot-nesting order.
     pub fn all() -> &'static [BracketKind] {
-        &[
-            BracketKind::Round,
-            BracketKind::Square,
-            BracketKind::Curly,
-            BracketKind::Angle,
-            BracketKind::UpperA,
-            BracketKind::UpperB,
-            BracketKind::UpperC,
-            BracketKind::UpperD,
-        ]
+        &ALL
     }
 }
 
@@ -92,20 +92,29 @@ impl TryFrom<char> for ExtendedDotBracket {
     type Error = StructureError;
 
     fn try_from(c: char) -> Result<Self, Self::Error> {
-        match c {
-            '.' => return Ok(ExtendedDotBracket::Unpaired),
-            '+' | '&' => return Ok(ExtendedDotBracket::Break),
-            _ => {}
-        }
-        for &kind in BracketKind::all() {
-            if c == kind.open_char()  { return Ok(ExtendedDotBracket::Open(kind));  }
-            if c == kind.close_char() { return Ok(ExtendedDotBracket::Close(kind)); }
-        }
-        Err(StructureError::InvalidToken(
-            format!("character '{}'", c),
-            "extended dot-bracket".to_string(),
-            0,
-        ))
+        use BracketKind::*;
+        use ExtendedDotBracket::{Break, Close, Open, Unpaired};
+        Ok(match c {
+            '.' => Unpaired,
+            '+' | '&' => Break,
+            '(' => Open(Round),
+            ')' => Close(Round),
+            '[' => Open(Square),
+            ']' => Close(Square),
+            '{' => Open(Curly),
+            '}' => Close(Curly),
+            '<' => Open(Angle),
+            '>' => Close(Angle),
+            'A'..='Z' => Open(Letter(c as u8 - b'A')),
+            'a'..='z' => Close(Letter(c as u8 - b'a')),
+            _ => {
+                return Err(StructureError::InvalidToken(
+                    format!("character '{}'", c),
+                    "extended dot-bracket".to_string(),
+                    0,
+                ));
+            }
+        })
     }
 }
 
@@ -246,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_invalid_char() {
-        let err = ExtendedDotBracket::try_from('x').unwrap_err();
+        let err = ExtendedDotBracket::try_from('?').unwrap_err();
         assert!(matches!(
             err,
             StructureError::InvalidToken(_, ref src, _) if src == "extended dot-bracket"
@@ -273,16 +282,38 @@ mod tests {
         assert_eq!(format!("{}", v), "([)]");
     }
 
+    /// Every kind, opened in order and closed in reverse, so the string tracks
+    /// `all()` instead of pinning a fixed alphabet.
     #[test]
     fn test_vec_from_str_all_kinds() {
-        let s = "([{<AaBbCcDd>}])";
-        let v = ExtendedDotBracketVec::try_from(s).unwrap();
+        let kinds = BracketKind::all();
+        let s: String = kinds
+            .iter()
+            .map(|k| k.open_char())
+            .chain(kinds.iter().rev().map(|k| k.close_char()))
+            .collect();
+        let v = ExtendedDotBracketVec::try_from(s.as_str()).unwrap();
         assert_eq!(format!("{}", v), s);
     }
 
     #[test]
+    fn test_letter_families_reach_z() {
+        assert_eq!(BracketKind::all().len(), 30);
+        assert_eq!(
+            ExtendedDotBracket::try_from('Z').unwrap(),
+            ExtendedDotBracket::Open(BracketKind::Letter(25))
+        );
+        assert_eq!(
+            ExtendedDotBracket::try_from('z').unwrap(),
+            ExtendedDotBracket::Close(BracketKind::Letter(25))
+        );
+        let v = ExtendedDotBracketVec::try_from("(Zz)").unwrap();
+        assert_eq!(format!("{}", v), "(Zz)");
+    }
+
+    #[test]
     fn test_vec_invalid_token_position() {
-        let err = ExtendedDotBracketVec::try_from("(.x)").unwrap_err();
+        let err = ExtendedDotBracketVec::try_from("(.?)").unwrap_err();
         assert!(matches!(err, StructureError::InvalidToken(_, _, 2)));
     }
 
