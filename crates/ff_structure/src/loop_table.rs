@@ -30,7 +30,7 @@ impl From<&PairTable> for LoopTable {
 
         let mut stack: Vec<(usize, NAIDX)> = Vec::new(); // (closing_idx, loop_id)
         for i in 0..n {
-            match pt[i] {
+            match pt[i as u16] {
                 None => {
                     table[i] = LoopInfo::Unpaired { l: loop_index };
                 }

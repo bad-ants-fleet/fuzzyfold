@@ -46,3 +46,20 @@ for ss, en, gtime, _tinc, _wtime in ssa.simulate(seq, None, t_ext = 40, t_end = 
     print(f"{ss} {en/100:6.2f} {gtime:12.8e}")
 print(f"{seq}")
 
+
+
+
+
+# ============== Pseudoknot energy evaluation ==============
+
+# example of a simple RNA pseudoknot
+seq = "GCGAUUUCUGACCGCUUUUUUGUCAG"
+extended_dotbracket  = "[[[....(((((]]]......)))))"
+
+print("\nPseudoknot energy evaluation:")
+print(f"sequence: {seq}\nsecondary structure: {extended_dotbracket}")
+# Per-loop breakdown (like --verbose)
+loops = ff.pseudo_energy_loops(seq, extended_dotbracket)
+for _, (e, desc) in enumerate(loops):
+    print(f"{e:8.4f} kcal/mol  {desc}")
+print(f"sum:  {sum(e for e, _ in loops):8.4f} kcal/mol")

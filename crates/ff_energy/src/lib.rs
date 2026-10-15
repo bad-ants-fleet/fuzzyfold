@@ -13,10 +13,14 @@ mod loop_decomposition;
 /// The energy model trait.
 mod energy_model;
 
+/// pseudoknot parser
+mod pseudoknots;
+
 pub use nucleotides::*;
 pub use loop_decomposition::*;
 pub use energy_model::*;
 pub use nn_models::*;
+pub use pseudoknots::*;
 
 
 

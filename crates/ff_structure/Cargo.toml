@@ -1,6 +1,6 @@
 [package]
 name = "ff_structure"
-version = "0.3.0"
+version = "0.4.0"
 description = "fuzzyfold's secondary structure representations."
 documentation = "https://docs.rs/ff_structure"
 keywords = ["dna", "rna", "secondary-structure"]
@@ -13,7 +13,10 @@ categories.workspace = true
 
 [dependencies]
 nohash-hasher.workspace = true
+clap = { version = "4.5.56", features = ["derive"] }
+plotters = { version = "0.3", default-features = false, features = ["svg_backend", "line_series", "full_palette"] }
+
+
 
 [badges]
 maintenance = { status = "actively-developed" }
-

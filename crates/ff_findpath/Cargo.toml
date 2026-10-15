@@ -1,0 +1,53 @@
+[package]
+name = "ff_findpath"
+version = "0.1.0"
+description = "fuzzyfold's findpath algorithm for energy barrier estimation."
+documentation = "https://docs.rs/ff_findpath"
+keywords = ["dna", "rna", "secondary-structure", "findpath-algorithm", "nearest-neighbor"]
+readme = "../../README.md"
+
+
+
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+categories.workspace = true
+
+
+[dependencies]
+ff_structure.workspace = true
+ff_energy.workspace = true
+rustc-hash.workspace = true
+clap = { version = "4.5.56", features = ["derive"] }
+
+criterion.workspace = true
+
+
+[[bench]]
+name = "bench_greedy_functions"
+harness = false
+
+[[bench]]
+name = "bench_pseudo_findpath"
+harness = false
+
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+
+[[bin]]
+name = "ff-greedy"
+path = "src/bin/ff-greedy.rs"
+
+[[bin]]
+name = "ff-findpath"
+path = "src/bin/ff-findpath.rs"
+
+[[bin]]
+name = "ff-pseudo-findpath"
+path = "src/bin/ff-pseudo-findpath.rs"
+
+[[bin]]
+name = "ff-pseudo-findpath-bench-runner"
+path = "src/bin/ff-pseudo-findpath-bench-runner.rs"

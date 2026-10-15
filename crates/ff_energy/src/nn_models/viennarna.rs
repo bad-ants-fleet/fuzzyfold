@@ -11,8 +11,17 @@ use crate::LoopDecomposition;
 use crate::NearestNeighborLoop;
 use crate::K0;
 
-/// The union of different parameterizations,
-/// may contain redundant fallback parameters.
+// for energy_of_pair function
+//use ff_structure::PairTable;
+
+/// The default ViennaRNA-v2.6 energy model.
+///
+/// The current implementation allows different
+/// parameter files, but only the standard
+/// settings (dangle=2, tetraloops, etc.)
+///
+/// Only single-stranded folding is supported.
+///
 pub struct ViennaRNA {
     /// Steric constraint on minimum hairpin length. (Always three.)
     min_hp_size: usize,
@@ -57,15 +66,19 @@ pub struct ViennaRNA {
     ninio_max: i32,
 
     /// Multiloop penalty for unpaired bases.
-    ml_base: i32,
+    pub(crate) ml_base: i32,
     /// Multiloop initiation penalty.
-    ml_closing: i32,
+    pub(crate) ml_closing: i32,
     /// Multiloop penalty per outgoing stem.
-    ml_intern: i32,
+    pub(crate) ml_intern: i32,
 
     triloops: Vec<LoopEntry>,
     tetraloops: Vec<LoopEntry>,
     hexaloops: Vec<LoopEntry>,
+
+    /// Optional D&P pseudoknot parameters (all 11 features).
+    /// `None` → fall back to the simplified multiloop approximation.
+    pub(crate) pk_params: Option<DPParams>,
 }
 
 macro_rules! rescale_params {
@@ -135,6 +148,8 @@ impl ViennaRNA {
             triloops: params.triloops.to_vec(),
             tetraloops: params.tetraloops.to_vec(),
             hexaloops: params.hexaloops.to_vec(),
+
+            pk_params: None,
         }
     }
 
@@ -179,6 +194,8 @@ impl ViennaRNA {
                 triloops: params.triloops_en37.to_vec(),
                 tetraloops: params.tetraloops_en37.to_vec(),
                 hexaloops: params.hexaloops_en37.to_vec(),
+
+                pk_params: None,
             }
         } else {
             let kelvin = celsius + K0;
@@ -221,8 +238,24 @@ impl ViennaRNA {
                 triloops: rescale_param!(triloops, params, scale),
                 tetraloops: rescale_param!(tetraloops, params, scale),
                 hexaloops: rescale_param!(hexaloops, params, scale),
+
+                pk_params: None,
             }
         }
+    }
+
+    /// Attach D&P pseudoknot parameters. Enables the full 11-feature Dirks-Pierce
+    /// energy formula for `Pseudoloop` and SpanBand loops instead of the default
+    /// simplified multiloop approximation.
+    ///
+    /// ```rust
+    /// use ff_energy::{ViennaRNA, parameters::{RNA_TURNER_2004, RNA_DP09}};
+    /// let model = ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0)
+    ///     .with_pseudoknot_params(RNA_DP09);
+    /// ```
+    pub fn with_pseudoknot_params(mut self, params: DPParams) -> Self {
+        self.pk_params = Some(params);
+        self
     }
 
     fn hairpin_bonus(&self, seq: &[Base]) -> Option<i32> {
@@ -455,7 +488,7 @@ impl ViennaRNA {
            + self.ml_intern * n as i32)
     }
 
-    fn exterior(&self, segments: &[&[Base]]) -> Result<i32, EnergyError> {
+    pub(crate) fn exterior(&self, segments: &[&[Base]]) -> Result<i32, EnergyError> {
         let mut en = 0;
         let n = segments.len() - 1; 
         for i in 0..n {
@@ -494,7 +527,43 @@ impl ViennaRNA {
         }
         Ok(en)
     }
+
+///// A potential helper function to evaluate the energy of a base-pair move.
+//    fn _energy_of_pair(&self, 
+//        sequence: &[Base], 
+//        structure: &PairTable, 
+//        i: usize,
+//        j: usize
+//    ) -> i32 {
+//        let inner = structure.loop_enclosed_by(Some((i, j)));
+//        let epair = structure.get_enclosing_pair(i, j);
+//
+//        if let (Some(pi), Some(pj)) = (structure[i], structure[j]) {
+//            assert!(j == pi && i == pj);
+//            let outer = structure.loop_enclosed_by(epair);
+//            let mut pt = structure.clone();
+//            pt[i] = None;
+//            pt[j] = None;
+//            let combo = pt.loop_enclosed_by(epair);
+//
+//            let en_paired = self.energy_of_loop(sequence, &inner) + self.energy_of_loop(sequence, &outer);
+//            let en_absent = self.energy_of_loop(sequence, &combo);
+//            return en_absent.unwrap() - en_paired.unwrap()
+//        } else {
+//            assert!(structure[i] == structure[j]);
+//            let combo = structure.loop_enclosed_by(epair);
+//            let mut pt = structure.clone();
+//            pt[i] = Some(j);
+//            pt[j] = Some(i);
+//            let outer = pt.loop_enclosed_by(epair);
+//            let en_paired = self.energy_of_loop(sequence, &inner) + self.energy_of_loop(sequence, &outer);
+//            let en_absent = self.energy_of_loop(sequence, &combo);
+//            return en_paired - en_absent 
+//        }
+//    }
+//
 }
+
 
 const CAN_PAIR: [[bool; 4]; 4] = {
     use Base::*;

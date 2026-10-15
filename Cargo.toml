@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+exclude = ["crates/.claude"]
 default-members = ["crates/fuzzyfold"]
 resolver = "3"
 
@@ -15,12 +16,15 @@ categories = [
     "science::bioinformatics::sequence-analysis",
 ]
 
+[profile.bench]
+debug = true   # keep symbols for samply/flamegraph profiling
+
 [workspace.dependencies]
 # local crates
 ff_energy    = { path = "./crates/ff_energy", version = "0.4.0" }
-ff_structure = { path = "./crates/ff_structure", version = "0.3.0" }
-ff_kinetics  = { path = "./crates/ff_kinetics", version = "0.4.1" }
-
+ff_structure = { path = "./crates/ff_structure", version = "0.4.0" }
+ff_kinetics  = { path = "./crates/ff_kinetics", version = "0.4.0" }
+ff_findpath = { path = "./crates//ff_findpath", version = "0.1.0"}
 # shared crates
 colored = "3.1.1"
 criterion = "0.7.0"

@@ -1,23 +1,22 @@
-//! Pair and PairSet definitions. 
+//! Pair and PairSet definitions.
 //!
-//! Compact integer-based representation of base pairs, can 
+//! Compact integer-based representation of base pairs, can
 //! be used as alternative to PairTable representations.
 //!
 //! A `Pair` is defined by two 16-bit indices (`NAIDX`) packed into a
 //! 32-bit integer key (`P1KEY`) for efficient set and map storage.
 //!
-//! We currently do not povide the conversions from PairSet to 
+//! We currently do not povide the conversions from PairSet to
 //! PairTable, mainly because at this stage it is not clear if
-//! PairSets may be used in the future to include pseudoknots. 
-//! 
+//! PairSets may be used in the future to include pseudoknots.
+//!
 
-use std::fmt;
 use nohash_hasher::IntSet;
+use std::fmt;
 
-use crate::PairTable;
 use crate::NAIDX;
 use crate::P1KEY;
-
+use crate::PairTable;
 
 /// A base pair (i, j) with i < j.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -118,10 +117,10 @@ impl From<&PairTable> for PairSet {
         let mut pairs = IntSet::default();
         for (i, &j_opt) in pt.iter().enumerate() {
             let i = i as NAIDX;
-            if let Some(j) = j_opt {
-                if i < j {
-                    pairs.insert(Pair::new(i, j).key());
-                }
+            if let Some(j) = j_opt
+                && i < j
+            {
+                pairs.insert(Pair::new(i, j).key());
             }
         }
         Self {
@@ -182,4 +181,3 @@ mod tests {
         assert!(s.contains("(1,4)"));
     }
 }
-
