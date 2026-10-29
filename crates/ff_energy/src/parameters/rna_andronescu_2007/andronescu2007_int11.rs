@@ -1,4 +1,4 @@
-use crate::parameters::parameterset::Int11Params;
+use crate::parameters::tables::Int11Params;
 
 pub static INT11: Int11Params = [
 

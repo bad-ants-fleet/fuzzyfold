@@ -1,4 +1,4 @@
-use crate::parameters::parameterset::Int22Params;
+use crate::parameters::tables::Int22Params;
 
 pub static INT22_EN37: Int22Params = [
     [

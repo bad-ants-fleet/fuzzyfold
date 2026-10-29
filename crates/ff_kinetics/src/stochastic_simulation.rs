@@ -194,8 +194,8 @@ mod tests {
     use std::sync::Arc;
     use std::collections::HashSet;
 
-    use ff_structure::PairTable;
-    use ff_energy::ViennaRNA;
+    use ff_structure::MultiPairTable;
+    use ff_energy::Fuzzyfold;
     use ff_energy::EnergyModel;
     use ff_energy::NucleotideVec;
     use crate::Arrhenius;
@@ -206,12 +206,12 @@ mod tests {
 
     macro_rules! setup_ssa_input {
         ($wname:ident, $rname:ident, $seq:expr, $db:expr) => {
-            let emodel = ViennaRNA::default();
+            let emodel = Fuzzyfold::default();
             let $rname = Arrhenius::new(emodel.temperature(), 1.0, None, None);
 
             let sequence = NucleotideVec::try_from($seq)
                 .expect("Invalid sequence?");
-            let pairings = PairTable::try_from($db)
+            let pairings = MultiPairTable::try_from($db)
                 .expect("Invalid structure?");
 
             let ltab = LoopTable::try_from((sequence, &pairings, Arc::new(emodel)))
@@ -228,12 +228,12 @@ mod tests {
 
     #[test]
     fn test_flux_after_moves() {
-        let emodel = Arc::new(ViennaRNA::default());
+        let emodel = Arc::new(Fuzzyfold::default());
         let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
         let policy = shift_policy::ThreeAndFour;
 
         let sequence = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").expect("Invalid sequence?");
-        let pairings =     PairTable::try_from(".((((....)))).((((........))))...............").expect("Invalid structure?");
+        let pairings =     MultiPairTable::try_from(".((((....)))).((((........))))...............").expect("Invalid structure?");
 
         let ltab = LoopTable::try_from((sequence.clone(), &pairings, emodel.clone()))
             .expect("Invalid sequence/structure combination");
@@ -246,7 +246,7 @@ mod tests {
             steps += 1;
             println!("{}, {}", w.current_structure(), w.current_energy());
             let moves1 = w.propose_moves().collect::<Vec<_>>();
-            let p = PairTable::try_from(&w.current_structure()).expect("Invalid structure?");
+            let p = MultiPairTable::try_from(&w.current_structure()).expect("Invalid structure?");
             let ltab = LoopTable::try_from((sequence.clone(), &p, emodel.clone()))
                 .expect("Invalid sequence/structure combination");
             let walker = LoopNeighbors::from((ltab, policy));
@@ -257,6 +257,38 @@ mod tests {
         assert!(steps > 0, "Simulation must perform at least one step");
     }
 
+
+    #[test]
+    fn test_flux_after_moves_circular() {
+        // On circular strands, the moves after each step are the moves of a
+        // table built from scratch, and the energy is that of the structure.
+        let emodel = Arc::new(Fuzzyfold::default());
+        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
+        let policy = shift_policy::ThreeAndFour;
+        for (seq, db) in [
+            ("GGGAAACCCA^", "..........^"),
+            ("GCGCAAAAGCGCAAAAAGCGCUUUUGCGC^", ".............................^"),
+            ("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC^", 
+             ".((((....)))).((((........))))...............^"),
+        ] {
+            let sequence = NucleotideVec::try_from(seq).unwrap();
+            let pairings = MultiPairTable::try_from(db).unwrap();
+            let ltab = LoopTable::try_from((sequence.clone(), &pairings, emodel.clone())).unwrap();
+            let mut simulator = SSA::from((LoopNeighbors::from((ltab, policy)), rmodel));
+            let mut steps = 0;
+            simulator.simulate(&mut StdRng::seed_from_u64(7), 1e9, |_, _, _, w| {
+                steps += 1;
+                let structure = w.current_structure();
+                let p = MultiPairTable::try_from(&structure).unwrap();
+                assert_eq!(w.current_energy(), emodel.energy_of_structure(&sequence, &p).unwrap());
+                let ltab = LoopTable::try_from((sequence.clone(), &p, emodel.clone())).unwrap();
+                let moves = LoopNeighbors::from((ltab, policy)).propose_moves().collect::<Vec<_>>();
+                assert!(same_moves(&w.propose_moves().collect::<Vec<_>>(), &moves), "{structure}");
+                steps < 2000
+            });
+            assert!(steps > 100, "{seq}: {steps} steps");
+        }
+    }
 
     #[test]
     fn test_simple_ssa_simulation() {

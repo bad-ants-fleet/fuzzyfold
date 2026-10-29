@@ -39,7 +39,3 @@ harness = false
 
 [features]
 shift_analysis = []
-
-[badges]
-maintenance = { status = "actively-developed" }
-

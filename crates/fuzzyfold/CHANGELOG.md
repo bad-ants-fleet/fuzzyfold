@@ -2,6 +2,24 @@
 
 All notable changes to this crate will be documented in this file.
 
+## [development]
+## Added
+- --model fuzzyfold|viennarna: the energy model (default fuzzyfold);
+  with viennarna, the default RNA parameters are turner2004
+
+- A warning for circular strands with --model viennarna: it scores the
+  open circle as 0, which is not the reference state of structured circles
+- Circular strands in ff-timecourse, ff-trajectory, ff-ensemble and
+  ff-explore (at full length)
+
+## Changed
+- andronescu2007 at a temperature other than 37 C is an error, not a panic
+- Pseudoknot energies from the ring decomposition (see ff_energy): a loop
+  enclosing a kiss is strained, no longer a regular multiloop; `ff-eval -v`
+  lists the loops and, for a pseudoknot, its terms (energy_parsers::log_terms).
+  Other tools no longer log energy terms with -v; the loop types are
+  colored here, not in ff_energy
+
 ## [0.5.0] - 2026-10-06
 ## Added
 - ff-ensemble to produce detailed output from multiple simulations in DRF format.

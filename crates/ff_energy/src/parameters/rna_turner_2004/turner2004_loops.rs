@@ -1,4 +1,4 @@
-use crate::parameters::parameterset::LoopParams;
+use crate::parameters::tables::LoopParams;
 
 pub static HAIRPIN_EN37: LoopParams = [
     i32::MAX, /*   0 */

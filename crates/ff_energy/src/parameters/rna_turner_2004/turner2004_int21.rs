@@ -1,4 +1,4 @@
-use crate::parameters::parameterset::Int21Params;
+use crate::parameters::tables::Int21Params;
 
 pub static INT21_EN37: Int21Params = [
     [

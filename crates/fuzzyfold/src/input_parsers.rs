@@ -6,6 +6,7 @@ use anyhow::{anyhow, Result};
 use paste::paste;
 use ff_structure::DotBracketVec;
 use ff_energy::NucleotideVec;
+use ff_energy::check_sequence;
 
 #[derive(Clone, Copy)]
 enum NAMode {
@@ -54,24 +55,20 @@ fn parse_na_format<R: BufRead>(
 
     let structure = match (structure, mode) {
         (Some(s), NAMode::Strict) => {
-            if sequence.len() != s.len() {
-                return Err(anyhow!(
-                        "Sequence length ({}) and structure length ({}) do not match",
-                        sequence.len(),
-                        s.len()
-                ));
-            }
+            check_sequence(&sequence, &s)?;
             s
         },
         (None, NAMode::Strict) => return Err(anyhow!("Missing structure line")),
 
         (Some(s), NAMode::Lenient) => {
+            // The structure of the first part of the sequence.
             if sequence.len() < s.len() {
                 return Err(anyhow!(
                         "Structure is longer than sequence ({} > {}).",
                         s.len(), sequence.len()
                 ));
             }
+            check_sequence(&sequence[..s.len()], &s)?;
             s
         },
 

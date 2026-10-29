@@ -1,0 +1,21 @@
+# RNAeval energies (ViennaRNA 2.7.2, -d2), in 10 cal/mol: parameters, temperature (C),
+# sequence, structure, energy. The model ViennaRNA must reproduce them.
+turner2004 37 GCAACAGCUGAGUAACGUUGCUAGAACGAGCUGCAUUCGAGGAGCAAAAUUUCCACCAAUUCGAUUUGGAUAUCAUACUUGUCGGUUUCUCCCCUUGGCA (((((...........)))))...............((((.(((....((.((((...........)))).))....))).))))......((...)).. -1180
+turner2004 37 CGUGUAACUGGCACCUCCCGUUUCGGGGACUCUGCAGAUAAUUUUAACCUGCGGUGAGACUUCGGGGCCGUGUUUAAUCCUAAGGCUUUACAGUCUGCCG .((..(((((((.((((((......))))..((((((...........)))))).........)).)))).)))..))....(((((....))))).... -2390
+turner2004 37 CGUAUGUACCUCCUAAGCCGACGACGGUCCUGGUGUCGAGUGCCUACUAGUUCUAUUUUUACAUGCGAUGAAGCGGUACGAUUUACAUAACGAGCUCAUG .(((.((((...(.(.((.(((....)))...)).).).)))).))).((((((((((.(((.(((......)))))).)).....)))..))))).... -1020
+turner2004 37 ACGGUUGAUAAGAUAGUGGAGAGAAUGCCGGCAAUGAUCUGGACGACAUCUGCAUAGGUGCGCGGGGGAGAUGGGAAGCCGUUCUAACAGCACUACUUGG ........((((.((((((..(((((((...((....(((.(.((.(((((....)))))))).)))....))....)).)))))..)..))))))))). -2010
+turner2004 37 CAGCUAUGAGGACGUGAGGCUAAGCCUGAACGUAUUUGAAGACAGGGGUUCUCUCGCCAGAACGCCCAUCUGAGGAAACCGUCACUGUGUUGAGCUUGAG ..((((..(((((((.((((...)))).).....(((..(((..((.(((((......))))).))..)))..)))...)))).))....).)))..... -2070
+turner2004 37 GGGGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCCC ((((........................................)))) -299
+andronescu2007 37 GCAACAGCUGAGUAACGUUGCUAGAACGAGCUGCAUUCGAGGAGCAAAAUUUCCACCAAUUCGAUUUGGAUAUCAUACUUGUCGGUUUCUCCCCUUGGCA (((((...........)))))...............((((.(((....((.((((...........)))).))....))).))))......((...)).. -1143
+andronescu2007 37 CGUGUAACUGGCACCUCCCGUUUCGGGGACUCUGCAGAUAAUUUUAACCUGCGGUGAGACUUCGGGGCCGUGUUUAAUCCUAAGGCUUUACAGUCUGCCG .((..(((((((.((((((......))))..((((((...........)))))).........)).)))).)))..))....(((((....))))).... -2304
+andronescu2007 37 CGUAUGUACCUCCUAAGCCGACGACGGUCCUGGUGUCGAGUGCCUACUAGUUCUAUUUUUACAUGCGAUGAAGCGGUACGAUUUACAUAACGAGCUCAUG .(((.((((...(.(.((.(((....)))...)).).).)))).))).((((((((((.(((.(((......)))))).)).....)))..))))).... -954
+andronescu2007 37 ACGGUUGAUAAGAUAGUGGAGAGAAUGCCGGCAAUGAUCUGGACGACAUCUGCAUAGGUGCGCGGGGGAGAUGGGAAGCCGUUCUAACAGCACUACUUGG ........((((.((((((..(((((((...((....(((.(.((.(((((....)))))))).)))....))....)).)))))..)..))))))))). -1585
+andronescu2007 37 CAGCUAUGAGGACGUGAGGCUAAGCCUGAACGUAUUUGAAGACAGGGGUUCUCUCGCCAGAACGCCCAUCUGAGGAAACCGUCACUGUGUUGAGCUUGAG ..((((..(((((((.((((...)))).).....(((..(((..((.(((((......))))).))..)))..)))...)))).))....).)))..... -1779
+andronescu2007 37 GGGGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCCC ((((........................................)))) -262
+mathews2004 37 GCAACAGCTGAGTAACGTTGCTAGAACGAGCTGCATTCGAGGAGCAAAATTTCCACCAATTCGATTTGGATATCATACTTGTCGGTTTCTCCCCTTGGCA (((((...........)))))...............((((.(((....((.((((...........)))).))....))).))))......((...)).. -330
+mathews2004 37 CGTGTAACTGGCACCTCCCGTTTCGGGGACTCTGCAGATAATTTTAACCTGCGGTGAGACTTCGGGGCCGTGTTTAATCCTAAGGCTTTACAGTCTGCCG .((..(((((((.((((((......))))..((((((...........)))))).........)).)))).)))..))....(((((....))))).... -490
+mathews2004 37 CGTATGTACCTCCTAAGCCGACGACGGTCCTGGTGTCGAGTGCCTACTAGTTCTATTTTTACATGCGATGAAGCGGTACGATTTACATAACGAGCTCATG .(((.((((...(.(.((.(((....)))...)).).).)))).))).((((((((((.(((.(((......)))))).)).....)))..))))).... 1110
+mathews2004 37 ACGGTTGATAAGATAGTGGAGAGAATGCCGGCAATGATCTGGACGACATCTGCATAGGTGCGCGGGGGAGATGGGAAGCCGTTCTAACAGCACTACTTGG ........((((.((((((..(((((((...((....(((.(.((.(((((....)))))))).)))....))....)).)))))..)..))))))))). -110
+mathews2004 37 CAGCTATGAGGACGTGAGGCTAAGCCTGAACGTATTTGAAGACAGGGGTTCTCTCGCCAGAACGCCCATCTGAGGAAACCGTCACTGTGTTGAGCTTGAG ..((((..(((((((.((((...)))).).....(((..(((..((.(((((......))))).))..)))..)))...)))).))....).)))..... -180
+mathews2004 37 GGGGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCCC ((((........................................)))) 41
+turner2004 25 GGGGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCCC ((((........................................)))) -444

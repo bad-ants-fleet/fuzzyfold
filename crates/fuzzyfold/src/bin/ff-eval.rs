@@ -1,17 +1,18 @@
 use std::io::Write;
-use log::info;
+use log::{info, log_enabled, Level};
 use colored::*;
-use env_logger::Builder;
 use clap::Args;
 use clap::Parser;
 use clap::ArgAction;
 use anyhow::Result;
+use env_logger::Builder;
 
 use fuzzyfold::energy::EnergyModel;
 use fuzzyfold::structure::MultiPairTable;
+use fuzzyfold::structure::ClosedRegions;
 use fuzzyfold::input_parsers::ruler;
 use fuzzyfold::input_parsers::read_eval_input;
-use fuzzyfold::energy_parsers::EnergyModelArguments;
+use fuzzyfold::energy_parsers::{log_terms, EnergyModelArguments};
 
 
 #[derive(Debug, Args)]
@@ -56,21 +57,24 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     init_logging(cli.eval.verbose);
 
-    let model = cli.energy.build_model();
+    let model = cli.energy.build_model()?;
 
     let is_rna = cli.energy.dna.is_none();
     let (header, sequence, structure) = read_eval_input(&cli.eval.input, is_rna)?;
+    cli.energy.warn_circular(&sequence);
     if let Some(h) = header {
         println!("{}", h.yellow())
     }
 
-    //NOTE: we use MPT as it is the more general method, but if you do a lot of
-    //single-stranded evaluations, then it is a bit of overhead compared to
-    //PairTable. May be worth to refactor and wrap PT and MPT into an enum which
-    //implements LoopDecomposition.
     let pairings = MultiPairTable::try_from(&structure)?;
+    if log_enabled!(Level::Info) {
+        log_terms(&model.energy_terms(&sequence, &pairings)?);
+    }
     let energy = model.energy_of_structure(&sequence, &pairings)?;
 
+    if log_enabled!(Level::Info) && !pairings.is_nested() {
+        info!("Pseudoknot density: {}", ClosedRegions::from(&pairings).density());
+    }
     info!("{}", ruler(sequence.len() - 1).magenta());
     println!("{}\n{} {}", sequence, structure, format!("{:>6.2}", energy as f64 / 100.0).green());
     info!("{}", ruler(sequence.len() - 1).magenta());

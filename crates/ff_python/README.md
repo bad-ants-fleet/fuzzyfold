@@ -1,32 +1,118 @@
-# fuzzyfold - Python Interface
+# fuzzyfold — Python bindings
 
-This repository provides (preliminary) Python bindings for **fuzzyfold's** RNA
-energy evaluation and kinetic simulations.
+Python bindings for fuzzyfold, a Rust framework for nucleic acid energy 
+evaluation and stochastic folding kinetics. The bindings are a thin layer 
+over the Rust crates: models, simulations and file formats are the same as 
+in the `ff-*` command line tools.
 
-The Python module exposes:
+## Installation
 
-- Energy evaluation (only default RNA parameters)
-- Stochastic kinetic simulation (`Simulator`)
-
-## Installation (Development)
-
-The Python extension is built using `maturin`.
-
-### 1. Install maturin
+Requires a Rust toolchain and Python ≥ 3.10. From this directory:
 
 ```bash
-pip install maturin
+pip install .                 # build and install the module
+maturin develop --release     # or, during development, into the active environment
 ```
 
-### 2. Build and install locally
-From the Python binding crate directory:
+The version follows the crate (`Cargo.toml`).
 
-```bash
-maturin develop --release
+All energies are in kcal/mol.
+
+## Energy evaluation
+
+```python
+import fuzzyfold as ff
+
+model = ff.Fuzzyfold()                        # rna_extended at 37 C
+model = ff.Fuzzyfold(params="dna", celsius=25)
+model = ff.ViennaRNA(celsius=25)              # as ViennaRNA 2.6, no pseudoknots
+model.energy_of_structure("UGCCUAGAGAGUCAGGUGAU", ".((((.((...))))))...")   # kcal/mol
 ```
 
+`params` is `"rna_extended"` (Turner 2004 with special hairpins and
+modified bases; default of `Fuzzyfold`), `"rna_turner_2004"` (default of
+`ViennaRNA`) or `"dna"` (Mathews 2004). 
+Strands are separated by `+` or `&`. A `^` after a strand makes it circular,
+in sequence and structure. `Fuzzyfold` evaluates circular strands also with
+pseudoknots and together with other strands (`ViennaRNA` only a circle
+alone); kinetics simulate a circular strand alone, without pseudoknots.
+`ViennaRNA` warns for circular strands: it scores the open circle as 0,
+which is not the reference state of the structured circles.
 
-### 3. Basic usage
-For now, see the script: 
-[example.py]
+### Pseudoknots
 
+```python
+model = ff.Fuzzyfold()
+seq, pk = "GCGAUUUCUGACCGCUUUUUUGUCAG", "[[[....(((((]]]......)))))"
+model.energy_of_structure(seq, pk)            # -3.57
+for level, term, energy in model.energy_terms(seq, pk):
+    print("  " * level, term, energy)
+ff.stems(pk)                                  # [(pairs, strained), ...]
+```
+
+Pseudoknots use `()[]{}<>` and the letter families `Aa` to `Zz`. They are 
+evaluated with pseudoknot terms on top of the nearest neighbor model, the
+same as `ff-eval`.
+For now, every parameter set uses the same pseudoknot parameters, from a
+preliminary training on the HotKnots data sets, not rescaled with
+temperature.
+
+- `energy_terms` lists each loop and, for a pseudoknot, its terms (the
+  loops of its strained stems, and the helix ends of its loops), with their
+  level: the content of `ff-eval -v`.
+- `stems` returns the stems of the pseudoknots as the evaluation 
+  sees them, each as its pairs and whether it is strained (scaled, Pb) or
+  relaxed.
+
+## Structures
+
+Functions on dot-bracket strings. Indices are positions in the string, so a
+strand break (`+`) or strand wrap (`^`) takes one position. Invalid
+structures raise `ValueError`.
+
+```python
+s = "((..[[..))..]]"
+ff.partners(s)          # [9, 8, None, None, 13, 12, None, None, 1, 0, ...]
+ff.pairs(s)             # [(0, 9), (1, 8), (4, 13), (5, 12)]
+ff.normalize("[(.)]")   # '((.))': one spelling per structure
+ff.closed_regions(s)    # [(0, 13, False)]: (i, j, nested)
+ff.density(s)           # 2
+```
+
+- `normalize` assigns the brackets again from `(` upward and writes strand
+  breaks as `+`, so equal structures give equal strings, e.g. as dict keys.
+- `closed_regions`: intervals that no pair crosses, minimal from their first
+  base; a region is nested if its first and last base pair with each other.
+- `density`: the largest number of bands of one pseudoknotted region that
+  span a common position; 1 for nested structures, 2 for H-types and
+  kissing hairpins.
+
+## Kinetics
+
+- `Simulator(params, celsius, k0, k3ws, k4ws)`: stochastic simulation 
+  (Gillespie), optionally co-transcriptional (`t_ext`) and with three- and
+  four-way branch migration (`k3ws`, `k4ws`).
+  - `simulate_trajectory(...)`: an iterator over the trajectory.
+  - `simulate_ensemble(...)`, `simulate_timecourse(...)`: many simulations,
+    written as `.drf`, `.tln` and `.nxy` files; `aggregate_timecourse_results`
+    merges `.tln` files.
+- `Explorer(...).explore(sequence, structure, ...)`: the neighborhood of a 
+  structure within an energy range.
+- `Plotter.plot_timecourse(...)`: plots a time course.
+
+Pseudoknots are not supported in kinetics yet.
+
+## Examples
+
+- `examples/example.py`: energy evaluation, simulations, and the energy 
+  breakdown of a pseudoknot.
+- `examples/ff_eval_arcs.py`: `ff-eval` that also draws the structure as an
+  arc diagram, one color per stem.
+
+## Citation
+
+If you use fuzzyfold in your research, please cite:
+
+> Stefan Badelt (2026): fuzzyfold: a high-performance framework for
+> stochastic RNA folding kinetics. bioRxiv preprint,
+> https://doi.org/10.64898/2026.06.17.732885

@@ -1,5 +1,5 @@
 use crate::Base;
-use crate::parameters::parameterset::LoopEntry;
+use crate::parameters::tables::LoopEntry;
 
 const fn convert<const N: usize>(bytes: &[u8; N]) -> [Base; N] {
     let mut out = [Base::A; N];

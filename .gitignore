@@ -1,6 +1,9 @@
 /target
 /bash_benchmarking
 /data
+.DS_Store
+.claude
+.vscode
 *.tln
 *.nxy
 *.pdf

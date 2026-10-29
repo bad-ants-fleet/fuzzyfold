@@ -15,7 +15,7 @@ use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 use serde_json::to_string_pretty;
 
-use ff_structure::PairTable;
+use ff_structure::MultiPairTable;
 use ff_energy::EnergyModel;
 use ff_kinetics::RateModel;
 use ff_kinetics::Walker;
@@ -63,7 +63,7 @@ pub struct Cli {
 
 fn main() -> Result<()> {
     let mut cli = Cli::parse();
-    let emodel = Arc::new(cli.energy.build_model());
+    let emodel = Arc::new(cli.energy.build_model()?);
     let rmodel = cli.kinetics.build_model(emodel.temperature());
 
     let is_rna = cli.energy.dna.is_none();
@@ -76,10 +76,11 @@ fn main() -> Result<()> {
                 Err(e) => return Err(anyhow::anyhow!("{e} (or use --t-ext?)")),
             }
         };
+    cli.energy.warn_circular(&sequence);
     let num_ext = sequence.len() - structure.len();
     cli.simulation.validate(cli.kinetics.k0, num_ext)?;
     let t_sep = cli.simulation.t_sep.expect("t-sep must exist after validation!");
-    let pairings = PairTable::try_from(&structure)?;
+    let pairings = MultiPairTable::try_from(&structure)?;
 
     if let Some(h) = header {
         println!("{}", h.yellow());

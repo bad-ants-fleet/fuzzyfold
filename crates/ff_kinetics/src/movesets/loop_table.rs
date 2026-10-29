@@ -2,15 +2,19 @@ use std::fmt;
 use std::sync::Arc;
 use nohash_hasher::IntMap;
 
-use ff_structure::NAIDX;
 use ff_structure::DotBracket;
 use ff_structure::DotBracketVec;
+use ff_structure::MultiPairTable;
+use ff_energy::Base;
 use ff_energy::EnergyModel;
+use ff_energy::Gap;
 use ff_energy::NucleotideVec;
-use ff_energy::LoopDecomposition;
-use ff_energy::NearestNeighborLoop;
+use ff_energy::NestedLoop;
+use ff_energy::Ring;
+use ff_energy::RingDecomposition;
 
-type LoopEntry = (NearestNeighborLoop, i32);
+
+type LoopEntry = (NestedLoop, i32);
 
 /// Direct storage of the loop decomposition from a structure.
 ///
@@ -25,7 +29,7 @@ pub struct LoopTable<E: EnergyModel> {
     loops: Vec<LoopEntry>,
     stale: Vec<usize>,
     loop_lookup: Vec<usize>,
-    pair_lookup: IntMap<NAIDX, NAIDX>,
+    pair_lookup: IntMap<usize, usize>,
     energy: i32,
 }
 
@@ -54,12 +58,24 @@ impl<E: EnergyModel> LoopTable<E> {
         self.model.min_hairpin_size()
     }
 
+    /// True for a circular strand: its last position is the strand wrap.
+    pub fn is_circular(&self) -> bool {
+        self.sequence.last() == Some(&Base::SW)
+    }
+
     pub fn can_pair(&self, i: usize, j: usize) -> bool {
         self.model.can_pair(self.sequence[i], self.sequence[j])
     }
 
-    pub fn energy_of_loop(&self, nn_loop: &NearestNeighborLoop) -> i32 {
-        self.model.energy_of_loop(&self.sequence, nn_loop)
+    /// False for a hairpin with fewer unpaired bases than the model allows.
+    /// Index distances rule these out, except for the hairpin through the 
+    /// strand wrap of a circular strand.
+    pub fn fits(&self, l: &NestedLoop) -> bool {
+        l.hairpin_size().is_none_or(|n| n >= self.min_hairpin_size())
+    }
+
+    pub fn energy_of_loop(&self, l: &NestedLoop) -> i32 {
+        self.model.energy_of_nested_loop(&self.sequence, l)
             .expect("Broken energy evaluation!")
     }
 
@@ -71,15 +87,15 @@ impl<E: EnergyModel> LoopTable<E> {
         self.loop_lookup.len()
     }
 
-    pub fn pairs(&self) -> impl Iterator<Item = (&NAIDX, &NAIDX)> + '_ {
+    pub fn pairs(&self) -> impl Iterator<Item = (&usize, &usize)> + '_ {
         self.pair_lookup.iter()
     }
 
-    pub fn delete_pair(&mut self, i: &NAIDX) -> NAIDX {
+    pub fn delete_pair(&mut self, i: &usize) -> usize {
         self.pair_lookup.remove(i).expect("Missing pair_list entry.")
     }
 
-    pub fn insert_pair(&mut self, i: NAIDX, j: NAIDX) {
+    pub fn insert_pair(&mut self, i: usize, j: usize) {
         self.pair_lookup.insert(i, j);
     }
 
@@ -92,13 +108,13 @@ impl<E: EnergyModel> LoopTable<E> {
     }
 
     pub fn update_lookup(&mut self, idx: usize) {
-        let (nn_loop, _) = self.get(idx);
-        for k in nn_loop.inclusive_unpaired_indices() {
-            self.loop_lookup[k] = idx;
+        let (l, _) = self.loops.get(idx).expect("Invalid LoopCache index");
+        for s in l.stretches() {
+            self.loop_lookup[s.unpaired.start..=s.ends.1].fill(idx);
         }
     }
 
-    pub fn pair_lookup(&self, idx: &NAIDX) -> NAIDX {
+    pub fn pair_lookup(&self, idx: &usize) -> usize {
         self.pair_lookup[idx]
     }
 
@@ -147,8 +163,11 @@ impl<E: EnergyModel> fmt::Display for LoopTable<E> {
         // Convert sequence to string
         let mut dbr = vec!['.'; self.loop_lookup.len()];
         for (i, j) in &self.pair_lookup {
-            dbr[*i as usize] = '(';
-            dbr[*j as usize] = ')';
+            dbr[*i ] = '(';
+            dbr[*j ] = ')';
+        }
+        if self.is_circular() {
+            *dbr.last_mut().unwrap() = '^';
         }
         let dbr_str: String = dbr.into_iter().collect();
         write!(f, "{}", dbr_str)
@@ -167,51 +186,103 @@ impl<E: EnergyModel> fmt::Debug for LoopTable<E> {
 impl<E: EnergyModel> From<&LoopTable<E>> for DotBracketVec {
     fn from(ltab: &LoopTable<E>) -> Self {
         // Use the same logic as your Display impl, but avoid allocating a String unnecessarily
-        let mut vec = vec![DotBracket::Unpaired; ltab.lookup_len()];
+        let mut vec = vec![DotBracket::UNPAIRED; ltab.lookup_len()];
         for (i, j) in ltab.pairs() {
-            vec[*i as usize] = DotBracket::Open;
-            vec[*j as usize] = DotBracket::Close;
+            vec[*i ] = DotBracket::OPEN;
+            vec[*j ] = DotBracket::CLOSE;
+        }
+        if ltab.is_circular() {
+            *vec.last_mut().unwrap() = DotBracket::STRAND_WRAP;
         }
         DotBracketVec(vec)
     }
 }
 
-impl<T: LoopDecomposition, E: EnergyModel> TryFrom<(NucleotideVec, &T, Arc<E>)> 
-for LoopTable<E> {
+impl<E: EnergyModel> TryFrom<(NucleotideVec, &MultiPairTable, Arc<E>)> for LoopTable<E> {
     type Error = String;
 
-    fn try_from((sequence, pairings, model): (NucleotideVec, &T, Arc<E>)
+    fn try_from((sequence, pairings, model): (NucleotideVec, &MultiPairTable, Arc<E>)
     ) -> Result<Self, Self::Error> {
+        Self::new(sequence, pairings, model)
+    }
+}
+
+impl<E: EnergyModel> LoopTable<E> {
+    /// The table of a structure.
+    pub fn new(sequence: NucleotideVec, pairings: &MultiPairTable, model: Arc<E>
+    ) -> Result<Self, String> {
+        // One strand, linear or circular: a circular strand ends with the
+        // strand wrap, the only strand end of the sequence.
+        let circular = sequence.has_circular_strand();
+        let strand_ends = sequence.iter().filter(|b| matches!(b, Base::SB | Base::SW)).count();
+        if circular && (strand_ends > 1 || sequence.last() != Some(&Base::SW)) {
+            return Err("Kinetics support a single strand without pseudoknots.".into());
+        }
 
         let mut loops = Vec::new();
         let mut loop_lookup = Vec::with_capacity(sequence.len());
-        let mut pair_lookup: IntMap<NAIDX, NAIDX>  = IntMap::default();
+        let mut pair_lookup: IntMap<usize, usize>  = IntMap::default();
         let mut energy = 0;
 
         let mut current_len = 0;
-        pairings.for_each_loop(|l| {
+        let mut exterior = 0;
+        // Crossing pairs, also those that close no cycle, make a pseudoknot.
+        let mut unsupported = !pairings.is_nested();
+        let mut error = None;
+        pairings.for_each_ring(|r| {
+            // Kinetics support one strand without pseudoknots: one exterior
+            // loop (through the wrap for a circular strand at full length),
+            // and no joint exterior loops.
+            let Ring::Loop(l) = r else {
+                unsupported = true;
+                return;
+            };
+            match l.gap() {
+                Gap::Open { five, three } if !circular && five <= three => exterior += 1,
+                Gap::Wrap { .. } => exterior += 1,
+                Gap::None => (),
+                _ => unsupported = true,
+            }
+            if unsupported || exterior > 1 || error.is_some() {
+                return;
+            }
             let (_, b) = l.span();
-            let b = b as usize + 1;
+            let b = b + 1;
             if b > current_len {
                 loop_lookup.resize(b, usize::MAX);
                 current_len = b;
             }
 
-            let loop_energy = model.energy_of_loop(&sequence, l)
-                .expect("Broken energy evaluation!");
+            let loop_energy = match model.energy_of_nested_loop(&sequence, l) {
+                Ok(en) => en,
+                Err(e) => {
+                    error = Some(e.to_string());
+                    return;
+                }
+            };
             energy += loop_energy;
 
             if let Some((i, j)) = l.closing() {
-                pair_lookup.insert(i as NAIDX, j as NAIDX); 
+                pair_lookup.insert(i, j); 
             }
 
             let loop_index = loops.len();
-            for k in l.inclusive_unpaired_indices() {
-                loop_lookup[k] = loop_index;
+            for s in l.stretches() {
+                loop_lookup[s.unpaired.start..=s.ends.1].fill(loop_index);
             }
             loops.push((l.to_owned(), loop_energy));
         });
 
+        if let Some(e) = error {
+            return Err(e);
+        }
+        if unsupported || exterior != 1 {
+            return Err("Kinetics support a single strand without pseudoknots, a circular strand at full length.".into());
+        }
+        if circular {
+            // The strand wrap belongs to no loop.
+            loop_lookup.push(usize::MAX);
+        }
         Ok(LoopTable {
             sequence,
             model,
@@ -224,3 +295,29 @@ for LoopTable<E> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ff_energy::Fuzzyfold;
+    use ff_structure::MultiPairTable;
+
+    #[test]
+    fn test_one_strand_without_pseudoknots() {
+        let model = Arc::new(Fuzzyfold::default());
+        let table = |seq: &str, db: &str| LoopTable::try_from((
+            NucleotideVec::try_from(seq).unwrap(),
+            &MultiPairTable::try_from(db).unwrap(),
+            model.clone(),
+        ));
+        assert!(table("GGGAAACCC", "(((...)))").is_ok());
+        assert!(table("GGGAAACCCAAA", "((([[[)))]]]").is_err());
+        assert!(table("GGG+CCC", "(((+)))").is_err());
+        assert!(table("GGG+CCC", "...+...").is_err());
+        // A circular strand alone, at full length.
+        assert!(table("GGGGAAACCCCAAAAAA^", "((((...))))......^").is_ok());
+        assert!(table("GGGGAAACCCCAAAAAA^", "((((...))))......").is_err());
+        assert!(table("GGGGAAACCCCAAAAAA^AA", "((((...))))......^..").is_err());
+        // The hairpin through the wrap has no unpaired bases.
+        assert!(table("GGGAAACCC^", "(((...)))^").is_err());
+    }
+}

@@ -1,4 +1,4 @@
-use crate::parameters::parameterset::DangleParams;
+use crate::parameters::tables::DangleParams;
 
 pub static DANGLE5_EN37: DangleParams = [
     /* [cl] [D]:    A      C      G      U */

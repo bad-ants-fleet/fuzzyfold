@@ -19,6 +19,9 @@ categories = [
     "science::bioinformatics::sequence-analysis",
 ]
 
+[profile.bench]
+debug = true   # keep symbols for samply/flamegraph profiling
+
 [workspace.dependencies]
 # local crates
 ff_energy    = { path = "./crates/ff_energy", version = "0.5.0" }
@@ -26,6 +29,8 @@ ff_structure = { path = "./crates/ff_structure", version = "0.4.0" }
 ff_kinetics  = { path = "./crates/ff_kinetics", version = "0.5.0" }
 
 # shared crates
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
 colored = "3.1.1"
 criterion = "0.8.2"
 env_logger = "0.11.11"

@@ -12,9 +12,3 @@ repository.workspace = true
 categories.workspace = true
 
 [dependencies]
-nohash-hasher.workspace = true
-serde.workspace = true
-
-[badges]
-maintenance = { status = "actively-developed" }
-

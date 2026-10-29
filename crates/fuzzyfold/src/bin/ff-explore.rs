@@ -10,7 +10,7 @@ use env_logger::Builder;
 
 use ff_energy::EnergyModel;
 use ff_kinetics::shift_policy::*;
-use fuzzyfold::structure::PairTable;
+use fuzzyfold::structure::MultiPairTable;
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
 use fuzzyfold::kinetics::LoopNeighbors;
@@ -83,10 +83,11 @@ fn init_logging(verbosity: u8) {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     init_logging(cli.lmin.verbose);
-    let emodel = Arc::new(cli.energy.build_model());
+    let emodel = Arc::new(cli.energy.build_model()?);
     let is_rna = cli.energy.dna.is_none();
     let (header, sequence, structure) = read_eval_input(&cli.lmin.input, is_rna)?;
-    let pairings = PairTable::try_from(&structure)?;
+    cli.energy.warn_circular(&sequence);
+    let pairings = MultiPairTable::try_from(&structure)?;
 
     let (delta, distance, info) = match (cli.lmin.delta, cli.lmin.maxdist) {
         (Some(d), None) => {
@@ -109,25 +110,25 @@ fn main() -> Result<()> {
         (false, false) => {
             let mut moves = LoopNeighbors::try_from(
                 (sequence, &pairings, emodel, NoShift)
-            ).expect("failed to build loop table");
+            ).map_err(|e| anyhow::anyhow!("failed to build loop table: {e}"))?;
             do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
         }
         (true, false) => {
             let mut moves = LoopNeighbors::try_from(
                 (sequence, &pairings, emodel, ThreeWayOnly)
-            ).expect("failed to build loop table");
+            ).map_err(|e| anyhow::anyhow!("failed to build loop table: {e}"))?;
             do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
         }
         (false, true) => {
             let mut moves = LoopNeighbors::try_from(
                 (sequence, &pairings, emodel, FourWayOnly)
-            ).expect("failed to build loop table");
+            ).map_err(|e| anyhow::anyhow!("failed to build loop table: {e}"))?;
             do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
         }
         (true, true) => {
             let mut moves = LoopNeighbors::try_from(
                 (sequence, &pairings, emodel, ThreeAndFour)
-            ).expect("failed to build loop table");
+            ).map_err(|e| anyhow::anyhow!("failed to build loop table: {e}"))?;
             do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);
         }
     }

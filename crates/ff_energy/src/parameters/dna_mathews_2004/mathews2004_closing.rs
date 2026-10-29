@@ -1,4 +1,4 @@
-use crate::parameters::parameterset::ClosingParams;
+use crate::parameters::tables::ClosingParams;
 
 // AP, PA, IU, UI, CI, IC parameters are dummy parameters
 

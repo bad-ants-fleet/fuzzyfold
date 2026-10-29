@@ -1,6 +1,6 @@
-use crate::parameters::parameterset::StackParams;
-use crate::parameters::parameterset::ExtendedStackParams;
-use crate::parameters::parameterset::{P, E};
+use crate::parameters::tables::StackParams;
+use crate::parameters::tables::ExtendedStackParams;
+use crate::parameters::tables::{P, E};
 
 pub static STACKPARAMS_EN37: StackParams = [
     /* [cl] [i]:   AT     TA     CG     GC     GT     TG */

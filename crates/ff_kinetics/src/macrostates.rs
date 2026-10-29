@@ -9,7 +9,7 @@ use rand::Rng;
 
 use ff_structure::DotBracketVec;
 use ff_structure::DotBracket;
-use ff_structure::PairTable;
+use ff_structure::MultiPairTable;
 use ff_energy::NucleotideVec;
 use ff_energy::EnergyModel;
 
@@ -45,9 +45,9 @@ use crate::{K0, KB};
 /// use ff_kinetics::Macrostate;
 /// use ff_structure::DotBracketVec;
 /// use ff_energy::NucleotideVec;
-/// use ff_energy::ViennaRNA;
+/// use ff_energy::Fuzzyfold;
 ///
-/// let energy_model = ViennaRNA::default();
+/// let energy_model = Fuzzyfold::default();
 /// let seq = NucleotideVec::try_from("CGCAAAGCG").unwrap();
 /// let db1 = DotBracketVec::try_from("(((...)))").unwrap();
 /// let db2 = DotBracketVec::try_from("((.....))").unwrap();
@@ -70,7 +70,7 @@ pub struct Macrostate {
 fn truncate(dbv: DotBracketVec, num: usize) -> Option<DotBracketVec> {
     let mut truncated = dbv.to_vec();
     let mut removed = 0;
-    while removed < num && truncated.last() == Some(&DotBracket::Unpaired) {
+    while removed < num && truncated.last() == Some(&DotBracket::UNPAIRED) {
         truncated.pop();
         removed += 1;
     }
@@ -83,7 +83,7 @@ fn truncate(dbv: DotBracketVec, num: usize) -> Option<DotBracketVec> {
 pub fn pad(dbv: &DotBracketVec, len: usize) -> DotBracketVec {
     let mut padded = dbv.to_vec();
     let extra = len.saturating_sub(padded.len());
-    padded.extend(std::iter::repeat_n(DotBracket::Unpaired, extra));
+    padded.extend(std::iter::repeat_n(DotBracket::UNPAIRED, extra));
     DotBracketVec(padded)
 }
 
@@ -110,7 +110,7 @@ impl Macrostate {
 
         let mut q_sum = 0.0;
         for dbv in structures {
-            let pt = PairTable::try_from(dbv)
+            let pt = MultiPairTable::try_from(dbv)
                 .expect("Invalid dot-bracket for energy evaluation");
             let en = energy_model.energy_of_structure(sequence, &pt)
                 .expect("Broken energy evaluation!");
@@ -378,7 +378,7 @@ impl<E: EnergyModel> MacrostateRegistry<E> {
 mod tests {
     use super::*;
     use std::io::Cursor;
-    use ff_energy::{parameters::RNA_TURNER_2004, ViennaRNA};
+    use ff_energy::{parameters::RNA_TURNER_2004, Fuzzyfold};
 
     #[test]
     fn test_macrostate_init() {
@@ -395,7 +395,7 @@ mod tests {
         .(((.(...)))).((((........))))...............
         */        
 
-        let energy_model = ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0);
+        let energy_model = Fuzzyfold::from_thermo_params(&RNA_TURNER_2004, 37.0);
         let seq = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").unwrap();
         let db1 = DotBracketVec::try_from(".((((....)))).((((........))))...............").unwrap();
         let db2 = DotBracketVec::try_from(".((((....)))).((((.(....).))))...............").unwrap();
@@ -427,7 +427,7 @@ mod tests {
 
     #[test]
     fn test_macrostateregistry_init_and_classify() {
-        let energy_model = ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0);
+        let energy_model = Fuzzyfold::from_thermo_params(&RNA_TURNER_2004, 37.0);
         let seq = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").unwrap();
 
         let mut registry = MacrostateRegistry::from((seq, Arc::new(energy_model)));

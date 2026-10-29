@@ -26,7 +26,9 @@ workflows.
 - Co-transcriptional folding trajectories
 - Thermodynamic parameters: RNA (Turner 2004), DNA (RNAstructure), extended
   sets including modification parameters and special hairpin parameters
-- Energy evaluation fully consistent with ViennaRNA
+- Energy evaluation compatible with ViennaRNA 2.6 (`ViennaRNA`)
+- Energy evaluation of pseudoknots and multi-stranded complexes, independent
+  of the order of the strands
 - Pure Rust workspace: straightforward installation via `cargo`, reproducible
   builds, no external runtime dependencies
 - Python bindings for rapid prototyping and custom analysis workflows
@@ -40,12 +42,10 @@ all command-line tools:
 cargo install fuzzyfold
 ```
 
-Individual crates can also be installed separately:
+To use the crates as libraries in your own Rust project:
 
 ```bash
-cargo install ff_structure
-cargo install ff_energy
-cargo install ff_kinetics
+cargo add ff_structure ff_energy ff_kinetics
 ```
 
 ## Command-line tools
@@ -70,6 +70,7 @@ as well as [examples/workflows](/examples/workflows/) to reproduce published ana
 | `ff_energy` | Free-energy evaluation using nearest-neighbor parameters |
 | `ff_kinetics` | Stochastic folding kinetics engine |
 | `fuzzyfold` | Command-line interfaces |
+| `ff_python` | Python bindings (not on crates.io) |
 
 Additional crates are in development and will be published to
 [crates.io](https://crates.io) as they mature.
@@ -111,7 +112,12 @@ request.
 If you use `fuzzyfold` in your research, please cite:
 
 > Stefan Badelt (2026): **fuzzyfold: a high-performance framework for stochastic RNA folding kinetics**,
-[https://doi.org/10.64898/2026.06.17.732885](https://doi.org/10.64898/2026.06.17.732885)
+bioRxiv preprint, [https://doi.org/10.64898/2026.06.17.732885](https://doi.org/10.64898/2026.06.17.732885)
+
+Please also cite the sources of the energy parameters you use, e.g. Turner
+2004 (Mathews et al. 2004) for RNA. The default pseudoknot parameters come
+from a preliminary training on the HotKnots data sets (Andronescu, Pop &
+Condon 2010).
 
 ## License
 

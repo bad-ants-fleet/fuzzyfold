@@ -1,48 +1,47 @@
-use ff_structure::NAIDX;
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub enum Move {
     /// A pair formation.
     Add {
-        i: NAIDX,
-        j: NAIDX,
+        i: usize,
+        j: usize,
     },
     /// A pair opening.
     Del {
-        i: NAIDX,
-        j: NAIDX,
+        i: usize,
+        j: usize,
     },
     /// A three-way shift move (i, j) -> (i, k)
     ShiftIK {
-        i: NAIDX,
-        j: NAIDX,
-        k: NAIDX,
+        i: usize,
+        j: usize,
+        k: usize,
     },
     /// A three-way shift move (i, j) -> (j, k)
     ShiftJK {
-        i: NAIDX,
-        j: NAIDX,
-        k: NAIDX,
+        i: usize,
+        j: usize,
+        k: usize,
     },
     /// A four-way shift move with adjacent pairs: 
     /// (i, j), (k, l) -> (i, l), (j, k)
     ShiftILJK {
         // Outer base-pair
-        i: NAIDX,
-        j: NAIDX,
+        i: usize,
+        j: usize,
         // Inner base-pair
-        k: NAIDX,
-        l: NAIDX,
+        k: usize,
+        l: usize,
     },
     /// A four-way shift move with enclosing pair: 
     /// (i, j), (k, l) -> (i, k), (l, j)
     ShiftIKLJ {
         // Outer base-pair
-        i: NAIDX,
-        j: NAIDX,
+        i: usize,
+        j: usize,
         // Inner base-pair
-        k: NAIDX,
-        l: NAIDX,
+        k: usize,
+        l: usize,
     },
 }
 
@@ -76,7 +75,7 @@ impl Move {
     }
 
     /// Returns the pair added by the move.
-    pub fn added_pair(&self) -> (NAIDX, NAIDX) {
+    pub fn added_pair(&self) -> (usize, usize) {
         match &self {
             Move::Add { i, j } =>  (*i, *j),
             Move::ShiftIK { i, k, .. } => if i < k { (*i, *k) } else { (*k, *i) },
@@ -86,7 +85,7 @@ impl Move {
     }
 
     /// Returns the two pairs added by the move.
-    pub fn added_pairs(&self) -> ((NAIDX, NAIDX), (NAIDX, NAIDX)) {
+    pub fn added_pairs(&self) -> ((usize, usize), (usize, usize)) {
         match &self {
             Move::ShiftIKLJ { i, j, k, l } => ((*i, *k), (*l, *j)),
             Move::ShiftILJK { i, j, k, l } => ((*i, *l), (*j, *k)),
@@ -95,7 +94,7 @@ impl Move {
     }
 
     /// Returns the pair deleted by the move.
-    pub fn deleted_pair(&self) -> (NAIDX, NAIDX) {
+    pub fn deleted_pair(&self) -> (usize, usize) {
         match &self {
             Move::Del { i, j } =>  (*i, *j),
             Move::ShiftIK { i, j, .. } => (*i, *j),
@@ -105,7 +104,7 @@ impl Move {
     }
 
     /// Returns the two pairs deleted by the move.
-    pub fn deleted_pairs(&self) -> ((NAIDX, NAIDX), (NAIDX, NAIDX)) {
+    pub fn deleted_pairs(&self) -> ((usize, usize), (usize, usize)) {
         match &self {
             Move::ShiftIKLJ { i, j, k, l } => ((*i, *j), (*k, *l)),
             Move::ShiftILJK { i, j, k, l } => ((*i, *j), (*k, *l)),
@@ -115,9 +114,9 @@ impl Move {
 
     /// Reports if there is an overlap between the added pairs in a move
     /// and the given pair.
-    pub fn conflicts(&self, pair: (NAIDX, NAIDX)) -> bool {
+    pub fn conflicts(&self, pair: (usize, usize)) -> bool {
         #[inline]
-        fn overlaps(a: (NAIDX, NAIDX), b: (NAIDX, NAIDX)) -> bool {
+        fn overlaps(a: (usize, usize), b: (usize, usize)) -> bool {
             let (p, q) = a;
             let (m, n) = b;
             !(q < m || n < p || (p < m && n < q) || (m < p && q < n))
@@ -145,7 +144,7 @@ impl Move {
 mod tests {
     use super::*;
 
-    fn pair(a: NAIDX, b: NAIDX) -> (NAIDX, NAIDX) {
+    fn pair(a: usize, b: usize) -> (usize, usize) {
         if a < b { (a, b) } else { (b, a) }
     }
 

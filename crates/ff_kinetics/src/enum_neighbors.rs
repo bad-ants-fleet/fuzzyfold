@@ -21,44 +21,44 @@ impl ApplyMove for DotBracketVec {
     fn apply_move(&mut self, mv: &Move) {
         match *mv {
             Move::Add { i, j } => {
-                self[i as usize] = DotBracket::Open;
-                self[j as usize] = DotBracket::Close;
+                self[i] = DotBracket::OPEN;
+                self[j] = DotBracket::CLOSE;
             }
             Move::Del { i, j } => {
-                self[i as usize] = DotBracket::Unpaired;
-                self[j as usize] = DotBracket::Unpaired;
+                self[i] = DotBracket::UNPAIRED;
+                self[j] = DotBracket::UNPAIRED;
             }
             Move::ShiftIK { i, j, k } => {
-                self[j as usize] = DotBracket::Unpaired;
+                self[j] = DotBracket::UNPAIRED;
                 if i < k {
-                    self[i as usize] = DotBracket::Open;
-                    self[k as usize] = DotBracket::Close;
+                    self[i] = DotBracket::OPEN;
+                    self[k] = DotBracket::CLOSE;
                 } else {
-                    self[k as usize] = DotBracket::Open;
-                    self[i as usize] = DotBracket::Close;
+                    self[k] = DotBracket::OPEN;
+                    self[i] = DotBracket::CLOSE;
                 }
             }
             Move::ShiftJK { i, j, k } => {
-                self[i as usize] = DotBracket::Unpaired;
+                self[i] = DotBracket::UNPAIRED;
                 if j < k {
-                    self[j as usize] = DotBracket::Open;
-                    self[k as usize] = DotBracket::Close;
+                    self[j] = DotBracket::OPEN;
+                    self[k] = DotBracket::CLOSE;
                 } else {
-                    self[k as usize] = DotBracket::Open;
-                    self[j as usize] = DotBracket::Close;
+                    self[k] = DotBracket::OPEN;
+                    self[j] = DotBracket::CLOSE;
                 }
             }
             Move::ShiftIKLJ { i, j, k, l } => {
-                self[i as usize] = DotBracket::Open;
-                self[k as usize] = DotBracket::Close;
-                self[l as usize] = DotBracket::Open;
-                self[j as usize] = DotBracket::Close;
+                self[i] = DotBracket::OPEN;
+                self[k] = DotBracket::CLOSE;
+                self[l] = DotBracket::OPEN;
+                self[j] = DotBracket::CLOSE;
             } 
             Move::ShiftILJK { i, j, k, l } => {
-                self[i as usize] = DotBracket::Open;
-                self[j as usize] = DotBracket::Open;
-                self[k as usize] = DotBracket::Close;
-                self[l as usize] = DotBracket::Close;
+                self[i] = DotBracket::OPEN;
+                self[j] = DotBracket::OPEN;
+                self[k] = DotBracket::CLOSE;
+                self[l] = DotBracket::CLOSE;
             }
         }
     }

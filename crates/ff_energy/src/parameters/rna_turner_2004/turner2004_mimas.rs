@@ -1,4 +1,4 @@
-use crate::parameters::parameterset::MismatchParams;
+use crate::parameters::tables::MismatchParams;
 
 pub static MISMATCH_HAIRPIN_EN37: MismatchParams = [
     [ /* [cl][5] [3]:    A      C      G      U */

@@ -1,20 +1,19 @@
 use nohash_hasher::IntMap;
 
-use ff_structure::NAIDX;
+use ff_energy::NestedLoop;
 use ff_energy::EnergyModel;
-use ff_energy::NearestNeighborLoop;
 
 use crate::Move;
 use crate::movesets::loop_table::LoopTable;
 
-type Pair = (NAIDX, NAIDX);
+type Pair = (usize, usize);
 type Moves = Vec<(Move, i32)>;
 
 
 /// Three-way shift move enumeration.
 ///
 /// Note, this code relies on the existance of a LoopTable, which maps the
-/// IntMap indices to the actual NearestNeighborLoop.
+/// IntMap indices to the actual NestedLoop.
 ///
 /// Three-way shift moves turn two existing loops into two new loops: 
 /// (outer0, inner0) -> (outer1, inner1). The initial pair (i, j) is
@@ -27,6 +26,23 @@ type Moves = Vec<(Move, i32)>;
 ///  -- E(inner1) - E(inner0)
 ///  -- E(outer1) - E(outer0)
 ///
+/// The two loops on either side of a pair, (outer, inner), and the loop
+/// without the pair: a three-way shift of the pair splits it again.
+struct Joined {
+    pair: Pair,
+    outer: usize,
+    inner: usize,
+    combo: NestedLoop,
+}
+
+impl Joined {
+    fn of<E: EnergyModel>(ltab: &LoopTable<E>, (i, j): Pair) -> Self {
+        let (outer, inner) = (ltab.loop_lookup(i), ltab.loop_lookup(j));
+        let combo = ltab.get(outer).0.join_loop(&ltab.get(inner).0);
+        Joined { pair: (i, j), outer, inner, combo }
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct ThreeWayNeighbors {
     map: IntMap<usize, Moves>,
@@ -56,40 +72,21 @@ impl ThreeWayNeighbors {
         index: usize,
     ) -> &Moves {
         let (init, _) = ltab.get(index);
-        let pairs = init.pairs();
+        let pairs = init.index_pairs();
 
-        let mut loopdict: IntMap<NAIDX, Pair> = IntMap::default();
+        let mut loopdict: IntMap<usize, Pair> = IntMap::default();
+        // Each pair joined out once, for all of its shifts.
+        let mut joined: IntMap<usize, Joined> = IntMap::default();
         for (i, j) in pairs.into_iter() {
             loopdict.insert(i, (i, j));
             loopdict.insert(j, (i, j));
+            joined.insert(i, Joined::of(ltab, (i, j)));
         }
 
         let mut neighbors: Moves = Vec::new();
-        let spans = init.inclusive_loop_ranges();
-        match init {
-            NearestNeighborLoop::Exterior { .. } => {
-                debug_assert!(!spans.is_empty(), "Exterior loop has no spans");
-                let n = spans.len() - 1;
-                for (e, r) in spans.iter().enumerate() {
-                    let p5 = *r.start() as NAIDX;
-                    let p5s = if e == 0 { p5 } else { p5 + 1 };
-                    let p3 = *r.end() as NAIDX;
-                    let p3e = if e == n { p3 + 1 } else { p3 };
-                    self.shift_iter(ltab, (p5, p5s), (p3, p3e), &loopdict, &mut neighbors);
-               }
-            },
-            NearestNeighborLoop::Hairpin { .. }
-            | NearestNeighborLoop::Interior { .. } 
-            | NearestNeighborLoop::Multibranch { .. } => {
-                for r in spans {
-                    let p5 = *r.start() as NAIDX;
-                    let p5s = p5 + 1;
-                    let p3 = *r.end() as NAIDX;
-                    let p3e = p3;
-                    self.shift_iter(ltab, (p5, p5s), (p3, p3e), &loopdict, &mut neighbors);
-                }
-            },
-            _ => todo!("Loop type currently not supported for three-way shifts!"),
+        for s in init.stretches() {
+            let ((p5, p3), unpaired) = (s.ends, s.unpaired);
+            self.shift_iter(ltab, (p5, unpaired.start), (p3, unpaired.end), &loopdict, &joined, &mut neighbors);
         }
         self.map.insert(index, neighbors);
         &self.map[&index]
@@ -99,15 +96,16 @@ impl ThreeWayNeighbors {
     fn shift_iter<E: EnergyModel>(
         &self,
         ltab: &LoopTable<E>,
-        (p5, p5s): (NAIDX, NAIDX),
-        (p3, p3e): (NAIDX, NAIDX),
-        loopdict: &IntMap<NAIDX, Pair>,
+        (p5, p5s): (usize, usize),
+        (p3, p3e): (usize, usize),
+        loopdict: &IntMap<usize, Pair>,
+        joined: &IntMap<usize, Joined>,
         neighbors: &mut Moves,
     ) {
         for k in p5s..p3e {
-            let uk = k as usize;
+            let uk = k;
             for (&p, &(i, j)) in loopdict.iter() {
-                let up = p as usize;
+                let up = p;
                 if !ltab.can_pair(uk, up) {
                     continue;
                 }
@@ -121,39 +119,27 @@ impl ThreeWayNeighbors {
                 } else {
                     Move::ShiftJK { i, j, k }
                 };
-                let delta = self.get_activation_energy(ltab, &mv);
-                neighbors.push((mv, delta))
+                if let Some(delta) = self.get_activation_energy(ltab, &joined[&i], &mv) {
+                    neighbors.push((mv, delta))
+                }
             }
         }
     }
  
-    pub fn get_loops<E: EnergyModel>(
-        &self,
-        ltab: &LoopTable<E>,
-        mv: &Move,
-    ) -> (usize, // outer0
-          usize, // inner0
-          NearestNeighborLoop, // outer1
-          NearestNeighborLoop) // inner1
-    {
-        let (i, j) = mv.deleted_pair();
-        let outer0_idx = ltab.loop_lookup(i as usize);
-        let inner0_idx = ltab.loop_lookup(j as usize);
-        let (outer0, _en) = ltab.get(outer0_idx);
-        let (inner0, _en) = ltab.get(inner0_idx); 
-        let combo = outer0.join_loop(inner0);
-        let (p, q) = mv.added_pair();
-        let (outer1, inner1) = combo.split_loop(p, q);
-        (outer0_idx, inner0_idx, outer1, inner1)
-    }
-
+    /// None if a new loop does not fit (see `LoopTable::fits`).
     fn get_activation_energy<E: EnergyModel>(
         &self,
         ltab: &LoopTable<E>,
+        joined: &Joined,
         mv: &Move,
-    ) -> i32 {
-        let (outer0_idx, inner0_idx, 
-             outer1, inner1) = self.get_loops(ltab, mv);
+    ) -> Option<i32> {
+        debug_assert_eq!(joined.pair, mv.deleted_pair());
+        let (outer0_idx, inner0_idx) = (joined.outer, joined.inner);
+        let (p, q) = mv.added_pair();
+        let (outer1, inner1) = joined.combo.split_loop(p, q);
+        if !ltab.fits(&outer1) || !ltab.fits(&inner1) {
+            return None;
+        }
 
         let (_o, outer0_en) = ltab.get(outer0_idx);
         let (_i, inner0_en) = ltab.get(inner0_idx);
@@ -179,9 +165,9 @@ impl ThreeWayNeighbors {
             println!("tw {} {} {} {}", d_en, a_en, 0.max(d_en).max(a_en), bm);
         }
 
-        ((outer1_en + inner1_en) - (outer0_en + inner0_en))
+        Some(((outer1_en + inner1_en) - (outer0_en + inner0_en))
             .max(outer1_en - outer0_en)
-            .max(inner1_en - inner0_en)
+            .max(inner1_en - inner0_en))
     }
 
 }
@@ -190,15 +176,15 @@ impl ThreeWayNeighbors {
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use ff_structure::PairTable;
-    use ff_energy::ViennaRNA;
+    use ff_structure::MultiPairTable;
+    use ff_energy::Fuzzyfold;
     use ff_energy::NucleotideVec;
 
     macro_rules! setup_loop_table {
         ($name:ident, $seq:expr, $db:expr) => {
-            let model = ViennaRNA::default();
+            let model = Fuzzyfold::default();
             let sequence = NucleotideVec::try_from($seq).unwrap();
-            let pairings = PairTable::try_from($db)
+            let pairings = MultiPairTable::try_from($db)
                 .expect("Invalid structure");
             let $name = LoopTable::try_from((sequence, &pairings, Arc::new(model)))
                 .expect("Invalid sequence/structure combination");

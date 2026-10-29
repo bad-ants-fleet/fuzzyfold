@@ -1,7 +1,7 @@
 use nohash_hasher::IntMap;
 
+use ff_energy::NestedLoop;
 use ff_energy::EnergyModel;
-use ff_energy::NearestNeighborLoop;
 
 use crate::Move;
 use crate::movesets::loop_table::LoopTable;
@@ -11,7 +11,7 @@ type Moves = Vec<(Move, i32)>;
 /// Four-way shift move enumeration.
 ///
 /// Note, this code relies on the existance of a LoopTable, which maps the
-/// IntMap indices to the actual NearestNeighborLoop.
+/// IntMap indices to the actual NestedLoop.
 ///
 /// Four-way shift moves turn three existing loops into three
 /// new loops: (center, merge1, merge2) -> (inside, outer1, outer2) where
@@ -53,29 +53,31 @@ impl FourWayNeighbors {
         index: usize,
     ) -> &Moves {
         let (init, _) = ltab.get(index);
-        let pairs = init.pairs();
+        let pairs = init.index_pairs();
 
         let mut neighbors = Vec::new(); 
         for (p1, &(i, j)) in pairs.iter().enumerate() {
-            let ui = i as usize;
-            let uj = j as usize;
+            let ui = i;
+            let uj = j;
             for &(k, l) in pairs[p1 + 1..].iter() {
-                let uk = k as usize;
-                let ul = l as usize;
+                let uk = k;
+                let ul = l;
                 if uj + ltab.min_hairpin_size() < uk 
                     && ltab.can_pair(ui, ul) 
                     && ltab.can_pair(uj, uk) 
                 {
                     let mv = Move::ShiftILJK { i, j, k, l };
-                    let delta = self.get_activation_energy(ltab, &mv);
-                    neighbors.push((mv, delta));
+                    if let Some(delta) = self.get_activation_energy(ltab, &mv) {
+                        neighbors.push((mv, delta));
+                    }
                 } else if ltab.can_pair(ui, uk) && ltab.can_pair(ul, uj) 
                     && ui + ltab.min_hairpin_size() < uk 
                     && ul + ltab.min_hairpin_size() < uj
                 {
                     let mv = Move::ShiftIKLJ { i, j, k, l };
-                    let delta = self.get_activation_energy(ltab, &mv);
-                    neighbors.push((mv, delta));
+                    if let Some(delta) = self.get_activation_energy(ltab, &mv) {
+                        neighbors.push((mv, delta));
+                    }
                 }
             }
         }
@@ -91,18 +93,18 @@ impl FourWayNeighbors {
     ) -> (usize, // center
           usize, // merge1
           usize, // merge2
-          NearestNeighborLoop, // inside
-          NearestNeighborLoop, // outer1
-          NearestNeighborLoop) // outer2
+          NestedLoop, // inside
+          NestedLoop, // outer1
+          NestedLoop) // outer2
     {
         match mv {
             Move::ShiftIKLJ { i, j, k, l } => {
-                let merge1_idx = ltab.loop_lookup(*i as usize);
-                let center_idx = ltab.loop_lookup(*j as usize);
-                let merge2_idx = ltab.loop_lookup(*l as usize);
+                let merge1_idx = ltab.loop_lookup(*i);
+                let center_idx = ltab.loop_lookup(*j);
+                let merge2_idx = ltab.loop_lookup(*l);
                 let (merge1, _energy) = ltab.get(merge1_idx);
                 let (center, center_en) = ltab.get(center_idx);
-                debug_assert_eq!(center_en, &ltab.geti(*k as usize).1);
+                debug_assert_eq!(center_en, &ltab.geti(*k).1);
                 let (merge2, _energy) = ltab.get(merge2_idx);
 
                 let inside = merge1.join_loop(center).join_loop(merge2);
@@ -112,12 +114,12 @@ impl FourWayNeighbors {
             },
             Move::ShiftILJK { i, j, k, l } => {
 
-                let center_idx = ltab.loop_lookup(*i as usize);
-                let merge1_idx = ltab.loop_lookup(*j as usize);
-                let merge2_idx = ltab.loop_lookup(*l as usize);
+                let center_idx = ltab.loop_lookup(*i);
+                let merge1_idx = ltab.loop_lookup(*j);
+                let merge2_idx = ltab.loop_lookup(*l);
                 let (merge1, _energy) = ltab.get(merge1_idx);
                 let (center, center_en) = ltab.get(center_idx);
-                debug_assert_eq!(center_en, &ltab.geti(*k as usize).1);
+                debug_assert_eq!(center_en, &ltab.geti(*k).1);
                 let (merge2, _energy) = ltab.get(merge2_idx);
 
                 let inside = center.join_loop(merge1).join_loop(merge2);
@@ -132,15 +134,18 @@ impl FourWayNeighbors {
     /// The function to caculate activation energy.
     ///
     /// Note that this function does not necessarily return the free energy
-    /// difference!!
+    /// difference!! None if a new loop does not fit (see `LoopTable::fits`).
     ///
     fn get_activation_energy<E: EnergyModel>(
         &self,
         ltab: &LoopTable<E>,
         mv: &Move,
-    ) -> i32 {
+    ) -> Option<i32> {
         let (center_idx, merge1_idx, merge2_idx, 
              inside, outer1, outer2) = self.get_loops(ltab, mv);
+        if !ltab.fits(&inside) || !ltab.fits(&outer1) || !ltab.fits(&outer2) {
+            return None;
+        }
 
         let (_, center_en) = ltab.get(center_idx);
         let (_m1, merge1_en) = ltab.get(merge1_idx);
@@ -180,9 +185,9 @@ impl FourWayNeighbors {
             println!("fw {} {} {} {}", d_en, a_en, 0.max(d_en).max(a_en), bm);
         }
 
-        ((inside_en + outer1_en + outer2_en) - (center_en + merge1_en + merge2_en))
+        Some(((inside_en + outer1_en + outer2_en) - (center_en + merge1_en + merge2_en))
             .max(outer1_en + outer2_en - center_en)
-            .max(inside_en - merge1_en - merge2_en)
+            .max(inside_en - merge1_en - merge2_en))
     }
 }
 
@@ -190,15 +195,15 @@ impl FourWayNeighbors {
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use ff_structure::PairTable;
-    use ff_energy::ViennaRNA;
+    use ff_structure::MultiPairTable;
+    use ff_energy::Fuzzyfold;
     use ff_energy::NucleotideVec;
 
     macro_rules! setup_loop_table {
         ($name:ident, $seq:expr, $db:expr) => {
-            let model = ViennaRNA::default();
+            let model = Fuzzyfold::default();
             let sequence = NucleotideVec::try_from($seq).unwrap();
-            let pairings = PairTable::try_from($db)
+            let pairings = MultiPairTable::try_from($db)
                 .expect("Invalid structure");
             let $name = LoopTable::try_from((sequence, &pairings, Arc::new(model)))
                 .expect("Invalid sequence/structure combination");
@@ -231,7 +236,8 @@ mod tests {
         assert_eq!(res[0].0, m);
 
         let (_, _, _, inner, _, _) = twn.get_loops(&ltab, &m);
-        assert_eq!(inner, NearestNeighborLoop::Interior { closing: (1, 15), inner: (7, 11) });
+        // The interior loop closed by (1, 15) with the inner pair (7, 11).
+        assert_eq!((inner.gap(), inner.pairs()), (ff_energy::Gap::None, &[(7, 11), (15, 1)][..]));
     }
 
     #[test]

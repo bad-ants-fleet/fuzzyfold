@@ -12,9 +12,10 @@ use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 
 use ff_structure::DotBracketVec;
-use ff_structure::PairTable;
+use ff_structure::MultiPairTable;
 use ff_energy::NucleotideVec;
-use ff_energy::ViennaRNA;
+use ff_energy::check_sequence;
+use ff_energy::Fuzzyfold;
 use ff_kinetics::SSA;
 use ff_kinetics::shift_policy;
 use ff_kinetics::Arrhenius;
@@ -22,36 +23,17 @@ use ff_kinetics::Walker;
 use ff_kinetics::LoopNeighbors;
 use ff_kinetics::MacrostateRegistry;
 use ff_kinetics::timeline::Timeline;
-use ff_energy::parameters::RNA_EXTENDED;
-use ff_energy::parameters::RNA_TURNER_2004;
-use ff_energy::parameters::DNA_MATHEWS_2004;
+use crate::energy_exports::thermo_params;
 use ff_shared::kinetics_parsers::TimelineParameters;
 
-fn resolve_energy_model(params: &str, celsius: f64) -> PyResult<(ViennaRNA, bool)> {
-    let mut is_rna = true;
-    let thermo = match params {
-        "rna_turner_2004" => &RNA_TURNER_2004,
-        "rna_extended" => &RNA_EXTENDED,
-        "dna" => {
-            is_rna = false;
-            &DNA_MATHEWS_2004
-        },
-        _ => {
-            return Err(PyValueError::new_err(
-                format!(
-                    "Unknown parameter set '{}'. \
-                     Valid options are: 'rna_turner_2004', 'rna_extended', 'dna'.",
-                    params
-                )
-            ));
-        }
-    };
-    Ok((ViennaRNA::from_thermo_params(thermo, celsius), is_rna))
+fn resolve_energy_model(params: &str, celsius: f64) -> PyResult<(Fuzzyfold, bool)> {
+    let (thermo, is_rna) = thermo_params(params)?;
+    Ok((Fuzzyfold::from_thermo_params(thermo, celsius), is_rna))
 }
 
 #[pyclass]
 pub struct Simulator {
-    energy_model: Arc<ViennaRNA>,
+    energy_model: Arc<Fuzzyfold>,
     rate_model: Arrhenius,
     is_rna: bool,
 }
@@ -61,7 +43,7 @@ pub struct Simulator {
 impl Simulator {
     #[new]
     #[pyo3(signature = (
-        params = "rna_turner_2004",
+        params = "rna_extended",
         celsius=37.0,
         k0=1e5,
         k3ws=0.0,
@@ -322,8 +304,8 @@ impl Simulator {
             None => None,
        };
 
-       let merged: Option<Result<Timeline<ViennaRNA>, String>> = py.detach(|| {
-            let run_one = |_: usize| -> Result<Timeline<ViennaRNA>, String> {
+       let merged: Option<Result<Timeline<Fuzzyfold>, String>> = py.detach(|| {
+            let run_one = |_: usize| -> Result<Timeline<Fuzzyfold>, String> {
                 let thread_registry = Arc::clone(&registry);
                 let mut timeline = Timeline::new(&output_times, thread_registry);
 
@@ -402,7 +384,7 @@ impl Simulator {
 
 #[pyclass]
 pub struct Explorer {
-    energy_model: Arc<ViennaRNA>,
+    energy_model: Arc<Fuzzyfold>,
     is_rna: bool,
     three_way_shifts: bool,
     four_way_shifts: bool,
@@ -412,7 +394,7 @@ pub struct Explorer {
 impl Explorer {
     #[new]
     #[pyo3(signature = (
-        params = "rna_turner_2004",
+        params = "rna_extended",
         celsius=37.0,
         three_way_shifts=false,
         four_way_shifts=false,
@@ -484,7 +466,9 @@ impl Explorer {
         };
         let structure_db = DotBracketVec::try_from(structure)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let pairings = PairTable::try_from(&structure_db)
+        check_sequence(&seq, &structure_db)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let pairings = MultiPairTable::try_from(&structure_db)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let energy_model = Arc::clone(&self.energy_model);
         let three_way_shifts = self.three_way_shifts;
@@ -538,7 +522,7 @@ fn parse_inputs(
         start: Option<&str>,
         t_ext: Option<f64>,
         t_end: f64,
-    ) -> PyResult<(NucleotideVec, PairTable, Vec<f64>)> {
+    ) -> PyResult<(NucleotideVec, MultiPairTable, Vec<f64>)> {
         let sequence = match sim.is_rna {
             true => NucleotideVec::try_from_rna(sequence)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?,
@@ -552,6 +536,13 @@ fn parse_inputs(
             None => DotBracketVec::try_from(".")
                 .map_err(|e| PyValueError::new_err(e.to_string()))?,
         };
+
+        // The start structure covers the first part of the sequence.
+        if start_db.len() > sequence.len() {
+            return Err(PyValueError::new_err("start is longer than sequence"));
+        }
+        check_sequence(&sequence[..start_db.len()], &start_db)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         if start_db.len() < sequence.len() && t_ext.is_none() {
             return Err(PyValueError::new_err(
@@ -567,7 +558,7 @@ fn parse_inputs(
             vec![t_end]
         };
 
-        let start_pt = PairTable::try_from(&start_db)
+        let start_pt = MultiPairTable::try_from(&start_db)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         Ok((sequence, start_pt, times))
@@ -575,7 +566,7 @@ fn parse_inputs(
 
 
 fn insert_macrostate_files(
-    registry: &mut MacrostateRegistry<ViennaRNA>,
+    registry: &mut MacrostateRegistry<Fuzzyfold>,
     files: &[PathBuf],
     cotrans: bool,
 ) -> PyResult<()> {
@@ -651,7 +642,7 @@ fn write_drf(
 
 fn write_timecourse_files(
     py: Python<'_>,
-    timeline: &Timeline<ViennaRNA>,
+    timeline: &Timeline<Fuzzyfold>,
     output: &PathBuf,
 ) -> PyResult<()> {
     let tln_path = output.with_extension("tln");
@@ -779,8 +770,8 @@ fn merge_tln_files(py: Python<'_>, inputs: &[PathBuf]) -> PyResult<Vec<TlnPoint>
     Ok(merged)
 }
 
-fn counts_to_timeline((names, points): TimecourseCounts) -> PyResult<Timeline<ViennaRNA>> {
-    let (energy_model, _) = resolve_energy_model("rna_default", 37.0)?;
+fn counts_to_timeline((names, points): TimecourseCounts) -> PyResult<Timeline<Fuzzyfold>> {
+    let (energy_model, _) = resolve_energy_model("rna_extended", 37.0)?;
     let dummy_seq = NucleotideVec::try_from("A")
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let mut registry = MacrostateRegistry::from((dummy_seq, Arc::new(energy_model)));
@@ -943,7 +934,7 @@ impl Plotter {
     }
 }
 
-fn timeline_to_occupancy(timeline: &Timeline<ViennaRNA>) -> Vec<(f64, FxHashMap<String, f64>)> {
+fn timeline_to_occupancy(timeline: &Timeline<Fuzzyfold>) -> Vec<(f64, FxHashMap<String, f64>)> {
     
     let macrostates = timeline.registry.macrostates();
     let mut name_order: Vec<&str> = Vec::new();
@@ -977,12 +968,12 @@ fn timeline_to_occupancy(timeline: &Timeline<ViennaRNA>) -> Vec<(f64, FxHashMap<
 
 fn build_iterator<P>(
     seq: NucleotideVec,
-    start_pt: &PairTable,
-    energy_model: Arc<ViennaRNA>,
+    start_pt: &MultiPairTable,
+    energy_model: Arc<Fuzzyfold>,
     rate_model: Arrhenius,
     times: Vec<f64>,
     policy: P,
-    wrap: fn(SSA<LoopNeighbors<ViennaRNA, P>, Arrhenius>) -> SSAKind,
+    wrap: fn(SSA<LoopNeighbors<Fuzzyfold, P>, Arrhenius>) -> SSAKind,
 ) -> PyResult<SimulationIterator>
 where
     P: shift_policy::ShiftPolicy,
@@ -1007,10 +998,10 @@ where
 }
 
 enum SSAKind {
-    NoShift(SSA<LoopNeighbors<ViennaRNA, shift_policy::NoShift>, Arrhenius>),
-    ThreeWayOnly(SSA<LoopNeighbors<ViennaRNA, shift_policy::ThreeWayOnly>, Arrhenius>),
-    FourWayOnly(SSA<LoopNeighbors<ViennaRNA, shift_policy::FourWayOnly>, Arrhenius>),
-    ThreeAndFour(SSA<LoopNeighbors<ViennaRNA, shift_policy::ThreeAndFour>, Arrhenius>),
+    NoShift(SSA<LoopNeighbors<Fuzzyfold, shift_policy::NoShift>, Arrhenius>),
+    ThreeWayOnly(SSA<LoopNeighbors<Fuzzyfold, shift_policy::ThreeWayOnly>, Arrhenius>),
+    FourWayOnly(SSA<LoopNeighbors<Fuzzyfold, shift_policy::FourWayOnly>, Arrhenius>),
+    ThreeAndFour(SSA<LoopNeighbors<Fuzzyfold, shift_policy::ThreeAndFour>, Arrhenius>),
 }
 
 #[pyclass]
@@ -1031,7 +1022,7 @@ impl SimulationIterator {
 
     fn __next__(
         mut slf: PyRefMut<Self>
-    ) -> Option<(String, i32, f64, f64, f64)> {
+    ) -> Option<(String, f64, f64, f64, f64)> {
 
         let this: &mut Self = &mut slf;
 
@@ -1039,7 +1030,7 @@ impl SimulationIterator {
             return None;
         }
 
-        let mut produced: Option<(String, i32, f64, f64, f64)> = None;
+        let mut produced: Option<(String, f64, f64, f64, f64)> = None;
 
         let rng = &mut this.rng;
         let mut mytinc = 0.0;
@@ -1056,7 +1047,7 @@ impl SimulationIterator {
 
                             produced = Some((
                                     w.to_string(),
-                                    w.current_energy(),
+                                    w.current_energy() as f64 / 100.0, // kcal/mol
                                     this.elapsed + t,
                                     mytinc,
                                     flux,

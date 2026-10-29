@@ -7,7 +7,7 @@ use crate::parameters::dna_mathews_2004::mathews2004_int22::*;
 use crate::parameters::dna_mathews_2004::mathews2004_loops::*;
 use crate::parameters::dna_mathews_2004::mathews2004_dangles::*;
 use crate::parameters::dna_mathews_2004::mathews2004_closing::*;
-use crate::parameters::parameterset::LoopEntry;
+use crate::parameters::tables::LoopEntry;
 
 
 pub static LOOPS: &[LoopEntry] = &[ ];

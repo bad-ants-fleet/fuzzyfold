@@ -2,6 +2,28 @@
 
 All notable changes to this crate will be documented in this file.
 
+## [development]
+### Changed
+- Indices are usize (Move, LoopTable, LoopNeighbors), not NAIDX
+- LoopTable reads the loops of the decomposition and rejects structures
+  with crossing pairs
+- LoopTable::try_from returns an error, not a panic, for a structure that
+  cannot be evaluated (e.g. a hairpin that is too small)
+
+### Added
+- The move sets work on NestedLoop, the loops of the ring decomposition
+  (NearestNeighborLoop is removed): identical trajectories, about 4% (no
+  shifts) and 8% (shifts) more instructions. Crossing pairs are a
+  pseudoknot also where they close no cycle
+- examples/kinetics_workload.rs: seeded simulations for instruction counts
+- tests/trajectories.rs: digests of seeded trajectories with and without
+  shifts, on linear and circular strands; at every step the flux is the
+  sum of the rates of a move set built from scratch
+- Circular strands, alone and at full length: add, delete and shift moves
+  through the strand wrap; moves are proposed only if their loops fit
+  (LoopTable::fits: the hairpin through the wrap of a circle is not too
+  small). Structures are written with `^`
+
 ## 0.5.0 - 2026-10-06
 ### Changed
 - The same macrostate can now be defined at multiple sequence lengths. A flag
