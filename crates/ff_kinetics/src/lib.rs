@@ -7,10 +7,13 @@
 //! - A [`MoveSet`] proposes the moves of the current structure with their
 //!   energy changes, and applies them. [`LoopNeighbors`] is the move set of
 //!   fuzzyfold: adding and deleting a pair, and optionally three-way and
-//!   four-way shift moves ([`ShiftMoves`]). It keeps the loops of the
+//!   four-way shift moves ([`MoveTypes`]). It keeps the loops of the
 //!   structure (its [`LoopTable`]) and updates only the loops a move
 //!   changes. A move set that also extends the strand at its 3' end
-//!   implements [`Elongation`].
+//!   implements [`Elongation`]. With [`MoveTypes::a_to_i`], the move set
+//!   also edits an A opposite a C in a 1x1 interior loop to I, which pairs
+//!   with the C ([`Move::Edit`]): the sequence changes during a simulation
+//!   ([`MoveSet::current_sequence`]).
 //! - A [`RateModel`] gives the rate of a move. [`Arrhenius`] uses one rate
 //!   constant per move type (k0, k3ws, k4ws): the constant for a move that
 //!   does not raise the energy, else the constant times exp(-dE / RT); for
@@ -27,10 +30,10 @@
 //! use ff_kinetics::{Arrhenius, LoopNeighbors, MoveSet, SSA};
 //!
 //! let model = Arc::new(Fuzzyfold::default());
-//! let rates = Arrhenius::new(model.temperature(), 1e5, None, None);
+//! let rates = Arrhenius::new(model.temperature(), 1e5, None, None, None);
 //! let seq = NucleotideVec::try_from_rna("GGGGAAACCCC").unwrap();
 //! let start = MultiPairTable::try_from("...........").unwrap();
-//! let moves = LoopNeighbors::try_from((seq, &start, model, rates.shift_moves())).unwrap();
+//! let moves = LoopNeighbors::try_from((seq, &start, model, rates.move_types())).unwrap();
 //!
 //! let mut ssa = SSA::from((moves, rates));
 //! let mut steps = 0;
@@ -76,10 +79,10 @@
 //! use ff_kinetics::timecourse::Timecourse;
 //!
 //! let model = Arc::new(Fuzzyfold::default());
-//! let rates = Arrhenius::new(model.temperature(), 1e5, None, None);
+//! let rates = Arrhenius::new(model.temperature(), 1e5, None, None, None);
 //! let seq = NucleotideVec::try_from_rna("GGGGAAACCCC").unwrap();
 //! let start = MultiPairTable::try_from("...........").unwrap();
-//! let moves = LoopNeighbors::try_from((seq.clone(), &start, model.clone(), rates.shift_moves())).unwrap();
+//! let moves = LoopNeighbors::try_from((seq.clone(), &start, model.clone(), rates.move_types())).unwrap();
 //!
 //! let mut registry = MacrostateRegistry::from((seq, model));
 //! let hairpin = ">hairpin\nGGGGAAACCCC\n((((...))))\n.(((...))).\n";
@@ -91,7 +94,7 @@
 //! for seed in 0..10 {
 //!     let mut ssa = SSA::from((moves.clone(), rates));
 //!     let trajectory = ssa.sample(&mut StdRng::seed_from_u64(seed), &schedule, &output,
-//!         |m| registry.classify(&m.current_structure()));
+//!         |m| registry.classify(m.current_sequence(), &m.current_structure()));
 //!     timecourse.add_trajectory(&trajectory);
 //! }
 //! assert_eq!(timecourse.num_trajectories(0), 10);

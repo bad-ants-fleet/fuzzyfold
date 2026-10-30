@@ -89,9 +89,10 @@ ff.density(s)           # 2
 
 ## Kinetics
 
-- `Simulator(params, celsius, k0, k3ws, k4ws)`: stochastic simulation 
-  (Gillespie), optionally co-transcriptional (`t_ext`) and with three- and
-  four-way branch migration (`k3ws`, `k4ws`).
+- `Simulator(params, celsius, k0, k3ws, k4ws, k_atoi)`: stochastic
+  simulation (Gillespie), optionally co-transcriptional (`t_ext`), with
+  three- and four-way branch migration (`k3ws`, `k4ws`), and with A-to-I
+  editing (`k_atoi`, see below).
   - `simulate_trajectory(...)`: an iterator over the trajectory.
   - `simulate_ensemble(...)`: the structures of many simulations at the
     output times, also written as a `.drf` file.
@@ -102,6 +103,15 @@ ff.density(s)           # 2
   structure within an energy range.
 
 Pseudoknots are not supported in kinetics yet.
+
+With `k_atoi > 0`, an A opposite a C in a 1x1 interior loop becomes
+inosine at that rate, and the I-C pair forms. The sequence then changes
+during a simulation: the trajectory iterator has the sequence of its last
+state as `iterator.sequence`; `simulate_ensemble` counts each structure
+together with its sequence (keys `"structure sequence"`, and a sequence
+column in the `.drf` file); a macrostate file may give an edited sequence
+(I for A), and a structure then belongs to the macrostate of its
+sequence.
 
 `simulate_ensemble` and `simulate_timecourse` report the state at the
 output times `times`, and a simulation ends at the last one. By default,

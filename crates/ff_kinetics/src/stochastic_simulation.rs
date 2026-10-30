@@ -296,7 +296,7 @@ mod tests {
     use ff_energy::NucleotideVec;
     use crate::Arrhenius;
     use crate::movesets::LoopNeighbors;
-    use crate::ShiftMoves;
+    use crate::MoveTypes;
     use crate::LoopTable;
     use crate::movesets::Move;
     use rustc_hash::FxHashMap;
@@ -304,7 +304,7 @@ mod tests {
     macro_rules! setup_ssa_input {
         ($wname:ident, $rname:ident, $seq:expr, $db:expr) => {
             let emodel = Fuzzyfold::default();
-            let $rname = Arrhenius::new(emodel.temperature(), 1.0, None, None);
+            let $rname = Arrhenius::new(emodel.temperature(), 1.0, None, None, None);
 
             let sequence = NucleotideVec::try_from($seq)
                 .expect("Invalid sequence?");
@@ -313,7 +313,7 @@ mod tests {
 
             let ltab = LoopTable::try_from((sequence, &pairings, Arc::new(emodel)))
                 .expect("Invalid sequence/structure combination");
-            let $wname = LoopNeighbors::from((ltab, ShiftMoves::NONE));
+            let $wname = LoopNeighbors::from((ltab, MoveTypes::NONE));
         };
     }
 
@@ -324,22 +324,26 @@ mod tests {
     }
 
     /// The moves and rates in the tree are those of a move set built from
-    /// scratch, after every move and extension, with shift moves, also
-    /// co-transcriptionally and on a circle.
+    /// scratch on the current sequence, after every move and extension,
+    /// with shift moves and A-to-I edits, also co-transcriptionally and on
+    /// a circle.
     #[test]
     fn rate_tree_after_moves_and_extensions() {
         let emodel = Arc::new(Fuzzyfold::default());
-        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
+        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0), Some(1.0));
+        let types = rmodel.move_types();
         let runs = [
             ("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC", "."),
             ("GGGAGCUAAAGCUCCCAUCGGCAUUAGCCGAUGGGAAAGCAUCC", "((((((....))))))"),
             ("GCGCAAAAGCGCAAAAAGCGCUUUUGCGC^", ".............................^"),
+            ("GCGACGCAAAAGCGCCGCAAGCGACGCAAAAGCGCCGC", "(((.(((....))).)))..(((.(((....))).)))"),
         ];
         let mut rng = StdRng::seed_from_u64(3);
+        let mut edited = 0;
         for (seq, db) in runs {
             let sequence = NucleotideVec::try_from(seq).unwrap();
             let start = MultiPairTable::try_from(db).unwrap();
-            let moves = LoopNeighbors::try_from((sequence.clone(), &start, emodel.clone(), ShiftMoves::ALL)).unwrap();
+            let moves = LoopNeighbors::try_from((sequence.clone(), &start, emodel.clone(), types)).unwrap();
             let mut ssa = SSA::from((moves, rmodel));
             for step in 0..3000 {
                 let length = ssa.move_set().current_structure_length();
@@ -353,7 +357,8 @@ mod tests {
                 }
                 let db = ssa.current_structure();
                 let pairs = MultiPairTable::try_from(&db).unwrap();
-                let fresh = LoopNeighbors::try_from((sequence.clone(), &pairs, emodel.clone(), ShiftMoves::ALL)).unwrap();
+                let current = ssa.move_set().loop_table().sequence().clone();
+                let fresh = LoopNeighbors::try_from((current, &pairs, emodel.clone(), types)).unwrap();
                 let expected: FxHashMap<Move, f64> = fresh.propose_moves()
                     .map(|(mv, delta)| (mv, rmodel.rate(&mv, delta)))
                     .filter(|&(_, k)| k > 0.0)
@@ -362,7 +367,9 @@ mod tests {
                 assert_eq!(tree, expected, "{seq} step {step}: {db}");
             }
             assert_eq!(ssa.move_set().current_structure_length(), sequence.len());
+            edited += ssa.move_set().loop_table().sequence().iter().filter(|&&b| b == ff_energy::Base::IN).count();
         }
+        assert!(edited > 0, "no edit happened");
     }
 
     #[test]
@@ -386,11 +393,11 @@ mod tests {
     #[test]
     fn sample_at_every_output_time() {
         let emodel = Arc::new(Fuzzyfold::default());
-        let rmodel = Arrhenius::new(emodel.temperature(), 1e5, None, None);
+        let rmodel = Arrhenius::new(emodel.temperature(), 1e5, None, None, None);
         let sequence = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").unwrap();
         let start = MultiPairTable::try_from("..........").unwrap();
         let num_ext = sequence.len() - start.len();
-        let moves = LoopNeighbors::try_from((sequence.clone(), &start, emodel, ShiftMoves::NONE)).unwrap();
+        let moves = LoopNeighbors::try_from((sequence.clone(), &start, emodel, MoveTypes::NONE)).unwrap();
 
         let out = OutputTimes::transcription(1e-3, num_ext, 1e-2).unwrap();
         let schedule = extension_schedule(Some(1e-3), num_ext, out.end()).unwrap();
@@ -406,8 +413,8 @@ mod tests {
     #[test]
     fn test_flux_after_moves() {
         let emodel = Arc::new(Fuzzyfold::default());
-        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
-        let policy = ShiftMoves::ALL;
+        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0), None);
+        let policy = MoveTypes::SHIFTS;
 
         let sequence = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").expect("Invalid sequence?");
         let pairings =     MultiPairTable::try_from(".((((....)))).((((........))))...............").expect("Invalid structure?");
@@ -439,8 +446,8 @@ mod tests {
         // On circular strands, the moves after each step are the moves of a
         // table built from scratch, and the energy is that of the structure.
         let emodel = Arc::new(Fuzzyfold::default());
-        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
-        let policy = ShiftMoves::ALL;
+        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0), None);
+        let policy = MoveTypes::SHIFTS;
         for (seq, db) in [
             ("GGGAAACCCA^", "..........^"),
             ("GCGCAAAAGCGCAAAAAGCGCUUUUGCGC^", ".............................^"),
@@ -474,9 +481,9 @@ mod tests {
         let seq = "UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC";
         let sequence = NucleotideVec::try_from(seq).unwrap();
         let start = MultiPairTable::try_from("..........").unwrap();
-        for shifts in [ShiftMoves::NONE, ShiftMoves::ALL] {
-            let k = (shifts == ShiftMoves::ALL).then_some(1.0);
-            let rmodel = Arrhenius::new(emodel.temperature(), 1.0, k, k);
+        for shifts in [MoveTypes::NONE, MoveTypes::SHIFTS] {
+            let k = (shifts == MoveTypes::SHIFTS).then_some(1.0);
+            let rmodel = Arrhenius::new(emodel.temperature(), 1.0, k, k, None);
             let moves = LoopNeighbors::try_from((sequence.clone(), &start, emodel.clone(), shifts)).unwrap();
             let mut simulator = SSA::from((moves, rmodel));
             let times = vec![5.0; seq.len() - start.len() + 1];
@@ -499,12 +506,12 @@ mod tests {
         // The waiting time belongs to the structure the callback sees: when
         // it ends after t_max, the structure stays; also at each extension.
         let emodel = Arc::new(Fuzzyfold::default());
-        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0));
+        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0), None);
         let seq = "UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC";
         let sequence = NucleotideVec::try_from(seq).unwrap();
         for (seed, t_max) in [(1, 0.5), (2, 3.0), (3, 20.0)] {
             let start = MultiPairTable::try_from(".".repeat(seq.len()).as_str()).unwrap();
-            let moves = LoopNeighbors::try_from((sequence.clone(), &start, emodel.clone(), ShiftMoves::ALL)).unwrap();
+            let moves = LoopNeighbors::try_from((sequence.clone(), &start, emodel.clone(), MoveTypes::SHIFTS)).unwrap();
             let mut simulator = SSA::from((moves, rmodel));
             let mut last = None;
             simulator.simulate(&mut StdRng::seed_from_u64(seed), t_max, |_, _, _, w| {
@@ -516,7 +523,7 @@ mod tests {
         // Before each extension: the structure of the last callback, plus an
         // unpaired base.
         let start = MultiPairTable::try_from("..........").unwrap();
-        let moves = LoopNeighbors::try_from((sequence.clone(), &start, emodel.clone(), ShiftMoves::ALL)).unwrap();
+        let moves = LoopNeighbors::try_from((sequence.clone(), &start, emodel.clone(), MoveTypes::SHIFTS)).unwrap();
         let mut simulator = SSA::from((moves, rmodel));
         let mut previous: Option<DotBracketVec> = None;
         let times = vec![2.0; seq.len() - start.len() + 1];

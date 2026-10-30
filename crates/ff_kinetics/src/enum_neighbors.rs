@@ -25,6 +25,11 @@ impl ApplyMove for DotBracketVec {
                 self[i] = DotBracket::OPEN;
                 self[j] = DotBracket::CLOSE;
             }
+            Move::Edit { .. } => {
+                let (i, j) = mv.added_pair();
+                self[i] = DotBracket::OPEN;
+                self[j] = DotBracket::CLOSE;
+            }
             Move::Del { i, j } => {
                 self[i] = DotBracket::UNPAIRED;
                 self[j] = DotBracket::UNPAIRED;
@@ -145,16 +150,16 @@ mod tests {
     use std::collections::VecDeque;
     use ff_structure::MultiPairTable;
     use ff_energy::{Fuzzyfold, NucleotideVec};
-    use crate::{LoopNeighbors, ShiftMoves};
+    use crate::{LoopNeighbors, MoveTypes};
 
-    fn move_set(model: &Arc<Fuzzyfold>, seq: &str, db: &DotBracketVec, shifts: ShiftMoves) -> LoopNeighbors<Fuzzyfold> {
+    fn move_set(model: &Arc<Fuzzyfold>, seq: &str, db: &DotBracketVec, shifts: MoveTypes) -> LoopNeighbors<Fuzzyfold> {
         let pairs = MultiPairTable::try_from(db).unwrap();
         LoopNeighbors::try_from((NucleotideVec::try_from(seq).unwrap(), &pairs, model.clone(), shifts)).unwrap()
     }
 
     /// Breadth first, with the moves of each structure built from scratch:
     /// every structure is found in the fewest moves.
-    fn reference(model: &Arc<Fuzzyfold>, seq: &str, db: &str, shifts: ShiftMoves,
+    fn reference(model: &Arc<Fuzzyfold>, seq: &str, db: &str, shifts: MoveTypes,
         maxdelta: i32, maxsteps: usize,
     ) -> FxHashSet<DotBracketVec> {
         let root = DotBracketVec::try_from(db).unwrap();
@@ -185,7 +190,7 @@ mod tests {
         let model = Arc::new(Fuzzyfold::default());
         let seq = "UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC";
         let db = ".((((....)))).((((........))))...............";
-        for shifts in [ShiftMoves::NONE, ShiftMoves::ALL] {
+        for shifts in [MoveTypes::NONE, MoveTypes::SHIFTS] {
             for (maxdelta, maxsteps) in [(300, usize::MAX), (600, 3), (i32::MAX / 2, 2), (400, 4)] {
                 let mut moves = move_set(&model, seq, &DotBracketVec::try_from(db).unwrap(), shifts);
                 let mut found = Vec::new();

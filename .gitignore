@@ -7,3 +7,6 @@
 *.nxy
 *.pdf
 *.svg
+*.drf
+__pycache__/
+/crates/ff_python/python/fuzzyfold/*.so

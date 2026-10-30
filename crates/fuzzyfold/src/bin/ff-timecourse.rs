@@ -126,7 +126,7 @@ fn main() -> Result<()> {
             Timecourse::new(times, macrostates.len())
         };
 
-    let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, rmodel.shift_moves()))
+    let moves = LoopNeighbors::try_from((sequence.clone(), &pairings, emodel, rmodel.move_types()))
         .map_err(|e| anyhow::anyhow!("failed to build the move set: {e}"))?;
     master.merge(&run_timecourse(moves, rmodel, &schedule, cli.num_sims as u64,
         &macrostates, &output));
@@ -198,7 +198,7 @@ where
             move |pb, _| {
                 let mut simulator = SSA::from((moves.clone(), rmodel.clone()));
                 let trajectory = simulator.sample(&mut rng(), schedule, output,
-                    |w| registry.classify(&w.current_structure()));
+                    |w| registry.classify(w.current_sequence(), &w.current_structure()));
                 pb.inc(1);
                 trajectory
             },

@@ -1,3 +1,6 @@
+//! The moves of a move set: the Move type, lists of moves with their
+//! energy changes (Neighbors), and the move types a move set proposes.
+
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub enum Move {
@@ -43,6 +46,12 @@ pub enum Move {
         k: usize,
         l: usize,
     },
+    /// An A-to-I edit: the A at i, opposite the C at j in a 1x1 interior
+    /// loop, becomes I, and the pair (i, j) forms. Irreversible.
+    Edit {
+        i: usize,
+        j: usize,
+    },
 }
 
 impl Move {
@@ -71,6 +80,7 @@ impl Move {
             Move::ShiftIKLJ { i, j, k, l } => {
                 Move::ShiftILJK { i, j: k, k: l, l:j }
             }
+            Move::Edit { .. } => panic!("An A-to-I edit has no inverse."),
         }
     }
 
@@ -80,6 +90,7 @@ impl Move {
             Move::Add { i, j } =>  (*i, *j),
             Move::ShiftIK { i, k, .. } => if i < k { (*i, *k) } else { (*k, *i) },
             Move::ShiftJK { j, k, .. } => if j < k { (*j, *k) } else { (*k, *j) },
+            Move::Edit { i, j } => if i < j { (*i, *j) } else { (*j, *i) },
             _ => unreachable!("Move should add a single pair!"),
         }
     }
@@ -125,6 +136,7 @@ impl Move {
             Move::Add { .. } => overlaps(self.added_pair(), pair),
             Move::ShiftIK { .. } => overlaps(self.added_pair(), pair),
             Move::ShiftJK { .. } => overlaps(self.added_pair(), pair),
+            Move::Edit { .. } => overlaps(self.added_pair(), pair),
             Move::ShiftILJK { .. } => {
                 // TODO: maybe check one and debug_assert the other?
                 let (p1, p2) = self.added_pairs();
@@ -138,6 +150,30 @@ impl Move {
             _ => unreachable!("conflicts() is only valid for moves that add pairs"),
         }
     }
+}
+
+/// The neighbors of a structure in a move set: each move with its energy
+/// change, or its barrier for shift moves.
+pub type Neighbors = Vec<(Move, i32)>;
+
+/// The moves a move set proposes, besides adding and deleting pairs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MoveTypes {
+    /// A pair moves one of its bases: (i, j) -> (i, k) or (j, k).
+    pub three_way: bool,
+    /// Two pairs exchange their bases: (i, j), (k, l) -> (i, l), (j, k) or
+    /// (i, k), (l, j).
+    pub four_way: bool,
+    /// A-to-I editing: the A of a 1x1 interior loop with an A opposite a C
+    /// becomes I, and the I-C pair forms.
+    pub a_to_i: bool,
+}
+
+impl MoveTypes {
+    /// Only adding and deleting pairs.
+    pub const NONE: MoveTypes = MoveTypes { three_way: false, four_way: false, a_to_i: false };
+    /// Three-way and four-way shifts.
+    pub const SHIFTS: MoveTypes = MoveTypes { three_way: true, four_way: true, a_to_i: false };
 }
 
 #[cfg(test)]

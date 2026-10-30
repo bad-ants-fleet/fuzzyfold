@@ -16,7 +16,7 @@ use ff_energy::NucleotideVec;
 use ff_energy::check_sequence;
 use ff_energy::Fuzzyfold;
 use ff_kinetics::SSA;
-use ff_kinetics::ShiftMoves;
+use ff_kinetics::MoveTypes;
 use ff_kinetics::Arrhenius;
 use ff_kinetics::MoveSet;
 use ff_kinetics::LoopNeighbors;
@@ -49,6 +49,7 @@ impl Simulator {
         k0=1e5,
         k3ws=0.0,
         k4ws=0.0,
+        k_atoi=0.0,
     ))]
     fn new(
         params: &str,
@@ -56,10 +57,11 @@ impl Simulator {
         k0: f64,
         k3ws: f64,
         k4ws: f64,
+        k_atoi: f64,
     ) -> PyResult<Self> {
         let (energy_model, is_rna) = resolve_energy_model(params, celsius)?;
 
-        if k0 < 0.0 || k3ws < 0.0 || k4ws < 0.0 {
+        if k0 < 0.0 || k3ws < 0.0 || k4ws < 0.0 || k_atoi < 0.0 {
             return Err(PyValueError::new_err(
                 "Rate constants must be non-negative",
             ));
@@ -70,6 +72,7 @@ impl Simulator {
             k0,
             Some(k3ws),
             Some(k4ws),
+            Some(k_atoi),
         );
 
         Ok(Self {
@@ -123,36 +126,40 @@ impl Simulator {
        let schedule = extension_schedule(t_ext, num_ext, output_times.end())
            .map_err(PyValueError::new_err)?;
        let moves = LoopNeighbors::try_from((
-            sequence.clone(), &start_pt, Arc::clone(&self.energy_model), self.rate_model.shift_moves(),
+            sequence.clone(), &start_pt, Arc::clone(&self.energy_model), self.rate_model.move_types(),
        )).map_err(|e| PyValueError::new_err(e.to_string()))?;
        let rate_model = self.rate_model;
+       let edits = rate_model.move_types().a_to_i;
 
-       let results: Vec<Vec<(String, i32)>> = py.detach(|| {
+       // (structure, full sequence with edits if any, energy) at the output times.
+       let results: Vec<Vec<(String, Option<String>, i32)>> = py.detach(|| {
             (0..num_sims).into_par_iter().map(|_| {
                 let mut ssa = SSA::from((moves.clone(), rate_model));
                 ssa.sample(&mut SmallRng::from_os_rng(), &schedule, &output_times,
-                    |w| (w.to_string(), w.current_energy()))
+                    |w| (w.to_string(), edits.then(|| w.current_sequence().to_string()), w.current_energy()))
             }).collect()
        });
        let output_times = output_times.times();
 
-
-       let mut counts: Vec<FxHashMap<String, usize>> = (0..output_times.len()).map(|_| FxHashMap::default()).collect();
-       // Energy per structure (energy in dcal/mol), for the .drf file.
-       let mut energies: FxHashMap<String, i32> = FxHashMap::default();
-
-       for structures in results {
-           for (t_idx, (structure, energy)) in structures.into_iter().enumerate() {
-               *counts[t_idx].entry(structure.clone()).or_insert(0) += 1;
-               energies.entry(structure).or_insert(energy);
+       let mut states: Vec<FxHashMap<DrfState, usize>> = vec![FxHashMap::default(); output_times.len()];
+       for trajectory in results {
+           for (t_idx, state) in trajectory.into_iter().enumerate() {
+               *states[t_idx].entry(state).or_insert(0) += 1;
            }
        }
 
        if let Some(output) = output {
-           write_drf(&output.with_extension("drf"), output_times, &counts, &energies,
-           num_sims, sequence.len())?;
+           write_drf(&output.with_extension("drf"), output_times, &states, num_sims, sequence.len())?;
        }
 
+       // The structure, with edits followed by its sequence (as far as transcribed).
+       let counts = states.into_iter().map(|ensemble| ensemble.into_iter().map(|((s, seq, _), c)| {
+           let key = match seq {
+               Some(seq) => format!("{s} {}", &seq[..s.len()]),
+               None => s,
+           };
+           (key, c)
+       }).collect::<FxHashMap<String, usize>>());
        Ok(output_times.iter().copied().zip(counts).collect())
     }
 
@@ -199,14 +206,14 @@ impl Simulator {
        };
 
        let moves = LoopNeighbors::try_from((
-            sequence.clone(), &start_pt, Arc::clone(&energy_model), rate_model.shift_moves(),
+            sequence.clone(), &start_pt, Arc::clone(&energy_model), rate_model.move_types(),
        )).map_err(|e| PyValueError::new_err(e.to_string()))?;
 
        let master = py.detach(|| {
             let run_one = |_: usize| -> Vec<usize> {
                 let mut ssa = SSA::from((moves.clone(), rate_model));
                 ssa.sample(&mut SmallRng::from_os_rng(), &schedule, &output_times,
-                    |w| registry.classify(&w.current_structure()))
+                    |w| registry.classify(w.current_sequence(), &w.current_structure()))
             };
 
             // Count trajectories as they finish rather than keeping them in memory.
@@ -339,7 +346,7 @@ impl Explorer {
         let pairings = MultiPairTable::try_from(&structure_db)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let energy_model = Arc::clone(&self.energy_model);
-        let shifts = ShiftMoves { three_way: self.three_way_shifts, four_way: self.four_way_shifts };
+        let shifts = MoveTypes { three_way: self.three_way_shifts, four_way: self.four_way_shifts, a_to_i: false };
 
         let mut results: Vec<(String, f64)> = py.detach(move || -> Result<_, String> {
             let mut out: Vec<(String, f64)> = Vec::new();
@@ -424,44 +431,57 @@ pub fn transcription_times(t_ext: f64, num_ext: usize, t_end: f64) -> PyResult<V
 
 
 
+/// A structure with its full sequence (with edits, if any) and energy.
+type DrfState = (String, Option<String>, i32);
+
+/// The ensembles at the output times as a .drf file; with edits, the
+/// sequence of each structure is a column. A structure keeps its id when
+/// the strand grows, not when it is edited.
 fn write_drf(
     path: &PathBuf,
     times: &[f64],
-    counts: &[FxHashMap<String, usize>],
-    energies: &FxHashMap<String, i32>,
+    states: &[FxHashMap<DrfState, usize>],
     num_sims: usize,
     seqlen: usize,
 ) -> PyResult<()> {
     use std::io::Write;
 
-    let padded = |s: &str| format!("{}{}", s, ".".repeat(seqlen.saturating_sub(s.len())));
+    let id_key = |(s, seq, _): &DrfState| format!("{}{} {}", s, ".".repeat(seqlen.saturating_sub(s.len())),
+        seq.as_deref().unwrap_or(""));
 
-    // Per time point: (structure, energy, count), sorted by energy (then structure).
-    let sorted: Vec<Vec<(&String, i32, usize)>> = counts.iter().map(|ensemble| {
-        let mut entries: Vec<(&String, i32, usize)> = ensemble.iter()
-            .map(|(s, &c)| (s, energies[s], c))
-            .collect();
-        entries.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(b.0)));
+    // Per time point: the states with their counts, sorted by energy (then structure).
+    let sorted: Vec<Vec<(&DrfState, usize)>> = states.iter().map(|ensemble| {
+        let mut entries: Vec<(&DrfState, usize)> = ensemble.iter().map(|(s, &c)| (s, c)).collect();
+        entries.sort_by(|a, b| a.0.2.cmp(&b.0.2).then_with(|| a.0.cmp(b.0)));
         entries
     }).collect();
 
     let mut idict: FxHashMap<String, usize> = FxHashMap::default();
     for entries in &sorted {
-        for (s, _, _) in entries {
+        for (state, _) in entries {
             let next_id = idict.len();
-            idict.entry(padded(s)).or_insert(next_id);
+            idict.entry(id_key(state)).or_insert(next_id);
         }
     }
 
+    let edits = states.iter().flat_map(|e| e.keys()).any(|(_, seq, _)| seq.is_some());
     let mut writer = std::io::BufWriter::new(fs::File::create(path)?);
-    writeln!(writer, "id time occupancy structure energy")?;
+    if edits {
+        writeln!(writer, "id time occupancy structure energy sequence")?;
+    } else {
+        writeln!(writer, "id time occupancy structure energy")?;
+    }
     for (t, entries) in times.iter().zip(&sorted) {
-        for (s, en, count) in entries {
-            writeln!(
+        for (state @ (s, seq, en), count) in entries {
+            write!(
                 writer,
                 "{:5} {:03.3} {:5} {} {:6.2}",
-                idict[&padded(s)], t, *count as f64 / num_sims as f64, s, *en as f64 / 100.0
+                idict[&id_key(state)], t, *count as f64 / num_sims as f64, s, *en as f64 / 100.0
             )?;
+            if let Some(seq) = seq {
+                write!(writer, " {}", &seq[..s.len()])?;
+            }
+            writeln!(writer)?;
         }
     }
     writer.flush()?;
@@ -475,11 +495,12 @@ fn build_iterator(
     rate_model: Arrhenius,
     times: Vec<f64>,
 ) -> PyResult<SimulationIterator> {
-    let moves = LoopNeighbors::try_from((seq, start_pt, energy_model, rate_model.shift_moves()))
+    let moves = LoopNeighbors::try_from((seq, start_pt, energy_model, rate_model.move_types()))
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let ssa = SSA::from((moves, rate_model));
 
     Ok(SimulationIterator {
+        sequence: ssa.move_set().current_sequence().clone(),
         ssa,
         rng: SmallRng::from_os_rng(),
         times,
@@ -492,6 +513,8 @@ fn build_iterator(
 pub struct SimulationIterator {
     ssa: SSA<LoopNeighbors<Fuzzyfold>, Arrhenius>,
     rng: SmallRng,
+    /// The sequence of the last state (it changes with A-to-I edits).
+    sequence: NucleotideVec,
     times: Vec<f64>,
     elapsed: f64,
     finished: bool,
@@ -502,6 +525,13 @@ impl SimulationIterator {
 
     fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
         slf
+    }
+
+    /// The sequence of the last state: the input sequence, with the A-to-I
+    /// edits made so far (full length).
+    #[getter]
+    fn sequence(&self) -> String {
+        self.sequence.to_string()
     }
 
     /// The next state: (structure, energy, time, waiting time, flux). It
@@ -516,6 +546,9 @@ impl SimulationIterator {
         let (drawn, flux) = this.ssa.waiting_time(&mut this.rng).unwrap_or((f64::INFINITY, 0.0));
         let tinc = drawn.min(rest);
         let moves = this.ssa.move_set();
+        if moves.current_sequence() != &this.sequence {
+            this.sequence = moves.current_sequence().clone();
+        }
         let state = (
             moves.to_string(),
             moves.current_energy() as f64 / 100.0, // kcal/mol

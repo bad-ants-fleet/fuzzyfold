@@ -8,6 +8,7 @@ use rand::Rng;
 use ff_structure::DotBracketVec;
 use ff_structure::DotBracket;
 use ff_structure::MultiPairTable;
+use ff_energy::Base;
 use ff_energy::NucleotideVec;
 use ff_energy::EnergyModel;
 
@@ -61,6 +62,9 @@ use crate::{ZERO_CELSIUS, KB};
 #[derive(Debug)]
 pub struct Macrostate {
     name: String,
+    /// The sequence of the structures (full length), None for the
+    /// catch-all macrostate.
+    sequence: Option<NucleotideVec>,
     ensemble: FxHashMap<DotBracketVec, (i32, f64)>,
     ensemble_energy: Option<f64>,
 }
@@ -92,6 +96,7 @@ impl Macrostate {
     pub fn new_catch_all(name: &str) -> Self {
         Macrostate { 
             name: name.to_owned(),
+            sequence: None,
             ensemble: FxHashMap::default(),
             ensemble_energy: None,
         }
@@ -122,6 +127,7 @@ impl Macrostate {
         }
         Self {
             name: name.to_owned(),
+            sequence: Some(sequence.clone()),
             ensemble,
             ensemble_energy: Some(-rt * q_sum.ln()),
         }
@@ -129,6 +135,12 @@ impl Macrostate {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// The sequence of the structures (full length), None for the
+    /// catch-all macrostate.
+    pub fn sequence(&self) -> Option<&NucleotideVec> {
+        self.sequence.as_ref()
     }
 
     pub fn ensemble(&self) -> &FxHashMap<DotBracketVec, (i32, f64)> {
@@ -262,8 +274,11 @@ impl<E: EnergyModel> MacrostateRegistry<E> {
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
         };
 
-        if file_seq != self.sequence {
-            return Err(io_err("Sequence does not match input sequence", source));
+        // The input sequence, or an A-to-I edit of it.
+        let edited = file_seq.len() == self.sequence.len() && file_seq.iter().zip(self.sequence.iter())
+            .all(|(f, s)| f == s || (*f == Base::IN && *s == Base::A));
+        if !edited {
+            return Err(io_err("Sequence does not match the input sequence (or an A-to-I edit of it)", source));
         }
 
         let mut structures = Vec::new();
@@ -296,27 +311,33 @@ impl<E: EnergyModel> MacrostateRegistry<E> {
             return Ok(false)
         }
 
-        // Macrostates of the same length are disjoint.
+        // Macrostates of the same length and sequence are disjoint.
         let len = file_seq.len() - remove;
         for (l, ms) in &self.macrostates {
-            if let Some(s) = structures.iter().find(|s| *l == len && ms.contains(s)) {
+            if *l != len || ms.sequence() != Some(&file_seq) {
+                continue;
+            }
+            if let Some(s) = structures.iter().find(|s| ms.contains(s)) {
                 return Err(io_err(&format!("Structure {} is also in macrostate {}", s, ms.name()), source));
             }
         }
         self.macrostates.push((len, Macrostate::from_list(
             &name,
-            &self.sequence,
+            &file_seq,
             &structures,
             &*self.energy_model,
         )));
         Ok(true)
     }
 
-    /// The index of the macrostate that contains a structure, 0 (unassigned)
-    /// if none does. Macrostates of the same length are disjoint.
-    pub fn classify(&self, structure: &DotBracketVec) -> usize {
+    /// The index of the macrostate that contains a structure of a sequence
+    /// (full length, as far as it is transcribed), 0 (unassigned) if none
+    /// does. Macrostates of the same length and sequence are disjoint.
+    pub fn classify(&self, sequence: &[Base], structure: &DotBracketVec) -> usize {
+        let n = structure.len();
         self.macrostates.iter()
-            .position(|(len, ms)| structure.len() == *len && ms.contains(structure))
+            .position(|(len, ms)| n == *len && ms.contains(structure)
+                && ms.sequence().is_some_and(|s| s[..n] == sequence[..n]))
             .unwrap_or(0)
     }
 
@@ -393,6 +414,34 @@ mod tests {
         assert!((total - 1.0).abs() < 1e-9);
     }
 
+    fn seq_of<E: EnergyModel>(registry: &MacrostateRegistry<E>) -> Vec<Base> {
+        registry.sequence().to_vec()
+    }
+
+    #[test]
+    fn a_to_i_edited_macrostates() {
+        let model = Arc::new(Fuzzyfold::default());
+        let seq = NucleotideVec::try_from("GCGACGCAAAAGCGCCGC").unwrap();
+        let mut registry = MacrostateRegistry::from((seq, model));
+        let plain = b">plain\nGCGACGCAAAAGCGCCGC\n(((.(((....))).)))\n";
+        let edited = b">edited\nGCGICGCAAAAGCGCCGC\n(((((((....)))))))\n";
+        registry.insert_from_reader(Cursor::new(&plain[..]), "manual", 0).unwrap();
+        registry.insert_from_reader(Cursor::new(&edited[..]), "manual", 0).unwrap();
+
+        // A structure belongs to the macrostate of its sequence.
+        let open = DotBracketVec::try_from("(((.(((....))).)))").unwrap();
+        let paired = DotBracketVec::try_from("(((((((....)))))))").unwrap();
+        let mut bases = registry.sequence().to_vec();
+        assert_eq!(registry.classify(&bases, &open), 1);
+        bases[3] = Base::IN;
+        assert_eq!(registry.classify(&bases, &open), 0);
+        assert_eq!(registry.classify(&bases, &paired), 2);
+
+        // Another base is not an edit.
+        let other = b">other\nGCGGCGCAAAAGCGCCGC\n..................\n";
+        assert!(registry.insert_from_reader(Cursor::new(&other[..]), "manual", 0).is_err());
+    }
+
     #[test]
     fn test_macrostateregistry_init_and_classify() {
         let energy_model = Fuzzyfold::from_thermo_params(&RNA_TURNER_2004, 37.0);
@@ -415,15 +464,15 @@ mod tests {
 
         // Build a test macrostate with a few structures
         let s1 = DotBracketVec::try_from(".((((....)))).((((........))))...............").unwrap();
-        assert_eq!(registry.classify(&s1), 1);
+        assert_eq!(registry.classify(&seq_of(&registry), &s1), 1);
         let s2 = DotBracketVec::try_from(".((((....)))).((((.(....).))))...............").unwrap();
-        assert_eq!(registry.classify(&s2), 1);
+        assert_eq!(registry.classify(&seq_of(&registry), &s2), 1);
         let s3 = DotBracketVec::try_from(".((((....))))..(((........)))................").unwrap();
-        assert_eq!(registry.classify(&s3), 1);
+        assert_eq!(registry.classify(&seq_of(&registry), &s3), 1);
 
         // Unknown structure: should return 0 ("Unassigned")
         let s4 = DotBracketVec::try_from("..............").unwrap();
-        assert_eq!(registry.classify(&s4), 0);
+        assert_eq!(registry.classify(&seq_of(&registry), &s4), 0);
 
         // A structure in two macrostates is an error.
         let overlap = b">other

@@ -15,7 +15,7 @@ use ff_energy::Fuzzyfold;
 use ff_kinetics::Arrhenius;
 use ff_kinetics::LoopNeighbors;
 use ff_kinetics::MacrostateRegistry;
-use ff_kinetics::ShiftMoves;
+use ff_kinetics::MoveTypes;
 use ff_kinetics::SSA;
 use ff_kinetics::MoveSet;
 
@@ -52,7 +52,7 @@ fn load_registries(len: usize, emodel: &Arc<Fuzzyfold>) -> Vec<MacrostateRegistr
 /// iteration starts from the same seed.
 fn bench_classify_dbv(c: &mut Criterion) {
     let emodel = Arc::new(Fuzzyfold::default());
-    let rmodel = Arrhenius::new(emodel.temperature(), 1.0, None, None);
+    let rmodel = Arrhenius::new(emodel.temperature(), 1.0, None, None, None);
     let mut group = c.benchmark_group("Classify macrostates (DBV) during SSA");
     group.sampling_mode(SamplingMode::Flat);
     group.sample_size(10);
@@ -66,11 +66,11 @@ fn bench_classify_dbv(c: &mut Criterion) {
                 let mut rng = StdRng::seed_from_u64(42);
                 let mut classifications = 0usize;
                 for ((seq, pt), registry) in inputs.iter().zip(&registries) {
-                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), ShiftMoves::NONE))
+                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), MoveTypes::NONE))
                         .expect("Failed to build LoopNeighbors");
                     let mut simulator = SSA::from((moves, rmodel));
                     simulator.simulate(&mut rng, black_box(10.0), |_t, _ti, _fl, moves| {
-                        classifications += registry.classify(&moves.current_structure());
+                        classifications += registry.classify(moves.current_sequence(), &moves.current_structure());
                         true
                     });
                 }
@@ -95,7 +95,7 @@ fn bench_classify_isolated(c: &mut Criterion) {
         b.iter(|| {
             let mut sum = 0usize;
             for (s, registry) in structures.iter().zip(&registries) {
-                sum += registry.classify(black_box(s));
+                sum += registry.classify(registry.sequence(), black_box(s));
             }
             black_box(sum)
         })

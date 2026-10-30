@@ -1,6 +1,5 @@
 use std::fmt;
 use std::sync::Arc;
-use nohash_hasher::IntMap;
 
 use ff_structure::DotBracket;
 use ff_structure::DotBracketVec;
@@ -31,9 +30,12 @@ pub struct LoopTable<E: EnergyModel> {
     loops: Vec<LoopEntry>,
     stale: Vec<usize>,
     loop_lookup: Vec<usize>,
-    pair_lookup: IntMap<usize, usize>,
+    /// The partner of each paired position, UNPAIRED otherwise.
+    pair_table: Vec<usize>,
     energy: i32,
 }
+
+const UNPAIRED: usize = usize::MAX;
 
 /// Clone creates an independent loop bookkeeping state,
 /// but shares the underlying sequence and energy model.
@@ -45,7 +47,7 @@ impl<E: EnergyModel> Clone for LoopTable<E> {
             loops: self.loops.clone(),
             stale: self.stale.clone(),
             loop_lookup: self.loop_lookup.clone(),
-            pair_lookup: self.pair_lookup.clone(),
+            pair_table: self.pair_table.clone(),
             energy: self.energy,
         }
     }
@@ -54,6 +56,18 @@ impl<E: EnergyModel> Clone for LoopTable<E> {
 impl<E: EnergyModel> LoopTable<E> {
     pub fn sequence_length(&self) -> usize {
         self.sequence.len()
+    }
+
+    /// The sequence, with the edits made so far.
+    pub fn sequence(&self) -> &NucleotideVec {
+        &self.sequence
+    }
+
+    /// Change a base, as an edit; the loops are not updated.
+    pub(crate) fn set_base(&mut self, i: usize, base: Base) {
+        let mut bases = self.sequence.to_vec();
+        bases[i] = base;
+        self.sequence = NucleotideVec::try_from(bases).expect("A base for a base");
     }
 
     pub fn min_hairpin_size(&self) -> usize {
@@ -89,16 +103,23 @@ impl<E: EnergyModel> LoopTable<E> {
         self.loop_lookup.len()
     }
 
-    pub fn pairs(&self) -> impl Iterator<Item = (&usize, &usize)> + '_ {
-        self.pair_lookup.iter()
+    /// The pairs (i, j), i < j, in the order of i.
+    pub fn pairs(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
+        self.pair_table.iter().enumerate().filter(|&(i, &j)| j != UNPAIRED && i < j).map(|(i, &j)| (i, j))
     }
 
-    pub(crate) fn delete_pair(&mut self, i: &usize) -> usize {
-        self.pair_lookup.remove(i).expect("Missing pair_list entry.")
+    /// Delete the pair of i, returns its partner.
+    pub(crate) fn delete_pair(&mut self, i: usize) -> usize {
+        let j = self.pair_table[i];
+        assert_ne!(j, UNPAIRED, "Missing pair-table entry.");
+        self.pair_table[i] = UNPAIRED;
+        self.pair_table[j] = UNPAIRED;
+        j
     }
 
     pub(crate) fn insert_pair(&mut self, i: usize, j: usize) {
-        self.pair_lookup.insert(i, j);
+        self.pair_table[i] = j;
+        self.pair_table[j] = i;
     }
 
     pub fn energy(&self) -> i32 {
@@ -114,10 +135,6 @@ impl<E: EnergyModel> LoopTable<E> {
         for s in l.stretches() {
             self.loop_lookup[s.unpaired.start..=s.ends.1].fill(idx);
         }
-    }
-
-    pub(crate) fn pair_lookup(&self, idx: &usize) -> usize {
-        self.pair_lookup[idx]
     }
 
     pub(crate) fn loop_lookup(&self, idx: usize) -> usize {
@@ -164,9 +181,9 @@ impl<E: EnergyModel> fmt::Display for LoopTable<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Convert sequence to string
         let mut dbr = vec!['.'; self.loop_lookup.len()];
-        for (i, j) in &self.pair_lookup {
-            dbr[*i ] = '(';
-            dbr[*j ] = ')';
+        for (i, j) in self.pairs() {
+            dbr[i] = '(';
+            dbr[j] = ')';
         }
         if self.is_circular() {
             *dbr.last_mut().unwrap() = '^';
@@ -180,7 +197,7 @@ impl<E: EnergyModel> fmt::Debug for LoopTable<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LoopTable")
             .field("loop_lookup", &self.loop_lookup)
-            .field("pair_lookup", &self.pair_lookup)
+            .field("pair_table", &self.pair_table)
             .finish()
     }
 }
@@ -190,8 +207,8 @@ impl<E: EnergyModel> From<&LoopTable<E>> for DotBracketVec {
         // Use the same logic as your Display impl, but avoid allocating a String unnecessarily
         let mut vec = vec![DotBracket::UNPAIRED; ltab.lookup_len()];
         for (i, j) in ltab.pairs() {
-            vec[*i ] = DotBracket::OPEN;
-            vec[*j ] = DotBracket::CLOSE;
+            vec[i] = DotBracket::OPEN;
+            vec[j] = DotBracket::CLOSE;
         }
         if ltab.is_circular() {
             *vec.last_mut().unwrap() = DotBracket::STRAND_WRAP;
@@ -223,7 +240,7 @@ impl<E: EnergyModel> LoopTable<E> {
 
         let mut loops = Vec::new();
         let mut loop_lookup = Vec::with_capacity(sequence.len());
-        let mut pair_lookup: IntMap<usize, usize>  = IntMap::default();
+        let mut pair_table = vec![UNPAIRED; sequence.len()];
         let mut energy = 0;
 
         let mut current_len = 0;
@@ -265,7 +282,8 @@ impl<E: EnergyModel> LoopTable<E> {
             energy += loop_energy;
 
             if let Some((i, j)) = l.closing() {
-                pair_lookup.insert(i, j); 
+                pair_table[i] = j;
+                pair_table[j] = i;
             }
 
             let loop_index = loops.len();
@@ -291,10 +309,18 @@ impl<E: EnergyModel> LoopTable<E> {
             loops,
             stale: Vec::new(),
             loop_lookup,
-            pair_lookup,
+            pair_table,
             energy,
         })
     }
+}
+
+/// The loop table of a structure, for tests.
+#[cfg(test)]
+pub(crate) fn table<E: EnergyModel>(model: E, seq: &str, db: &str) -> LoopTable<E> {
+    let sequence = NucleotideVec::try_from(seq).unwrap();
+    let pairs = MultiPairTable::try_from(db).unwrap();
+    LoopTable::try_from((sequence, &pairs, Arc::new(model))).unwrap()
 }
 
 #[cfg(test)]

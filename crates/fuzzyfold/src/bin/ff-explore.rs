@@ -9,7 +9,7 @@ use anyhow::Result;
 use env_logger::Builder;
 
 use ff_energy::EnergyModel;
-use ff_kinetics::ShiftMoves;
+use ff_kinetics::MoveTypes;
 use fuzzyfold::structure::MultiPairTable;
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
@@ -107,7 +107,7 @@ fn main() -> Result<()> {
         println!("{}", sequence);
     }
 
-    let shifts = ShiftMoves { three_way: cli.lmin.three_way_shifts, four_way: cli.lmin.four_way_shifts };
+    let shifts = MoveTypes { three_way: cli.lmin.three_way_shifts, four_way: cli.lmin.four_way_shifts, a_to_i: false };
     let mut moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shifts))
         .map_err(|e| anyhow::anyhow!("failed to build loop table: {e}"))?;
     do_enumerate(&mut moves, delta, distance, cli.lmin.sorted);

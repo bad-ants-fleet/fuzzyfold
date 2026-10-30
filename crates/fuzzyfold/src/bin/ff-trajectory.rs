@@ -88,7 +88,7 @@ fn main() -> Result<()> {
     let end = cli.t_ext.map_or(0.0, |t| t * num_ext as f64) + cli.t_end;
     let times = extension_schedule(cli.t_ext, num_ext, end).map_err(anyhow::Error::msg)?;
 
-    let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, rmodel.shift_moves()))
+    let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, rmodel.move_types()))
         .map_err(|e| anyhow::anyhow!("failed to build the move set: {e}"))?;
     run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
 
@@ -105,57 +105,55 @@ fn run_simulator<W: Elongation + std::fmt::Display, K: RateModel>(
 )
 {
     let mut simulator = SSA::from((moves, rmodel));
+    // When an edit changes the sequence, it is printed (as far as it is
+    // transcribed) before the structure, with the same columns.
+    let mut sequence = simulator.move_set().current_sequence().clone();
+    let mut edited = move |w: &W| {
+        let changed = w.current_sequence() != &sequence;
+        if changed {
+            sequence = w.current_sequence().clone();
+        }
+        changed.then(|| sequence.to_string()[..w.current_structure_length()].to_string())
+    };
+    let mut print_step = |t: f64, tinc: f64, flux: f64, w: &W| {
+        let columns = format!("{:8.2} {:14.8e} {:14.8e} {:15.8e}",
+            w.current_energy() as f64 / 100., t, tinc, 1.0 / flux);
+        if let Some(seq) = edited(w) {
+            println!("{} {}", seq.yellow(), columns);
+        }
+        println!("{} {}", w, columns);
+    };
 
     match (silent, num_steps) {
         (true, 0) => {
             simulator.co_simulate(&mut rng(), times, |_, _, _, _|  true);
-            let cs = simulator.current_structure();
-            let en = simulator.current_energy();
-            println!("{} {:8.2}", cs, en as f64 / 100.);
         },
         (false, 0) => {
-            simulator.co_simulate(&mut rng(), times, 
-                |t, tinc, flux, w| {
-                    println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
-                        w,
-                        w.current_energy() as f64 / 100.,
-                        t,
-                        tinc,
-                        1.0 / flux,
-                    );
-                    true
-                });
-        },
-        (true, _) => {
-            if times.len() > 1 {
-                panic!("no support for co-transcriptional num-steps.")
-            }
-            let mut steps = 0;
-            simulator.simulate(&mut rng(), f64::MAX, |_, _, _, _| {
-                steps += 1;
-                steps < num_steps 
+            simulator.co_simulate(&mut rng(), times, |t, tinc, flux, w| {
+                print_step(t, tinc, flux, w);
+                true
             });
-            let ls = simulator.current_structure();
-            let en = simulator.current_energy();
-            println!("{} {:8.2}", ls, en as f64 / 100.);
         },
-        (false, _) => {
+        (silent, _) => {
             if times.len() > 1 {
                 panic!("no support for co-transcriptional num-steps.")
             }
             let mut steps = 0;
-            simulator.simulate(&mut rng(), f64::MAX, 
-                |t, tinc, flux, w| {
-                    println!("{} {:8.2} {:14.8e} {:14.8e} {:15.8e}",
-                        w,
-                        w.current_energy() as f64 / 100.,
-                        t,
-                        tinc,
-                        1.0 / flux,
-                    );
-                    steps += 1;
-                    steps < num_steps 
-                });
+            simulator.simulate(&mut rng(), f64::MAX, |t, tinc, flux, w| {
+                if !silent {
+                    print_step(t, tinc, flux, w);
+                }
+                steps += 1;
+                steps < num_steps
+            });
         },
+    }
+    if silent {
+        let w = simulator.move_set();
+        let energy = format!("{:8.2}", w.current_energy() as f64 / 100.);
+        if let Some(seq) = edited(w) {
+            println!("{} {}", seq.yellow(), energy);
+        }
+        println!("{} {}", simulator.current_structure(), energy);
     }
 }

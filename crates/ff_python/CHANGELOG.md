@@ -16,6 +16,10 @@ All notable changes to this crate will be documented in this file.
 
 - lin_log_times and transcription_times: output times for simulations.
 
+- A-to-I editing: Simulator(k_atoi=...), SimulationIterator.sequence, the
+  sequence in the keys of simulate_ensemble and as a column of .drf files
+  (with edits), and macrostates of edited sequences.
+
 ### Changed
 - Simulator.simulate_timecourse returns a Timecourse.
 - simulate_ensemble and simulate_timecourse take a list of output times
@@ -28,3 +32,14 @@ All notable changes to this crate will be documented in this file.
 - Plotter (use fuzzyfold.plotting) and
   Simulator.aggregate_timecourse_results (use Timecourse.merge, or
   `python -m fuzzyfold.plotting` with several .tln files and --merged).
+
+
+## 0.5.0 - 2026-10-06
+### Changed
+- Default rna parameter specification.
+- simulate -> simulate_trajectory.
+
+### Added
+- export for simulate_ensemble.
+- export for simulate_timecourse.
+- various file i/o conversions

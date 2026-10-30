@@ -1,13 +1,10 @@
-mod base_pair_moves;
-mod four_way_shifts;
-mod loop_neighbors;
-mod loop_table;
+mod moves;
 mod move_set;
-mod shift_moves;
-mod three_way_shifts;
+mod loop_table;
+mod loop_neighbors;
+mod shifts;
 
-pub use base_pair_moves::*;
-pub use loop_neighbors::*;
-pub use loop_table::LoopTable;
+pub use moves::*;
 pub use move_set::*;
-pub use shift_moves::ShiftMoves;
+pub use loop_table::LoopTable;
+pub use loop_neighbors::*;

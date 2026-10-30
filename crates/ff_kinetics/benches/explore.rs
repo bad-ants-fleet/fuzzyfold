@@ -5,7 +5,7 @@ use criterion::criterion_group;
 use criterion::criterion_main;
 
 use ff_energy::Fuzzyfold;
-use ff_kinetics::ShiftMoves;
+use ff_kinetics::MoveTypes;
 use ff_kinetics::LoopNeighbors;
 use ff_kinetics::enum_neighbors::enumerate_neighbors;
 
@@ -26,7 +26,7 @@ pub fn gen_neighbors(c: &mut Criterion) {
             b.iter(|| {
                 let mut count = 0usize;
                 for (seq, pt) in &inputs {
-                    let mut moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), ShiftMoves::NONE))
+                    let mut moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), MoveTypes::NONE))
                         .expect("Failed to build LoopNeighbors");
                     enumerate_neighbors(&mut moves, 0, 5, |_, _| {
                         count += 1;

@@ -33,8 +33,8 @@ fn digest(lines: &[String]) -> u64 {
 fn trajectory(seq: &str, db: &str, shifts: bool) -> Vec<String> {
     let model = Arc::new(Fuzzyfold::default());
     let shift = shifts.then_some(1.0);
-    let rates = Arrhenius::new(model.temperature(), 1.0, shift, shift);
-    let policy = rates.shift_moves();
+    let rates = Arrhenius::new(model.temperature(), 1.0, shift, shift, None);
+    let policy = rates.move_types();
     let sequence = NucleotideVec::try_from(seq).unwrap();
     let start = MultiPairTable::try_from(db).unwrap();
     let moves = LoopNeighbors::try_from((sequence.clone(), &start, model.clone(), policy)).unwrap();

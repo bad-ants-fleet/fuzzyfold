@@ -12,7 +12,7 @@ use ff_energy::EnergyModel;
 use ff_energy::Fuzzyfold;
 use ff_kinetics::Arrhenius;
 use ff_kinetics::LoopNeighbors;
-use ff_kinetics::ShiftMoves;
+use ff_kinetics::MoveTypes;
 use ff_kinetics::SSA;
 
 mod common;
@@ -24,7 +24,7 @@ const LENGTHS: [usize; 3] = [100, 1000, 2500];
 /// trajectories.
 fn simulate_benchmark(c: &mut Criterion) {
     let emodel = Arc::new(Fuzzyfold::default());
-    let rmodel = Arrhenius::new(emodel.temperature(), 1.0, None, None);
+    let rmodel = Arrhenius::new(emodel.temperature(), 1.0, None, None, None);
     let mut group = c.benchmark_group("Seeded stochastic simulations.");
     group.sampling_mode(SamplingMode::Flat);
     group.sample_size(10);
@@ -36,7 +36,7 @@ fn simulate_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 let mut rng = StdRng::seed_from_u64(42);
                 for (seq, pt) in &inputs {
-                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), ShiftMoves::NONE))
+                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), MoveTypes::NONE))
                         .expect("Failed to build LoopNeighbors");
                     let mut simulator = SSA::from((moves, rmodel));
                     simulator.simulate(&mut rng, black_box(10.0), |_t, _ti, _fl, _w| true);
@@ -49,7 +49,7 @@ fn simulate_benchmark(c: &mut Criterion) {
 
 fn simulate_three_way_shift_benchmark(c: &mut Criterion) {
     let emodel = Arc::new(Fuzzyfold::default());
-    let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), None);
+    let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), None, None);
     let mut group = c.benchmark_group("Seeded stochastic simulations with three-way shift moves.");
     group.sampling_mode(SamplingMode::Flat);
     group.sample_size(10);
@@ -61,7 +61,7 @@ fn simulate_three_way_shift_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 let mut rng = StdRng::seed_from_u64(42);
                 for (seq, pt) in &inputs {
-                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), ShiftMoves { three_way: true, four_way: false }))
+                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), MoveTypes { three_way: true, four_way: false, a_to_i: false }))
                         .expect("Failed to build LoopNeighbors");
                     let mut simulator = SSA::from((moves, rmodel));
                     simulator.simulate(&mut rng, black_box(10.0), |_t, _ti, _fl, _w| true);

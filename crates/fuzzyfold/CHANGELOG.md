@@ -4,6 +4,13 @@ All notable changes to this crate will be documented in this file.
 
 ## [development]
 ## Added
+- --k-AtoI: the rate of A-to-I editing in ff-trajectory, ff-timecourse and
+  ff-ensemble (an A opposite a C in a 1x1 interior loop becomes I and pairs).
+  ff-trajectory prints the sequence (as far as transcribed) when an edit
+  changes it, with the energy and times of the new state; ff-ensemble
+  writes the sequence as a column of the .drf file (a structure keeps its id
+  as the strand grows, not when it is edited); a macrostate file of
+  ff-timecourse may give an edited sequence (I for A)
 - --model fuzzyfold|viennarna: the energy model (default fuzzyfold);
   with viennarna, the default RNA parameters are turner2004
 

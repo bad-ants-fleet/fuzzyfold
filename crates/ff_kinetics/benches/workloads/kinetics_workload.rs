@@ -18,7 +18,7 @@ const DATA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ff_energy/benches/da
 fn run(shifts: bool, len: usize, count: usize, t_max: f64, steps: i64) -> i64 {
     let model = Arc::new(Fuzzyfold::default());
     let s = shifts.then_some(1.0);
-    let rates = Arrhenius::new(model.temperature(), 1.0, s, s);
+    let rates = Arrhenius::new(model.temperature(), 1.0, s, s, None);
     let mut rng = StdRng::seed_from_u64(42);
     let input = std::fs::read_to_string(format!("{DATA}/benchmark_random_structures_len{len}.vrna")).unwrap();
     let lines: Vec<&str> = input.lines().collect();
@@ -26,7 +26,7 @@ fn run(shifts: bool, len: usize, count: usize, t_max: f64, steps: i64) -> i64 {
     for c in lines.chunks(3).take(count) {
         let seq = NucleotideVec::try_from(c[1]).unwrap();
         let start = MultiPairTable::try_from(c[2]).unwrap();
-        let moves = LoopNeighbors::try_from((seq, &start, model.clone(), rates.shift_moves())).unwrap();
+        let moves = LoopNeighbors::try_from((seq, &start, model.clone(), rates.move_types())).unwrap();
         let mut ssa = SSA::from((moves, rates));
         let mut n = 0i64;
         ssa.simulate(&mut rng, t_max, |_, _, _, w| { n += 1; sum += w.current_energy() as i64; n < steps });

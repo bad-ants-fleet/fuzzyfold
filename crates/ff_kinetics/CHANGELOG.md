@@ -25,6 +25,16 @@ All notable changes to this crate will be documented in this file.
   move set built from scratch.
 
 ### Added
+- A-to-I editing (Move::Edit, MoveTypes::a_to_i, the rate constant k_atoi of
+  Arrhenius, a fifth argument of Arrhenius::new): the A of a 1x1 interior
+  loop with an A opposite a C becomes I, and the I-C pair forms, in one
+  irreversible move at a constant rate. LoopTable::sequence and
+  MoveSet::current_sequence give the sequence with the edits so far. A
+  macrostate may have an edited sequence (I for A, in its file);
+  MacrostateRegistry::classify takes the sequence and the structure, and
+  macrostates of the same length and sequence are disjoint. Tests compare an edit, and every step of
+  simulations with edits, with a move set built from scratch on the edited
+  sequence. Without edits, identical trajectories, 0.2% more instructions.
 - Crate documentation: move sets, rate models, the SSA, co-transcriptional
   folding, output times, macrostates and time courses, neighborhoods.
 - OutputTimes: the times at which a simulation reports its state; any
@@ -36,6 +46,23 @@ All notable changes to this crate will be documented in this file.
   ff-timecourse, ff-ensemble and the Python bindings use them.
 
 ### Changed
+- The move set modules: moves.rs (Move, Neighbors, MoveTypes), move_set.rs
+  (the traits), loop_table.rs, loop_neighbors.rs (with its MoveSet and
+  Elongation impls), and shifts.rs (three-way and four-way shifts as
+  functions; ThreeWayNeighbors and FourWayNeighbors are removed). Identical
+  trajectories and shift_analysis output.
+- three_way_shifts iterates over the pairs of a loop in a vector instead
+  of two hash maps (10% fewer instructions per call). The same moves in a
+  different order: seeded trajectories with shift moves differ.
+- LoopNeighbors keeps the moves of each loop in a vector by loop index
+  (LoopMoves: add moves, three-way and four-way shifts, edit) and the
+  delete energies in a vector by position; LoopTable keeps a pair table
+  instead of a map. No hash maps but the index of the rate tree (13% fewer
+  instructions in kinetics_workload no-shifts, 3% with shifts, on the same
+  trajectories). propose_moves lists the moves in the order of loops and
+  positions, so the rate tree starts in a different order: seeded
+  trajectories differ (digests recorded again; the sums of kinetics_workload
+  are now -5287032 and -365128059).
 - K0 (0 degrees Celsius in Kelvin) is called ZERO_CELSIUS, not to be
   confused with the rate constant k0.
 - Timecourse::plot_svg returns a Result instead of panicking.
@@ -78,10 +105,11 @@ All notable changes to this crate will be documented in this file.
 - SSA::waiting_time and SSA::apply_random_move are the two halves of a
   step, SSA::apply_extension an extension; simulate and co_simulate use
   them, with identical trajectories. SSA::move_set gives the move set.
-- Shift moves are a runtime setting, `ShiftMoves { three_way, four_way }`,
-  instead of the type parameter `ShiftPolicy` (NoShift, ThreeWayOnly,
-  FourWayOnly, ThreeAndFour): `LoopNeighbors<E>` takes it on construction,
-  and `Arrhenius::shift_moves()` gives the moves that have a rate. Identical
+- The move types are a runtime setting, `MoveTypes { three_way, four_way,
+  a_to_i }` (NONE, SHIFTS), instead of the type parameter `ShiftPolicy`
+  (NoShift, ThreeWayOnly, FourWayOnly, ThreeAndFour): `LoopNeighbors<E>`
+  takes it on construction, and `Arrhenius::move_types()` gives the moves
+  that have a rate. Identical
   trajectories, within 0.3% of the instructions.
 - LoopNeighbors: the moves after a change come from two functions, the
   delete moves of the pairs of the new loops (with the shift moves of the
