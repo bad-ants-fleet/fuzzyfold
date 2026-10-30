@@ -8,8 +8,8 @@ use clap::ArgGroup;
 use anyhow::Result;
 use env_logger::Builder;
 
-use ff_energy::EnergyModel;
-use ff_kinetics::MoveTypes;
+use fuzzyfold::energy::EnergyModel;
+use fuzzyfold::kinetics::MoveTypes;
 use fuzzyfold::structure::MultiPairTable;
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
@@ -56,8 +56,7 @@ pub struct LocminInput {
 
 
 #[derive(Debug, Parser)]
-#[command(name = "ff-eval")]
-#[command(author, version, about)]
+#[command(name = "ff-explore", version, about = "The structures within an energy range of a structure: a macrostate.", after_help = fuzzyfold::CITATION)]
 pub struct Cli {
     #[command(flatten)]
     pub lmin: LocminInput,
@@ -82,6 +81,7 @@ fn init_logging(verbosity: u8) {
 }
 
 fn main() -> Result<()> {
+    fuzzyfold::restore_sigpipe();
     let cli = Cli::parse();
     init_logging(cli.lmin.verbose);
     let emodel = Arc::new(cli.energy.build_model()?);

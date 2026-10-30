@@ -1,8 +1,5 @@
-use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use std::path::PathBuf;
-use std::io::{BufWriter, Write};
-use std::fs::File;
 
 use rayon::prelude::*;
 use rand::rng;
@@ -12,24 +9,23 @@ use anyhow::Result;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 
-use ff_structure::DotBracketVec;
-use ff_structure::MultiPairTable;
-use ff_energy::EnergyModel;
-use ff_energy::NucleotideVec;
-use ff_kinetics::Elongation;
-use ff_kinetics::LoopNeighbors;
-use ff_kinetics::SSA;
-use ff_kinetics::RateModel; 
+use fuzzyfold::structure::MultiPairTable;
+use fuzzyfold::energy::EnergyModel;
+use fuzzyfold::kinetics::Elongation;
+use fuzzyfold::kinetics::LoopNeighbors;
+use fuzzyfold::kinetics::SSA;
+use fuzzyfold::kinetics::RateModel; 
 
 use fuzzyfold::input_parsers::read_cotr_input;
 use fuzzyfold::input_parsers::read_eval_input;
 use fuzzyfold::energy_parsers::EnergyModelArguments;
 use fuzzyfold::kinetics_parsers::RateModelArguments;
 use fuzzyfold::kinetics_parsers::TimeArguments;
-use ff_kinetics::OutputTimes;
+use fuzzyfold::kinetics::OutputTimes;
+use fuzzyfold::kinetics::ensemble::{Ensemble, State};
 
 #[derive(Parser)]
-#[command(version, about = "Stochastically simulated nucleic acid ensembles over time.")]
+#[command(version, about = "The structures of many trajectories at the output times (.drf).", after_help = fuzzyfold::CITATION)]
 pub struct Cli {
     /// Input file (FASTA-like), or "-" for stdin
     #[arg(value_name = "INPUT", default_value = "-")]
@@ -52,6 +48,7 @@ pub struct Cli {
 }
 
 fn main() -> Result<()> {
+    fuzzyfold::restore_sigpipe();
     let cli = Cli::parse();
     let emodel = Arc::new(cli.energy.build_model()?);
     let rmodel = cli.kinetics.build_model(emodel.temperature());
@@ -88,69 +85,18 @@ fn main() -> Result<()> {
     let trajectories: Vec<Vec<State>> =
         run_timecourse(moves, rmodel, &schedule, cli.num_sims as u64, &output).collect();
 
-    let mut master: Vec<FxHashMap<State, usize>> = vec![FxHashMap::default(); times.len()];
+    let mut ensemble = Ensemble::new(times);
     for trajectory in trajectories {
-        for (i, state) in trajectory.into_iter().enumerate() {
-             *master[i].entry(state).or_insert(0) += 1;
-        }
+        ensemble.add_trajectory(trajectory);
     }
     println!("{}", "Finished simulations!".red());
 
-    let drf_path = cli.output.with_extension("drf");
-    let idict = build_idict(&master, sequence.len());
-    let mut writer = BufWriter::new(File::create(drf_path.clone())?);
     // With A-to-I edits, the sequence of each structure is a column.
-    if edits {
-        writeln!(writer, "id time occupancy structure energy sequence")?;
-    } else {
-        writeln!(writer, "id time occupancy structure energy")?;
-    }
-
-    for (t_idx, ensemble) in master.iter().enumerate() {
-        let t = times[t_idx];
-        let mut entries: Vec<(&State, usize)> = ensemble.iter().map(|(s, &c)| (s, c)).collect();
-        entries.sort_by_key(|&((_, _, e), _)| *e);
-
-        for (state @ (seq, s, en), occu) in entries {
-            let id = idict[&id_key(state, sequence.len())];
-            write!(
-                writer,
-                "{:5} {:03.3} {:5} {} {:6.2}",
-                id, t, occu as f64 / cli.num_sims as f64, s, *en as f64 / 100.0
-            )?;
-            if edits {
-                write!(writer, " {}", &seq.to_string()[..s.len()])?;
-            }
-            writeln!(writer)?;
-        }
-    }
+    let drf_path = cli.output.with_extension("drf");
+    ensemble.write_drf(&drf_path, edits)?;
     println!("Wrote drf file: {}", format!("{}", drf_path.display()).green()); 
 
     Ok(())
-}
-
-/// A structure with its sequence (full length, with edits) and energy.
-type State = (NucleotideVec, DotBracketVec, i32);
-
-/// One id per sequence and structure, the structure padded to full length:
-/// a structure keeps its id when the strand grows, not when it is edited.
-fn build_idict(master: &[FxHashMap<State, usize>], seqlen: usize) -> FxHashMap<String, usize> {
-    let mut idict: FxHashMap<String, usize> = FxHashMap::default();
-    for states in master {
-        for state in states.keys() {
-            let next_id = idict.len();
-            idict.entry(id_key(state, seqlen)).or_insert(next_id);
-        }
-    }
-    idict
-}
-
-fn id_key((seq, s, _): &State, seqlen: usize) -> String {
-    let mut key = s.to_string();
-    key.extend(std::iter::repeat_n('.', seqlen - s.len()));
-    key.push(' ');
-    key.push_str(&seq.to_string());
-    key
 }
 
 fn run_timecourse<W, K>(

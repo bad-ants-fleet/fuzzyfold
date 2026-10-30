@@ -1,10 +1,10 @@
 [package]
 name = "ff_energy"
-version = "0.5.0"
+version = "0.6.0"
 description = "fuzzyfold's nearest neighbor free energy evaluations."
 documentation = "https://docs.rs/ff_energy"
 keywords = ["dna", "rna", "secondary-structure", "nearest-neighbor"]
-readme = "../../README.md"
+readme = "README.md"
 
 edition.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ categories.workspace = true
 ff_structure.workspace = true
 
 log.workspace = true
-paste = "1.0.15"
+pastey.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

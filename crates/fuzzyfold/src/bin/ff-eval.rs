@@ -28,8 +28,7 @@ pub struct EvalInput {
 
 
 #[derive(Debug, Parser)]
-#[command(name = "ff-eval")]
-#[command(author, version, about)]
+#[command(name = "ff-eval", version, about = "The free energy of a structure, also with pseudoknots and several strands.", after_help = fuzzyfold::CITATION)]
 pub struct Cli {
     #[command(flatten)]
     pub eval: EvalInput,
@@ -54,6 +53,7 @@ fn init_logging(verbosity: u8) {
 }
 
 fn main() -> Result<()> {
+    fuzzyfold::restore_sigpipe();
     let cli = Cli::parse();
     init_logging(cli.eval.verbose);
 

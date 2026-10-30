@@ -2,7 +2,7 @@
 
 All notable changes to this crate will be documented in this file.
 
-## [development]
+## [development] - 0.6.0
 ### Fixed
 - A stack of a strained stem through the wraps of two circles was scaled
   as an interior loop: whether two pairs stack was decided by index. The
@@ -19,6 +19,7 @@ All notable changes to this crate will be documented in this file.
   Andronescu 2007, Mathews 2004)
 
 ### Added
+- A README of the crate, with an example tested with the doctests.
 - Benchmarks of pseudoknotted structures: benchmark_random_pseudoknots_len*
   (each nested structure cut into segments written in another order, a
   third each of pseudoknot density 2, 3, and 4 or more; without the pairs
@@ -79,6 +80,9 @@ All notable changes to this crate will be documented in this file.
   open chain; ViennaRNA keeps 0, as ViennaRNA 2.6
 
 ### Changed
+- Examples of ViennaRNA (parameter sets, temperature) and Fuzzyfold
+  (strands in either order).
+- pastey instead of paste (unmaintained, RUSTSEC-2024-0436).
 - The regression tests use the benchmark sets: tests/pseudoknot_energies.rs
   compares the energies of the pseudoknotted sets (lengths 50 and 100, all
   four variants, also the circles under rotation) with those recorded by

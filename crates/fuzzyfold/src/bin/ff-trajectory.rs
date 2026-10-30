@@ -4,13 +4,13 @@ use colored::*;
 use rand::rng;
 use std::sync::Arc;
 
-use ff_structure::MultiPairTable;
-use ff_energy::EnergyModel;
-use ff_kinetics::RateModel;
-use ff_kinetics::Elongation;
-use ff_kinetics::LoopNeighbors;
-use ff_kinetics::SSA;
-use ff_kinetics::extension_schedule;
+use fuzzyfold::structure::MultiPairTable;
+use fuzzyfold::energy::EnergyModel;
+use fuzzyfold::kinetics::RateModel;
+use fuzzyfold::kinetics::Elongation;
+use fuzzyfold::kinetics::LoopNeighbors;
+use fuzzyfold::kinetics::SSA;
+use fuzzyfold::kinetics::extension_schedule;
 
 use fuzzyfold::input_parsers::read_cotr_input;
 use fuzzyfold::input_parsers::read_eval_input;
@@ -20,7 +20,7 @@ use fuzzyfold::kinetics_parsers::RateModelArguments;
 //TODO: support seeded rng.
 
 #[derive(Debug, Parser)]
-#[command(version, about = "Stochastic Simulation Algorithm for RNA folding")]
+#[command(version, about = "One stochastic folding trajectory, also co-transcriptional (--t-ext).", after_help = fuzzyfold::CITATION)]
 pub struct Cli {
     /// Input file (FASTA-like), or "-" for stdin
     #[arg(value_name = "INPUT", default_value = "-")]
@@ -54,6 +54,7 @@ pub struct Cli {
 }
 
 fn main() -> Result<()> {
+    fuzzyfold::restore_sigpipe();
     let cli = Cli::parse();
     let emodel = Arc::new(cli.energy.build_model()?);
     let rmodel = cli.kinetics.build_model(emodel.temperature());

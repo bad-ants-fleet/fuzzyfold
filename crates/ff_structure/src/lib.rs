@@ -73,3 +73,8 @@ pub use error::*;
 pub use dotbracket::*;
 pub use multi_pair_table::*;
 pub use closed_regions::*;
+
+/// The example of the README, tested with the doctests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeExample;

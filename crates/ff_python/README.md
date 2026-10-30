@@ -12,7 +12,11 @@ Requires a Rust toolchain and Python ≥ 3.10. From this directory:
 ```bash
 pip install .                 # build and install the module
 maturin develop --release     # or, during development, into the active environment
+pytest tests                  # the tests (pip install pytest)
 ```
+
+The module is built for the stable ABI of CPython 3.10: one build works
+with all later versions.
 
 The version follows the crate (`Cargo.toml`).
 

@@ -3,7 +3,7 @@ use std::io::{stdin, BufRead, BufReader, Cursor};
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
-use paste::paste;
+use pastey::paste;
 use ff_structure::DotBracketVec;
 use ff_energy::NucleotideVec;
 use ff_energy::check_sequence;
@@ -138,10 +138,9 @@ pub fn read_eval<R: BufRead>(reader: R, is_rna: bool) -> Result<(Option<String>,
 /// - `base_stdin()`
 /// - `base_input(&str)`  ("-" is stdin, anything else a file)
 ///
-/// Example:
-/// ```ignore
-/// define_input_variants!(read_na_format, Result<(Option<String>, NucleotideVec, DotBracketVec)>);
-/// ```
+/// For example, `define_input_variants!(read_eval, NAResult)` gives
+/// `read_eval_string`, `read_eval_file`, `read_eval_stdin` and
+/// `read_eval_input`.
 macro_rules! define_input_variants {
     ($base:ident, $ret:ty) => {
         paste! {

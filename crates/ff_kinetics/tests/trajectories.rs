@@ -32,8 +32,8 @@ fn digest(lines: &[String]) -> u64 {
 /// energy and structure, with floats as their exact shortest form.
 fn trajectory(seq: &str, db: &str, shifts: bool) -> Vec<String> {
     let model = Arc::new(Fuzzyfold::default());
-    let shift = shifts.then_some(1.0);
-    let rates = Arrhenius::new(model.temperature(), 1.0, shift, shift, None);
+    let k = if shifts { 1.0 } else { 0.0 };
+    let rates = Arrhenius::new(model.temperature(), 1.0).with_three_way(k).with_four_way(k);
     let policy = rates.move_types();
     let sequence = NucleotideVec::try_from(seq).unwrap();
     let start = MultiPairTable::try_from(db).unwrap();

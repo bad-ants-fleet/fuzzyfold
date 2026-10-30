@@ -124,7 +124,9 @@ impl ClosedRegions<'_> {
     /// number of pairwise crossing bands.
     ///
     /// Bands are split at strand breaks, so in multi-stranded structures the
-    /// density depends on the order of strands.
+    /// density depends on the order of strands; for a circular strand it
+    /// depends on where the circle is cut (`..([[{).]}]^` has density 4, the
+    /// same circle cut four positions later, `([{.)](..})^`, density 3).
     pub fn density(&self) -> usize {
         self.iter()
             .filter(|r| !r.nested)
@@ -337,6 +339,14 @@ mod tests {
         let r = ClosedRegions::from(&t);
             assert_eq!(r.density(), 1, "density of {s}");
         }
+    }
+
+    #[test]
+    fn density_of_a_circle_depends_on_the_cut() {
+        // The same circle: the second is the first cut four positions later.
+        let cut = |s: &str| ClosedRegions::from(&table(s)).density();
+        assert_eq!(cut("..([[{).]}]^"), 4);
+        assert_eq!(cut("([{.)](..})^"), 3);
     }
 
     #[test]

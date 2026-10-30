@@ -36,7 +36,9 @@ impl Complex {
             let (i, j) = (rng.below(lens[s]), rng.below(lens[t]));
             // Helix (s, i..i+h) with (t, j-h+1..=j), antiparallel.
             if i + h > lens[s] || j + 1 < h { continue; }
-            if s == t && (i + h - 1 >= j + 1 - h || (j + 1 - h) - (i + h - 1) - 1 < 3) { continue; }
+            // On one strand, at least 3 unpaired bases between the two halves.
+            let (a, b) = (i + h - 1, j + 1 - h);
+            if s == t && b < a + 4 { continue; }
             if (0..h).any(|d| used[s][i + d] || used[t][j - d]) { continue; }
             for d in 0..h {
                 used[s][i + d] = true;

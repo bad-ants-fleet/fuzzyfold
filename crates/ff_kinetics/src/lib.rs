@@ -15,35 +15,34 @@
 //!   with the C ([`Move::Edit`]): the sequence changes during a simulation
 //!   ([`MoveSet::current_sequence`]).
 //! - A [`RateModel`] gives the rate of a move. [`Arrhenius`] uses one rate
-//!   constant per move type (k0, k3ws, k4ws): the constant for a move that
-//!   does not raise the energy, else the constant times exp(-dE / RT); for
-//!   shift moves, dE is the barrier of the move.
+//!   constant per move type: the constant for a move that does not raise
+//!   the energy, else the constant times exp(-dE / RT); for shift moves, dE
+//!   is the barrier of the move. Shift moves and edits are off unless their
+//!   rate constant is set ([`Arrhenius::with_three_way`] and others).
 //! - [`SSA`] simulates: it keeps the rates of all moves in a tree, draws
 //!   the waiting time and the next move, and applies the move.
 //!
 //! ```
 //! use std::sync::Arc;
-//! use rand::SeedableRng;
-//! use rand::rngs::StdRng;
 //! use ff_structure::MultiPairTable;
 //! use ff_energy::{EnergyModel, Fuzzyfold, NucleotideVec};
 //! use ff_kinetics::{Arrhenius, LoopNeighbors, MoveSet, SSA};
 //!
 //! let model = Arc::new(Fuzzyfold::default());
-//! let rates = Arrhenius::new(model.temperature(), 1e5, None, None, None);
 //! let seq = NucleotideVec::try_from_rna("GGGGAAACCCC").unwrap();
 //! let start = MultiPairTable::try_from("...........").unwrap();
-//! let moves = LoopNeighbors::try_from((seq, &start, model, rates.move_types())).unwrap();
 //!
+//! // Adding and deleting pairs at k0 = 1e5 per second.
+//! let rates = Arrhenius::new(model.temperature(), 1e5);
+//! let moves = LoopNeighbors::try_from((seq, &start, model, rates.move_types())).unwrap();
 //! let mut ssa = SSA::from((moves, rates));
-//! let mut steps = 0;
-//! // The callback gets the time, the waiting time, the flux and the move
-//! // set, for every structure until the time 1e-3 s.
-//! ssa.simulate(&mut StdRng::seed_from_u64(1), 1e-3, |_t, _tinc, _flux, m| {
-//!     steps += 1;
-//!     m.current_energy() > -1000
+//!
+//! // Simulate 1 ms. The callback gets each structure with the time it is
+//! // reached; returning false would stop the simulation.
+//! ssa.simulate(&mut rand::rng(), 1e-3, |t, _waiting_time, _flux, m| {
+//!     println!("{t:.2e} {} {:6.2}", m.current_structure(), m.current_energy() as f64 / 100.0);
+//!     true
 //! });
-//! assert!(steps > 0);
 //! ```
 //!
 //! # Units
@@ -66,12 +65,11 @@
 //! A [`MacrostateRegistry`] holds sets of structures (macrostates, read
 //! from files) and classifies a structure; a [`timecourse::Timecourse`]
 //! counts the macrostates of many trajectories at the output times and
-//! writes them as `.tln` and `.nxy` files.
+//! writes them as `.tln` and `.nxy` files; an [`ensemble::Ensemble`]
+//! counts their structures and writes them as a `.drf` file.
 //!
 //! ```
 //! use std::sync::Arc;
-//! use rand::SeedableRng;
-//! use rand::rngs::StdRng;
 //! use ff_structure::MultiPairTable;
 //! use ff_energy::{EnergyModel, Fuzzyfold, NucleotideVec};
 //! use ff_kinetics::{Arrhenius, LoopNeighbors, MoveSet, SSA};
@@ -79,25 +77,35 @@
 //! use ff_kinetics::timecourse::Timecourse;
 //!
 //! let model = Arc::new(Fuzzyfold::default());
-//! let rates = Arrhenius::new(model.temperature(), 1e5, None, None, None);
 //! let seq = NucleotideVec::try_from_rna("GGGGAAACCCC").unwrap();
 //! let start = MultiPairTable::try_from("...........").unwrap();
+//! let rates = Arrhenius::new(model.temperature(), 1e5);
 //! let moves = LoopNeighbors::try_from((seq.clone(), &start, model.clone(), rates.move_types())).unwrap();
 //!
+//! // A macrostate in the format of a file: name, sequence, structures.
+//! // Structures in no macrostate are "Unassigned" (index 0).
 //! let mut registry = MacrostateRegistry::from((seq, model));
 //! let hairpin = ">hairpin\nGGGGAAACCCC\n((((...))))\n.(((...))).\n";
-//! registry.insert_from_reader(hairpin.as_bytes(), "example", 0).unwrap();
+//! registry.insert_from_reader(hairpin.as_bytes(), "hairpin", 0).unwrap();
 //!
+//! // 50 times evenly up to 0.1 ms, then 50 evenly in log space up to 1 s.
 //! let output = OutputTimes::default();
+//! // At full length from the start: no extensions, one run to the end.
 //! let schedule = extension_schedule(None, 0, output.end()).unwrap();
+//!
 //! let mut timecourse = Timecourse::new(output.times(), registry.len());
-//! for seed in 0..10 {
+//! for _ in 0..10 {
 //!     let mut ssa = SSA::from((moves.clone(), rates));
-//!     let trajectory = ssa.sample(&mut StdRng::seed_from_u64(seed), &schedule, &output,
+//!     let trajectory = ssa.sample(&mut rand::rng(), &schedule, &output,
 //!         |m| registry.classify(m.current_sequence(), &m.current_structure()));
 //!     timecourse.add_trajectory(&trajectory);
 //! }
-//! assert_eq!(timecourse.num_trajectories(0), 10);
+//!
+//! // The number of trajectories in each macrostate at the end.
+//! let (names, counts) = timecourse.counts_by_name(&registry);
+//! for (name, count) in names.iter().zip(counts.last().unwrap()) {
+//!     println!("{name} {count}");
+//! }
 //! ```
 //!
 //! # Neighborhoods
@@ -114,6 +122,7 @@
 //! with [`MoveSetError`].
 
 pub mod timecourse;
+pub mod ensemble;
 pub mod enum_neighbors;
 
 mod rate_tree;
@@ -126,3 +135,8 @@ pub use rate_model::*;
 pub use stochastic_simulation::*;
 pub use macrostates::*;
 pub use movesets::*;
+
+/// The example of the README, tested with the doctests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeExample;

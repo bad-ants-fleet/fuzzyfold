@@ -24,7 +24,7 @@ const LENGTHS: [usize; 3] = [100, 1000, 2500];
 /// trajectories.
 fn simulate_benchmark(c: &mut Criterion) {
     let emodel = Arc::new(Fuzzyfold::default());
-    let rmodel = Arrhenius::new(emodel.temperature(), 1.0, None, None, None);
+    let rmodel = Arrhenius::new(emodel.temperature(), 1.0);
     let mut group = c.benchmark_group("Seeded stochastic simulations.");
     group.sampling_mode(SamplingMode::Flat);
     group.sample_size(10);
@@ -49,7 +49,7 @@ fn simulate_benchmark(c: &mut Criterion) {
 
 fn simulate_three_way_shift_benchmark(c: &mut Criterion) {
     let emodel = Arc::new(Fuzzyfold::default());
-    let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), None, None);
+    let rmodel = Arrhenius::new(emodel.temperature(), 1.0).with_three_way(1.0);
     let mut group = c.benchmark_group("Seeded stochastic simulations with three-way shift moves.");
     group.sampling_mode(SamplingMode::Flat);
     group.sample_size(10);

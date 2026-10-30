@@ -5,7 +5,6 @@ use pyo3::types::PyDict;
 use std::fs;
 use std::sync::Arc;
 use std::path::PathBuf;
-use rand::SeedableRng;
 use rand::rngs::SmallRng;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
@@ -23,6 +22,7 @@ use ff_kinetics::LoopNeighbors;
 use ff_kinetics::enum_neighbors::enumerate_neighbors;
 use ff_kinetics::MacrostateRegistry;
 use ff_kinetics::timecourse::Timecourse;
+use ff_kinetics::ensemble::{Ensemble, State};
 use crate::energy_exports::thermo_params;
 use ff_kinetics::OutputTimes;
 use ff_kinetics::extension_schedule;
@@ -67,13 +67,10 @@ impl Simulator {
             ));
         }
 
-        let rate_model = Arrhenius::new(
-            celsius,
-            k0,
-            Some(k3ws),
-            Some(k4ws),
-            Some(k_atoi),
-        );
+        let rate_model = Arrhenius::new(celsius, k0)
+            .with_three_way(k3ws)
+            .with_four_way(k4ws)
+            .with_a_to_i(k_atoi);
 
         Ok(Self {
             energy_model: Arc::new(energy_model),
@@ -131,32 +128,29 @@ impl Simulator {
        let rate_model = self.rate_model;
        let edits = rate_model.move_types().a_to_i;
 
-       // (structure, full sequence with edits if any, energy) at the output times.
-       let results: Vec<Vec<(String, Option<String>, i32)>> = py.detach(|| {
+       let results: Vec<Vec<State>> = py.detach(|| {
             (0..num_sims).into_par_iter().map(|_| {
                 let mut ssa = SSA::from((moves.clone(), rate_model));
-                ssa.sample(&mut SmallRng::from_os_rng(), &schedule, &output_times,
-                    |w| (w.to_string(), edits.then(|| w.current_sequence().to_string()), w.current_energy()))
+                ssa.sample(&mut rand::make_rng::<SmallRng>(), &schedule, &output_times,
+                    |w| (w.current_sequence().clone(), w.current_structure(), w.current_energy()))
             }).collect()
        });
        let output_times = output_times.times();
-
-       let mut states: Vec<FxHashMap<DrfState, usize>> = vec![FxHashMap::default(); output_times.len()];
+       let mut ensemble = Ensemble::new(output_times);
        for trajectory in results {
-           for (t_idx, state) in trajectory.into_iter().enumerate() {
-               *states[t_idx].entry(state).or_insert(0) += 1;
-           }
+           ensemble.add_trajectory(trajectory);
        }
 
        if let Some(output) = output {
-           write_drf(&output.with_extension("drf"), output_times, &states, num_sims, sequence.len())?;
+           ensemble.write_drf(output.with_extension("drf"), edits)?;
        }
 
        // The structure, with edits followed by its sequence (as far as transcribed).
-       let counts = states.into_iter().map(|ensemble| ensemble.into_iter().map(|((s, seq, _), c)| {
-           let key = match seq {
-               Some(seq) => format!("{s} {}", &seq[..s.len()]),
-               None => s,
+       let counts = ensemble.counts().iter().map(|counts| counts.iter().map(|((seq, s, _), &c)| {
+           let key = if edits {
+               format!("{s} {}", &seq.to_string()[..s.len()])
+           } else {
+               s.to_string()
            };
            (key, c)
        }).collect::<FxHashMap<String, usize>>());
@@ -212,7 +206,7 @@ impl Simulator {
        let master = py.detach(|| {
             let run_one = |_: usize| -> Vec<usize> {
                 let mut ssa = SSA::from((moves.clone(), rate_model));
-                ssa.sample(&mut SmallRng::from_os_rng(), &schedule, &output_times,
+                ssa.sample(&mut rand::make_rng::<SmallRng>(), &schedule, &output_times,
                     |w| registry.classify(w.current_sequence(), &w.current_structure()))
             };
 
@@ -431,63 +425,6 @@ pub fn transcription_times(t_ext: f64, num_ext: usize, t_end: f64) -> PyResult<V
 
 
 
-/// A structure with its full sequence (with edits, if any) and energy.
-type DrfState = (String, Option<String>, i32);
-
-/// The ensembles at the output times as a .drf file; with edits, the
-/// sequence of each structure is a column. A structure keeps its id when
-/// the strand grows, not when it is edited.
-fn write_drf(
-    path: &PathBuf,
-    times: &[f64],
-    states: &[FxHashMap<DrfState, usize>],
-    num_sims: usize,
-    seqlen: usize,
-) -> PyResult<()> {
-    use std::io::Write;
-
-    let id_key = |(s, seq, _): &DrfState| format!("{}{} {}", s, ".".repeat(seqlen.saturating_sub(s.len())),
-        seq.as_deref().unwrap_or(""));
-
-    // Per time point: the states with their counts, sorted by energy (then structure).
-    let sorted: Vec<Vec<(&DrfState, usize)>> = states.iter().map(|ensemble| {
-        let mut entries: Vec<(&DrfState, usize)> = ensemble.iter().map(|(s, &c)| (s, c)).collect();
-        entries.sort_by(|a, b| a.0.2.cmp(&b.0.2).then_with(|| a.0.cmp(b.0)));
-        entries
-    }).collect();
-
-    let mut idict: FxHashMap<String, usize> = FxHashMap::default();
-    for entries in &sorted {
-        for (state, _) in entries {
-            let next_id = idict.len();
-            idict.entry(id_key(state)).or_insert(next_id);
-        }
-    }
-
-    let edits = states.iter().flat_map(|e| e.keys()).any(|(_, seq, _)| seq.is_some());
-    let mut writer = std::io::BufWriter::new(fs::File::create(path)?);
-    if edits {
-        writeln!(writer, "id time occupancy structure energy sequence")?;
-    } else {
-        writeln!(writer, "id time occupancy structure energy")?;
-    }
-    for (t, entries) in times.iter().zip(&sorted) {
-        for (state @ (s, seq, en), count) in entries {
-            write!(
-                writer,
-                "{:5} {:03.3} {:5} {} {:6.2}",
-                idict[&id_key(state)], t, *count as f64 / num_sims as f64, s, *en as f64 / 100.0
-            )?;
-            if let Some(seq) = seq {
-                write!(writer, " {}", &seq[..s.len()])?;
-            }
-            writeln!(writer)?;
-        }
-    }
-    writer.flush()?;
-    Ok(())
-}
-
 fn build_iterator(
     seq: NucleotideVec,
     start_pt: &MultiPairTable,
@@ -502,7 +439,7 @@ fn build_iterator(
     Ok(SimulationIterator {
         sequence: ssa.move_set().current_sequence().clone(),
         ssa,
-        rng: SmallRng::from_os_rng(),
+        rng: rand::make_rng::<SmallRng>(),
         times,
         elapsed: 0.0,
         finished: false,

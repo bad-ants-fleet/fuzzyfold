@@ -4,7 +4,7 @@ use rand::prelude::IndexedRandom;
 
 /// Generate random sequences from a given alphabet.
 #[derive(Parser, Debug)]
-#[command(author, version, about = "Generate random sequences", long_about = None)]
+#[command(version, about = "Random sequences.", after_help = fuzzyfold::CITATION)]
 struct Args {
     /// Alphabet to choose from, comma-separated (e.g., A,C,G,U)
     #[arg(short, long, default_value = "A,C,G,U")]
@@ -25,6 +25,7 @@ struct Args {
 }
 
 fn main() {
+    fuzzyfold::restore_sigpipe();
     let args = Args::parse();
 
     // Parse alphabet

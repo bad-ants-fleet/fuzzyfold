@@ -24,8 +24,9 @@ workflows.
   parameterization
 - Ensemble-level occupancy analysis via aggregation of parallel trajectories
 - Co-transcriptional folding trajectories
-- Thermodynamic parameters: RNA (Turner 2004), DNA (RNAstructure), extended
-  sets including modification parameters and special hairpin parameters
+- Thermodynamic parameters: RNA (Turner 2004), DNA (Mathews 2004, from
+  RNAstructure), extended sets including modification parameters and
+  special hairpin parameters
 - Energy evaluation compatible with ViennaRNA 2.6 (`ViennaRNA`)
 - Energy evaluation of pseudoknots and multi-stranded complexes, independent
   of the order of the strands
@@ -66,11 +67,11 @@ as well as [examples/workflows](/examples/workflows/) to reproduce published ana
 
 | Crate | Description |
 |---|---|
-| `ff_structure` | Nucleic acid secondary structure data structures |
-| `ff_energy` | Free-energy evaluation using nearest-neighbor parameters |
-| `ff_kinetics` | Stochastic folding kinetics engine |
+| [`ff_structure`](crates/ff_structure/) | Nucleic acid secondary structure data structures |
+| [`ff_energy`](crates/ff_energy/) | Free-energy evaluation using nearest-neighbor parameters |
+| [`ff_kinetics`](crates/ff_kinetics/) | Stochastic folding kinetics engine |
 | `fuzzyfold` | Command-line interfaces |
-| `ff_python` | Python bindings (not on crates.io) |
+| [`ff_python`](crates/ff_python/) | Python bindings (not on crates.io) |
 
 Additional crates are in development and will be published to
 [crates.io](https://crates.io) as they mature.
@@ -105,7 +106,9 @@ cargo bench --workspace
 ```
 
 Please open a GitHub issue to discuss larger changes before submitting a pull
-request.
+request. [AGENTS.md](AGENTS.md) describes how the crates fit together, the
+working rules, and a checklist for changes before they are merged, also
+for changes made with coding agents.
 
 ## Citation
 
@@ -113,6 +116,9 @@ If you use `fuzzyfold` in your research, please cite:
 
 > Stefan Badelt (2026): **fuzzyfold: a high-performance framework for stochastic RNA folding kinetics**,
 bioRxiv preprint, [https://doi.org/10.64898/2026.06.17.732885](https://doi.org/10.64898/2026.06.17.732885)
+
+The citation is also in [CITATION.cff](CITATION.cff) (GitHub shows it as
+"Cite this repository").
 
 Please also cite the sources of the energy parameters you use, e.g. Turner
 2004 (Mathews et al. 2004) for RNA. The default pseudoknot parameters come

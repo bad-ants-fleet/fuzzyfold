@@ -2,7 +2,7 @@
 
 All notable changes to this crate will be documented in this file.
 
-## [development]
+## [development] - 0.6.0
 ### Fixed
 - SSA::simulate applied the move whose time fell after t_max: a simulation
   ended in the structure after it, and in co-transcriptional simulations
@@ -25,8 +25,15 @@ All notable changes to this crate will be documented in this file.
   move set built from scratch.
 
 ### Added
+- ensemble::Ensemble: the structures (with sequence and energy) of many
+  trajectories at the output times, and the .drf file, for ff-ensemble and
+  the Python bindings (one writer instead of two). The time column is the
+  exact time (it was rounded to three decimals: early output times all
+  read 0.000); per time, ties in energy are sorted by structure, so ids
+  no longer depend on hash map order.
+- A README of the crate, with an example tested with the doctests.
 - A-to-I editing (Move::Edit, MoveTypes::a_to_i, the rate constant k_atoi of
-  Arrhenius, a fifth argument of Arrhenius::new): the A of a 1x1 interior
+  Arrhenius, Arrhenius::with_a_to_i): the A of a 1x1 interior
   loop with an A opposite a C becomes I, and the I-C pair forms, in one
   irreversible move at a constant rate. LoopTable::sequence and
   MoveSet::current_sequence give the sequence with the edits so far. A
@@ -46,6 +53,13 @@ All notable changes to this crate will be documented in this file.
   ff-timecourse, ff-ensemble and the Python bindings use them.
 
 ### Changed
+- Arrhenius::new(celsius, k0) has only adding and deleting pairs; shift
+  moves and edits are added with with_three_way(k3ws), with_four_way(k4ws)
+  and with_a_to_i(k_atoi), instead of three Option arguments.
+- Examples without seeds and with comments on their values: the crate
+  docs, SSA::simulate, co_simulate and sample, OutputTimes, Arrhenius,
+  Macrostate, MacrostateRegistry (insert_from_reader is documented) and
+  enumerate_neighbors.
 - The move set modules: moves.rs (Move, Neighbors, MoveTypes), move_set.rs
   (the traits), loop_table.rs, loop_neighbors.rs (with its MoveSet and
   Elongation impls), and shifts.rs (three-way and four-way shifts as
@@ -94,6 +108,10 @@ All notable changes to this crate will be documented in this file.
   write_tln, write_nxy (was Display) and plot_svg (was
   plot_occupancy_over_time). The .tln and .nxy formats are unchanged.
 - criterion is a dev-dependency; ndarray is no longer a dependency.
+- rand 0.10: random() and random_range() come from rand::RngExt; the
+  bounds `R: Rng` of the SSA are the core trait of rand_core (was RngCore).
+  Seeded trajectories are unchanged. nohash-hasher is no longer a
+  dependency.
 - A structure in two macrostates of the same length is an error when the
   macrostate files are read (MacrostateRegistry::insert_from_reader),
   instead of a panic in MacrostateRegistry::classify.

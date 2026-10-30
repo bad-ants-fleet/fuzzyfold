@@ -2,8 +2,15 @@
 
 All notable changes to this crate will be documented in this file.
 
-## [development]
+## [development] - 0.6.0
+## Fixed
+- A closed pipe (`ff-trajectory | head`) ends the tools quietly instead of
+  a panic: SIGPIPE has its default action again (restore_sigpipe, Unix).
+- ff-explore called itself ff-eval in --help.
+
 ## Added
+- The citation at the end of --help of every tool (CITATION), and a
+  one-line description of each tool.
 - --k-AtoI: the rate of A-to-I editing in ff-trajectory, ff-timecourse and
   ff-ensemble (an A opposite a C in a 1x1 interior loop becomes I and pairs).
   ff-trajectory prints the sequence (as far as transcribed) when an edit
@@ -20,6 +27,18 @@ All notable changes to this crate will be documented in this file.
   ff-explore (at full length)
 
 ## Changed
+- ff-ensemble writes the .drf file with ff_kinetics::ensemble: the time
+  column is exact (it was rounded to three decimals, so early output times
+  all read 0.000), and ids no longer depend on hash map order.
+- The crate docs list the command line tools, each with an example.
+- The library crates are re-exported directly (pub use ff_kinetics as
+  kinetics, likewise structure and energy), so fuzzyfold::kinetics shows
+  the crate docs; the binaries import them through these paths.
+- --k3ws, --k4ws and --k-AtoI default to 0 (off), as numbers instead of
+  options without a value.
+- pastey instead of paste (unmaintained, RUSTSEC-2024-0436); serde,
+  serde_json and plotters are no longer dependencies (Timecourse is in
+  ff_kinetics). indicatif, pastey and rayon are workspace dependencies.
 - TimelineParameters is TimeArguments; it gives OutputTimes (ff_kinetics).
   --t-sep defaults to 1e-4 s at full length, no longer 10/k0 (the same for
   the default k0); --t-lin 0 (a single output time) is no longer

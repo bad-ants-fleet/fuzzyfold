@@ -11,24 +11,27 @@ pub struct RateModelArguments {
     #[arg(long, default_value_t = 1e5)]
     pub k0: f64,
 
-    /// Rate constant for three-way shift moves (optional, default = off).
-    #[arg(long)]
-    pub k3ws: Option<f64>,
+    /// Rate constant for three-way shift moves (0 = off).
+    #[arg(long, default_value_t = 0.0)]
+    pub k3ws: f64,
 
-    /// Rate constant for four-way shift moves (optional, default = off).
-    #[arg(long)]
-    pub k4ws: Option<f64>,
+    /// Rate constant for four-way shift moves (0 = off).
+    #[arg(long, default_value_t = 0.0)]
+    pub k4ws: f64,
 
     /// Rate of A-to-I editing at an A opposite a C in a 1x1 interior loop:
-    /// the A becomes I and pairs with the C (optional, default = off).
-    #[arg(long = "k-AtoI")]
-    pub k_atoi: Option<f64>,
+    /// the A becomes I and pairs with the C (0 = off).
+    #[arg(long = "k-AtoI", default_value_t = 0.0)]
+    pub k_atoi: f64,
 }
 
 impl RateModelArguments {
-    /// Validate that all parameters make sense.
+    /// The rate model at a temperature.
     pub fn build_model(&self, celsius: f64) -> Arrhenius {
-        Arrhenius::new(celsius, self.k0, self.k3ws, self.k4ws, self.k_atoi)
+        Arrhenius::new(celsius, self.k0)
+            .with_three_way(self.k3ws)
+            .with_four_way(self.k4ws)
+            .with_a_to_i(self.k_atoi)
     }
 }
 

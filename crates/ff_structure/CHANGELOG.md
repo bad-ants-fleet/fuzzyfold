@@ -2,15 +2,18 @@
 
 All notable changes to this crate will be documented in this file.
 
-## [development]
+## [development] - 0.6.0
 ### Added
+- A README of the crate, with an example tested with the doctests.
 - Pseudoknots: brackets `()[]{}<>` and `Aa`..`Zz`, 30 levels
 - Circular strands: strand wrap `^` (DotBracket::STRAND_WRAP, MultiStruct::StrandWrap)
 - MultiPairTable::is_nested: no two pairs cross; a strand wrap counts as
   a pair of the first and the last base of its circle, so a pair from a
   circle to another strand crosses
 - ClosedRegions (From a MultiPairTable): closed regions and density, a
-  structure analysis (the energy evaluation does not use it)
+  structure analysis (the energy evaluation does not use it) The density
+  of a circular strand depends on where the circle is cut (documented,
+  with a test).
 - crate documentation with examples
 
 ### Changed

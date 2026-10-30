@@ -92,3 +92,8 @@ pub use nucleotides::*;
 pub use decomposition::*;
 pub use energy_model::*;
 pub use models::*;
+
+/// The example of the README, tested with the doctests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeExample;

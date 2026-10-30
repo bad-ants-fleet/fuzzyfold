@@ -24,6 +24,24 @@ use super::viennarna::ViennaRNA;
 /// order of the strands. The open circle costs the initiation of a hairpin
 /// loop of its ring (0 in ViennaRNA). This is the model under development; 
 /// `ViennaRNA` stays as it is.
+///
+/// ```
+/// use ff_structure::MultiPairTable;
+/// use ff_energy::{EnergyModel, Fuzzyfold, NucleotideVec};
+///
+/// // The extended RNA parameters (rna_extended) at 37 C.
+/// let model = Fuzzyfold::default();
+///
+/// // Two strands (+ separates them): the energy includes the duplex
+/// // initiation, and does not depend on the order of the strands.
+/// let seq = NucleotideVec::try_from_rna("GGGGAAA+UUUCCCC").unwrap();
+/// let duplex = MultiPairTable::try_from("((((...+...))))").unwrap();
+/// let swapped_seq = NucleotideVec::try_from_rna("UUUCCCC+GGGGAAA").unwrap();
+/// let swapped = MultiPairTable::try_from("...((((+))))...").unwrap();
+/// let energy = model.energy_of_structure(&seq, &duplex).unwrap();
+/// assert_eq!(energy, model.energy_of_structure(&swapped_seq, &swapped).unwrap());
+/// println!("{:.2} kcal/mol", energy as f64 / 100.0);
+/// ```
 pub struct Fuzzyfold {
     /// The loop energies, shared with ViennaRNA until the models diverge.
     vrna: ViennaRNA,

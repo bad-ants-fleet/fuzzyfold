@@ -5,14 +5,30 @@ build-backend = "maturin"
 [project]
 name = "fuzzyfold"
 dynamic = ["version"]
-description = "fuzzyfold Python bindings"
+description = "Nucleic acid energy evaluation and stochastic folding kinetics (Python bindings of fuzzyfold)"
+readme = "README.md"
+authors = [{ name = "Stefan Badelt" }]
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = ["numpy"]
+keywords = ["rna", "dna", "secondary structure", "folding kinetics", "nearest neighbor"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+[project.urls]
+Repository = "https://github.com/bad-ants-fleet/fuzzyfold"
+Documentation = "https://github.com/bad-ants-fleet/fuzzyfold/tree/development/crates/ff_python"
+Citation = "https://doi.org/10.64898/2026.06.17.732885"
 
 [project.optional-dependencies]
 plot = ["matplotlib"]
+test = ["pytest"]
 
 [tool.maturin]
 python-source = "python"
 module-name = "fuzzyfold._fuzzyfold"
-features = ["pyo3/extension-module"]

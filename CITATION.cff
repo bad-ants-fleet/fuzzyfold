@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use fuzzyfold, please cite the article below."
+title: "fuzzyfold"
+type: software
+authors:
+  - family-names: Badelt
+    given-names: Stefan
+    affiliation: "University of Vienna"
+license: MIT
+repository-code: "https://github.com/bad-ants-fleet/fuzzyfold"
+version: "0.6.0"
+preferred-citation:
+  type: article
+  title: "fuzzyfold: a high-performance framework for stochastic RNA folding kinetics"
+  authors:
+    - family-names: Badelt
+      given-names: Stefan
+      affiliation: "University of Vienna"
+  journal: "bioRxiv"
+  year: 2026
+  doi: "10.64898/2026.06.17.732885"
+  url: "https://www.biorxiv.org/content/10.64898/2026.06.17.732885v2"

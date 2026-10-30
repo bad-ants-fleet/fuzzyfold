@@ -1,4 +1,4 @@
-use paste::paste;
+use pastey::paste;
 
 use crate::Base;
 use crate::PairTypeRNA;
@@ -19,6 +19,26 @@ use crate::NestedLoop;
 /// At temperatures other than 37 C, the rescaled parameters are rounded;
 /// ViennaRNA truncates them, so energies differ by a few tenths of a
 /// kcal/mol there.
+///
+/// ```
+/// use ff_structure::MultiPairTable;
+/// use ff_energy::{EnergyModel, NucleotideVec, ViennaRNA};
+/// use ff_energy::parameters::{RNA_ANDRONESCU_2007, RNA_TURNER_2004};
+///
+/// let seq = NucleotideVec::try_from_rna("GGGGAAACCCC").unwrap();
+/// let hairpin = MultiPairTable::try_from("((((...))))").unwrap();
+///
+/// // Turner 2004 at 37 C. Energies are in units of 10 cal/mol.
+/// let model = ViennaRNA::default();
+/// assert_eq!(model.energy_of_structure(&seq, &hairpin).unwrap(), -450);
+///
+/// // Turner 2004 rescaled to 25 C, and the parameters of Andronescu 2007
+/// // (fitted at 37 C, not rescaled).
+/// let cold = ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 25.0);
+/// assert_eq!(cold.energy_of_structure(&seq, &hairpin).unwrap(), -583);
+/// let fitted = ViennaRNA::from_andronescu_params(&RNA_ANDRONESCU_2007);
+/// assert_eq!(fitted.energy_of_structure(&seq, &hairpin).unwrap(), -338);
+/// ```
 pub struct ViennaRNA {
     /// Steric constraint on minimum hairpin length. (Always three.)
     min_hp_size: usize,

@@ -1,5 +1,5 @@
 use ff_structure::DotBracketVec;
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 use crate::MoveSet;
 use crate::Elongation;
@@ -62,6 +62,31 @@ impl<M: MoveSet, K: RateModel> SSA<M, K> {
     /// after t_max is not applied: the simulation ends in the structure of
     /// the last callback. Without moves, the callback is called once with
     /// the rest of the time. Returns the last return value of the callback.
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use ff_structure::{DotBracketVec, MultiPairTable};
+    /// use ff_energy::{EnergyModel, Fuzzyfold, NucleotideVec};
+    /// use ff_kinetics::{Arrhenius, LoopNeighbors, MoveSet, SSA};
+    ///
+    /// let model = Arc::new(Fuzzyfold::default());
+    /// let seq = NucleotideVec::try_from_rna("GGGGAAACCCC").unwrap();
+    /// let start = MultiPairTable::try_from("...........").unwrap();
+    /// let rates = Arrhenius::new(model.temperature(), 1e5);
+    /// let moves = LoopNeighbors::try_from((seq, &start, model, rates.move_types())).unwrap();
+    /// let mut ssa = SSA::from((moves, rates));
+    ///
+    /// // The first passage time to the hairpin, within at most 1 s.
+    /// let hairpin = DotBracketVec::try_from("((((...))))").unwrap();
+    /// let mut first_passage = None;
+    /// ssa.simulate(&mut rand::rng(), 1.0, |t, _waiting_time, _flux, m| {
+    ///     if m.current_structure() == hairpin {
+    ///         first_passage = Some(t);
+    ///     }
+    ///     first_passage.is_none()
+    /// });
+    /// println!("{first_passage:?}");
+    /// ```
     pub fn simulate<R, F>(&mut self, rng: &mut R, t_max: f64, mut callback: F) -> bool
     where
         R: Rng + ?Sized,
@@ -136,6 +161,27 @@ impl<M: Elongation, K: RateModel> SSA<M, K> {
     /// of the current structure to that of the sequence, then extend. The
     /// callback is as for `simulate`, with the time since the start, and a
     /// waiting time that ends at most slightly after the next extension.
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use ff_structure::MultiPairTable;
+    /// use ff_energy::{EnergyModel, Fuzzyfold, NucleotideVec};
+    /// use ff_kinetics::{Arrhenius, LoopNeighbors, SSA, extension_schedule};
+    ///
+    /// let model = Arc::new(Fuzzyfold::default());
+    /// let seq = NucleotideVec::try_from_rna("GGGGAAACCCCAAAGGGGAAACCCC").unwrap();
+    /// // Transcription starts with the first base.
+    /// let start = MultiPairTable::try_from(".").unwrap();
+    /// let rates = Arrhenius::new(model.temperature(), 1e5);
+    /// let moves = LoopNeighbors::try_from((seq.clone(), &start, model, rates.move_types())).unwrap();
+    /// let mut ssa = SSA::from((moves, rates));
+    ///
+    /// // One base every 20 ms, then 1 s at full length.
+    /// let num_ext = seq.len() - 1;
+    /// let schedule = extension_schedule(Some(0.02), num_ext, 0.02 * num_ext as f64 + 1.0).unwrap();
+    /// ssa.co_simulate(&mut rand::rng(), &schedule, |_t, _waiting_time, _flux, _m| true);
+    /// println!("{} {}", ssa.current_structure(), ssa.current_energy());
+    /// ```
     pub fn co_simulate<R, F>(&mut self, rng: &mut R, times: &[f64], mut callback: F)
     where
         R: Rng + ?Sized,
@@ -170,6 +216,30 @@ impl<M: Elongation, K: RateModel> SSA<M, K> {
     /// Simulate transcription as `co_simulate` (see `extension_schedule`)
     /// and record the move set at each output time. The schedule must end
     /// at the last output time.
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use ff_structure::MultiPairTable;
+    /// use ff_energy::{EnergyModel, Fuzzyfold, NucleotideVec};
+    /// use ff_kinetics::{Arrhenius, LoopNeighbors, MoveSet, OutputTimes, SSA, extension_schedule};
+    ///
+    /// let model = Arc::new(Fuzzyfold::default());
+    /// let seq = NucleotideVec::try_from_rna("GGGGAAACCCCAAAGGGGAAACCCC").unwrap();
+    /// let start = MultiPairTable::try_from(".").unwrap();
+    /// let rates = Arrhenius::new(model.temperature(), 1e5);
+    /// let moves = LoopNeighbors::try_from((seq.clone(), &start, model, rates.move_types())).unwrap();
+    /// let mut ssa = SSA::from((moves, rates));
+    ///
+    /// // One base every 20 ms: the structure just before each extension,
+    /// // then at 50 times up to 1 s after the full length.
+    /// let num_ext = seq.len() - 1;
+    /// let output = OutputTimes::transcription(0.02, num_ext, 1.0).unwrap();
+    /// let schedule = extension_schedule(Some(0.02), num_ext, output.end()).unwrap();
+    /// let structures = ssa.sample(&mut rand::rng(), &schedule, &output, |m| m.current_structure());
+    /// for (t, s) in output.times().iter().zip(&structures) {
+    ///     println!("{t:.3} {s}");
+    /// }
+    /// ```
     pub fn sample<R, T, F>(&mut self, rng: &mut R, schedule: &[f64], output: &OutputTimes,
         mut record: F) -> Vec<T>
     where
@@ -193,6 +263,22 @@ impl<M: Elongation, K: RateModel> SSA<M, K> {
 }
 
 /// The times at which a simulation reports its state, from 0.
+///
+/// ```
+/// use ff_kinetics::OutputTimes;
+///
+/// // 50 times evenly up to 0.1 ms, then 50 evenly in log space up to 1 s.
+/// let default = OutputTimes::default();
+/// assert_eq!(default.end(), 1.0);
+///
+/// // 10 times evenly up to 1 ms, then 90 in log space up to 10 s.
+/// let longer = OutputTimes::lin_log(1e-3, 10.0, 10, 90).unwrap();
+/// assert_eq!(longer.t_sep(), Some(1e-3));
+///
+/// // Any increasing list.
+/// let three = OutputTimes::new(vec![0.0, 0.5, 1.0]).unwrap();
+/// assert_eq!(three.times().len(), 3);
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutputTimes {
     times: Vec<f64>,
@@ -304,7 +390,7 @@ mod tests {
     macro_rules! setup_ssa_input {
         ($wname:ident, $rname:ident, $seq:expr, $db:expr) => {
             let emodel = Fuzzyfold::default();
-            let $rname = Arrhenius::new(emodel.temperature(), 1.0, None, None, None);
+            let $rname = Arrhenius::new(emodel.temperature(), 1.0);
 
             let sequence = NucleotideVec::try_from($seq)
                 .expect("Invalid sequence?");
@@ -330,7 +416,8 @@ mod tests {
     #[test]
     fn rate_tree_after_moves_and_extensions() {
         let emodel = Arc::new(Fuzzyfold::default());
-        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0), Some(1.0));
+        let rmodel = Arrhenius::new(emodel.temperature(), 1.0)
+            .with_three_way(1.0).with_four_way(1.0).with_a_to_i(1.0);
         let types = rmodel.move_types();
         let runs = [
             ("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC", "."),
@@ -393,7 +480,7 @@ mod tests {
     #[test]
     fn sample_at_every_output_time() {
         let emodel = Arc::new(Fuzzyfold::default());
-        let rmodel = Arrhenius::new(emodel.temperature(), 1e5, None, None, None);
+        let rmodel = Arrhenius::new(emodel.temperature(), 1e5);
         let sequence = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").unwrap();
         let start = MultiPairTable::try_from("..........").unwrap();
         let num_ext = sequence.len() - start.len();
@@ -413,7 +500,7 @@ mod tests {
     #[test]
     fn test_flux_after_moves() {
         let emodel = Arc::new(Fuzzyfold::default());
-        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0), None);
+        let rmodel = Arrhenius::new(emodel.temperature(), 1.0).with_three_way(1.0).with_four_way(1.0);
         let policy = MoveTypes::SHIFTS;
 
         let sequence = NucleotideVec::try_from("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC").expect("Invalid sequence?");
@@ -446,7 +533,7 @@ mod tests {
         // On circular strands, the moves after each step are the moves of a
         // table built from scratch, and the energy is that of the structure.
         let emodel = Arc::new(Fuzzyfold::default());
-        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0), None);
+        let rmodel = Arrhenius::new(emodel.temperature(), 1.0).with_three_way(1.0).with_four_way(1.0);
         let policy = MoveTypes::SHIFTS;
         for (seq, db) in [
             ("GGGAAACCCA^", "..........^"),
@@ -482,8 +569,8 @@ mod tests {
         let sequence = NucleotideVec::try_from(seq).unwrap();
         let start = MultiPairTable::try_from("..........").unwrap();
         for shifts in [MoveTypes::NONE, MoveTypes::SHIFTS] {
-            let k = (shifts == MoveTypes::SHIFTS).then_some(1.0);
-            let rmodel = Arrhenius::new(emodel.temperature(), 1.0, k, k, None);
+            let k = if shifts == MoveTypes::SHIFTS { 1.0 } else { 0.0 };
+            let rmodel = Arrhenius::new(emodel.temperature(), 1.0).with_three_way(k).with_four_way(k);
             let moves = LoopNeighbors::try_from((sequence.clone(), &start, emodel.clone(), shifts)).unwrap();
             let mut simulator = SSA::from((moves, rmodel));
             let times = vec![5.0; seq.len() - start.len() + 1];
@@ -506,7 +593,7 @@ mod tests {
         // The waiting time belongs to the structure the callback sees: when
         // it ends after t_max, the structure stays; also at each extension.
         let emodel = Arc::new(Fuzzyfold::default());
-        let rmodel = Arrhenius::new(emodel.temperature(), 1.0, Some(1.0), Some(1.0), None);
+        let rmodel = Arrhenius::new(emodel.temperature(), 1.0).with_three_way(1.0).with_four_way(1.0);
         let seq = "UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC";
         let sequence = NucleotideVec::try_from(seq).unwrap();
         for (seed, t_max) in [(1, 0.5), (2, 3.0), (3, 20.0)] {

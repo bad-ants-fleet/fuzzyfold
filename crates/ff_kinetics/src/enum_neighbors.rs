@@ -86,6 +86,25 @@ struct Frame {
 /// passed to the callback once, with its energy. The search is depth
 /// first; with a step limit, a structure found again in fewer steps is
 /// expanded again. The move set returns to the start.
+///
+/// ```
+/// use std::sync::Arc;
+/// use ff_structure::MultiPairTable;
+/// use ff_energy::{Fuzzyfold, NucleotideVec};
+/// use ff_kinetics::{LoopNeighbors, MoveTypes};
+/// use ff_kinetics::enum_neighbors::enumerate_neighbors;
+///
+/// let seq = NucleotideVec::try_from_rna("GGGGAAACCCC").unwrap();
+/// let start = MultiPairTable::try_from("((((...))))").unwrap();
+/// let model = Arc::new(Fuzzyfold::default());
+/// let mut moves = LoopNeighbors::try_from((seq, &start, model, MoveTypes::NONE)).unwrap();
+///
+/// // The structures within 3 kcal/mol (300) of the start, in at most 2
+/// // moves (usize::MAX for no limit).
+/// enumerate_neighbors(&mut moves, 300, 2, |structure, energy| {
+///     println!("{structure} {:.2}", energy as f64 / 100.0);
+/// });
+/// ```
 pub fn enumerate_neighbors<M: MoveSet, F>(moves: &mut M, maxdelta: i32, maxsteps: usize, mut callback: F)
 where
     F: FnMut(&DotBracketVec, i32),

@@ -52,7 +52,7 @@ fn load_registries(len: usize, emodel: &Arc<Fuzzyfold>) -> Vec<MacrostateRegistr
 /// iteration starts from the same seed.
 fn bench_classify_dbv(c: &mut Criterion) {
     let emodel = Arc::new(Fuzzyfold::default());
-    let rmodel = Arrhenius::new(emodel.temperature(), 1.0, None, None, None);
+    let rmodel = Arrhenius::new(emodel.temperature(), 1.0);
     let mut group = c.benchmark_group("Classify macrostates (DBV) during SSA");
     group.sampling_mode(SamplingMode::Flat);
     group.sample_size(10);

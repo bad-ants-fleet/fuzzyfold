@@ -1,6 +1,6 @@
 # Analyze changes of secondary-structure ensembles over time
 `ff-timecourse` performs multiple stochastic folding simulations in parallel and
-merges them into a unified timeline. This timeline then contains the occupancy
+merges them into a time course. This time course then contains the occupancy
 of predefined macro-states over time. The simulation starts at a provided starting
 structure. If the strating structure is shorter than the corresponding sequence,
 co-transcriptonal trajectories are simulated and the parameter `--t-ext` must be 
@@ -66,7 +66,7 @@ or, if you use pipes:
 cat dld1_lm3.na | ff-timecourse --macrostates dld1*.ms --t-end 1 -n 100 --output dld1_lm3_t1
 ```
 
-To familiarize yourself with the default timeline parameters `--t-lin`,
+To familiarize yourself with the default output time parameters `--t-lin`,
 `--t-log`, `--t-sep`, and `--t-ext` for output analysis, see:
 
 ```bash
@@ -76,7 +76,7 @@ ff-timecourse --help
 During execution, the program prints simulation parameters to `STDOUT`,
 displays a **progress bar**, and finally reports the results in different output 
 file formats: 
- - dld1_lm3_t1.tln: The "timeline" data that gets reloaded when another run is performed.
+ - dld1_lm3_t1.tln: The time course (macrostate counts) that gets reloaded when another run is performed.
  - dld1_lm3_t1.nxy: The simulation result in nxy format (for custom plotting).
  - dld1_lm3_t1.svg: A default SVG plot of the simulation results.
 
@@ -89,10 +89,10 @@ For publication plots, use the Python package (`crates/ff_python`):
 
 To reduce statistical noise in ensemble dynamics, you may want to perform
 **many more trajectories**, potentially for longer time periods.  You can
-*accumulate results incrementally* by reloading existing timelines.
+*accumulate results incrementally* by reloading existing time courses.
 In fact, this happens **automatically**, if a `*.tln` file exists that 
-matches your `--output name`. Note, timelines can only be merged, if the 
-timeline parameters do not change between calls!
+matches your `--output name`. Note, time courses can only be merged, if the 
+output times do not change between calls!
 
 For example:
 
@@ -102,7 +102,7 @@ cat dld1_lm3.na | ff-timecourse --macrostates dld1*.ms --t-end 1 -n 900 --output
 
 This command updates `dld1_lm3_t1.tln`, to include the results from the additional 900 simulations.
 Running the same command again will automatically reload the file, add another
-900 simulations, and update the stored timeline accordingly.
+900 simulations, and update the stored time course accordingly.
 
 Try it! This is the recommended way to extend your simulation dataset without
 restarting from scratch.

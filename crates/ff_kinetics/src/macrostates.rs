@@ -3,7 +3,7 @@ use std::io;
 use std::sync::Arc;
 use std::path::PathBuf;
 use rustc_hash::FxHashMap;
-use rand::Rng;
+use rand::RngExt;
 
 use ff_structure::DotBracketVec;
 use ff_structure::DotBracket;
@@ -40,24 +40,20 @@ use crate::{ZERO_CELSIUS, KB};
 /// - Will panic if a structure is not well-formed.
 ///
 /// # Example
-/// ```rust
+/// ```
 /// use ff_kinetics::Macrostate;
 /// use ff_structure::DotBracketVec;
-/// use ff_energy::NucleotideVec;
-/// use ff_energy::Fuzzyfold;
+/// use ff_energy::{Fuzzyfold, NucleotideVec};
 ///
-/// let energy_model = Fuzzyfold::default();
 /// let seq = NucleotideVec::try_from("CGCAAAGCG").unwrap();
-/// let db1 = DotBracketVec::try_from("(((...)))").unwrap();
-/// let db2 = DotBracketVec::try_from("((.....))").unwrap();
-/// let db3 = DotBracketVec::try_from(".((...)).").unwrap();
+/// let structures: Vec<DotBracketVec> = ["(((...)))", "((.....))", ".((...))."]
+///     .into_iter().map(|s| DotBracketVec::try_from(s).unwrap()).collect();
+/// let hairpin = Macrostate::from_list("hairpin", &seq, &structures, &Fuzzyfold::default());
 ///
-/// let ms = Macrostate::from_list(
-///    "test",
-///    &seq,
-///    &[db1, db2, db3],
-///    &energy_model,
-/// );
+/// // The structure of lowest energy, and the free energy of the macrostate
+/// // in kcal/mol.
+/// assert_eq!(hairpin.get_lowest_microstate().unwrap().to_string(), "(((...)))");
+/// println!("{:.2}", hairpin.ensemble_energy().unwrap());
 /// ```
 #[derive(Debug)]
 pub struct Macrostate {
@@ -200,6 +196,27 @@ impl Macrostate {
 }
 
 /// A registry to collect macrostate definitions.
+///
+/// ```
+/// use std::sync::Arc;
+/// use ff_structure::DotBracketVec;
+/// use ff_energy::{Fuzzyfold, NucleotideVec};
+/// use ff_kinetics::MacrostateRegistry;
+///
+/// let seq = NucleotideVec::try_from_rna("GGGGAAACCCC").unwrap();
+/// let mut registry = MacrostateRegistry::from((seq.clone(), Arc::new(Fuzzyfold::default())));
+///
+/// // A macrostate file: a name, the sequence, then one structure per line
+/// // (anything after a structure, such as its energy, is ignored).
+/// let hairpin = ">hairpin\nGGGGAAACCCC\n((((...)))) -4.43\n.(((...))).\n";
+/// registry.insert_from_reader(hairpin.as_bytes(), "hairpin.txt", 0).unwrap();
+///
+/// // Index 0 is "Unassigned", for structures in no macrostate.
+/// let db = DotBracketVec::try_from(".(((...))).").unwrap();
+/// assert_eq!(registry.classify(&seq, &db), 1);
+/// let db = DotBracketVec::try_from("...........").unwrap();
+/// assert_eq!(registry.classify(&seq, &db), 0);
+/// ```
 pub struct MacrostateRegistry<E: EnergyModel> {
     sequence: NucleotideVec,
     energy_model: Arc<E>,
@@ -240,6 +257,10 @@ impl<E: EnergyModel> MacrostateRegistry<E> {
         Ok(())
     }
 
+    /// Read a macrostate (name, sequence, structures) from a reader;
+    /// `source` names it in errors. With `remove > 0`, the structures are
+    /// cut by that many bases at the 3' end (co-transcriptional). False if
+    /// no structure remains after a cut.
     pub fn insert_from_reader<R: BufRead>(&mut self, 
         reader: R, 
         source: &str, 

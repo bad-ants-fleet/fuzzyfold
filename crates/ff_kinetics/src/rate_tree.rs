@@ -188,7 +188,7 @@ impl RateTree {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng};
     use rand::rngs::StdRng;
 
     /// Every sum is that of its subtree, the index points to each node, and

@@ -17,8 +17,8 @@ const DATA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ff_energy/benches/da
 
 fn run(shifts: bool, len: usize, count: usize, t_max: f64, steps: i64) -> i64 {
     let model = Arc::new(Fuzzyfold::default());
-    let s = shifts.then_some(1.0);
-    let rates = Arrhenius::new(model.temperature(), 1.0, s, s, None);
+    let k = if shifts { 1.0 } else { 0.0 };
+    let rates = Arrhenius::new(model.temperature(), 1.0).with_three_way(k).with_four_way(k);
     let mut rng = StdRng::seed_from_u64(42);
     let input = std::fs::read_to_string(format!("{DATA}/benchmark_random_structures_len{len}.vrna")).unwrap();
     let lines: Vec<&str> = input.lines().collect();
