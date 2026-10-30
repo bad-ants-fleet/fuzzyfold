@@ -22,10 +22,11 @@ All notable changes to this crate will be documented in this file.
 - Benchmarks of pseudoknotted structures: benchmark_random_pseudoknots_len*
   (each nested structure cut into segments written in another order, a
   third each of pseudoknot density 2, 3, and 4 or more; without the pairs
-  that could close a hairpin under three bases, also through a wrap; see
-  examples/pseudoknot_benchmark_set.rs), evaluated as one strand, four
-  strands, circular, and four strands with the third circular;
-  examples/energy_workload.rs for instruction counts
+  that could close a hairpin under three bases, also through a wrap; made
+  by benchmarks/pseudoknot_benchmark_set.py at the top of the repository),
+  evaluated as one strand, four strands, circular, and four strands with
+  the third circular; benches/workloads/energy_workload.rs (an example
+  target) for instruction counts
 - RingDecomposition (for MultiPairTable): a structure as loops traced along
   the backbone (NestedLoop: its pairs in loop order and a Gap, closed, open
   from a 5' end to a 3' end, or through the wrap of a circle) and
@@ -78,6 +79,13 @@ All notable changes to this crate will be documented in this file.
   open chain; ViennaRNA keeps 0, as ViennaRNA 2.6
 
 ### Changed
+- The regression tests use the benchmark sets: tests/pseudoknot_energies.rs
+  compares the energies of the pseudoknotted sets (lengths 50 and 100, all
+  four variants, also the circles under rotation) with those recorded by
+  benchmarks/fuzzyfold_energies.py, and tests/reference_energies.rs those of
+  the nested sets (Turner 2004, Andronescu 2007, Mathews 2004) with
+  ViennaRNA (benchmarks/viennarna_energies.py). tests/data is removed; the
+  long hairpin, also at 25 C, is a unit test of ViennaRNA.
 - The Display of loops and pseudoknots is plain text (no terminal colors);
   ff_energy no longer depends on colored, env_logger, itertools and
   rustc-hash

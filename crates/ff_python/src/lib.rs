@@ -7,7 +7,7 @@ pub mod structure_exports;
 pub mod kinetics_exports;
 
 #[pymodule]
-fn fuzzyfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _fuzzyfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<energy_exports::Fuzzyfold>()?;
     m.add_class::<energy_exports::ViennaRNA>()?;
     m.add_function(wrap_pyfunction!(energy_exports::stems, m)?)?;
@@ -18,7 +18,8 @@ fn fuzzyfold(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(structure_exports::density, m)?)?;
     m.add_class::<kinetics_exports::Simulator>()?;
     m.add_class::<kinetics_exports::Explorer>()?;
-    m.add_class::<kinetics_exports::Plotter>()?;
+    m.add_function(wrap_pyfunction!(kinetics_exports::lin_log_times, m)?)?;
+    m.add_function(wrap_pyfunction!(kinetics_exports::transcription_times, m)?)?;
     Ok(())
 }
 

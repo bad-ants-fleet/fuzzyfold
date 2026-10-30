@@ -23,3 +23,9 @@ criterion.workspace = true
 [[bench]]
 name = "energy_models"
 harness = false
+
+# A workload for instruction counts (callgrind), built as an example for a
+# fixed path: target/release/examples/energy_workload
+[[example]]
+name = "energy_workload"
+path = "benches/workloads/energy_workload.rs"

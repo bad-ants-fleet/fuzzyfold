@@ -80,6 +80,9 @@ file formats:
  - dld1_lm3_t1.nxy: The simulation result in nxy format (for custom plotting).
  - dld1_lm3_t1.svg: A default SVG plot of the simulation results.
 
+For publication plots, use the Python package (`crates/ff_python`):
+`python -m fuzzyfold.plotting dld1_lm3_t1.tln` (with error bands).
+
 ---
 
 ## Aggregating data from multiple simulations

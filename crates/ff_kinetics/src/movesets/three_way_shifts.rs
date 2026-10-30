@@ -4,10 +4,10 @@ use ff_energy::NestedLoop;
 use ff_energy::EnergyModel;
 
 use crate::Move;
+use crate::Neighbors;
 use crate::movesets::loop_table::LoopTable;
 
 type Pair = (usize, usize);
-type Moves = Vec<(Move, i32)>;
 
 
 /// Three-way shift move enumeration.
@@ -45,23 +45,15 @@ impl Joined {
 
 #[derive(Clone, Default)]
 pub struct ThreeWayNeighbors {
-    map: IntMap<usize, Moves>,
+    map: IntMap<usize, Neighbors>,
 } 
 
 impl ThreeWayNeighbors {
-    pub fn len(&self) -> usize {
-        self.map.values().map(|v| v.len()).sum::<usize>()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
-
-    pub fn map(&self) -> &IntMap<usize, Moves> {
+    pub fn map(&self) -> &IntMap<usize, Neighbors> {
         &self.map
     }
 
-    pub fn remove(&mut self, index: &usize) -> Option<Moves> {
+    pub fn remove(&mut self, index: &usize) -> Option<Neighbors> {
         self.map.remove(index)
     }
 
@@ -70,7 +62,7 @@ impl ThreeWayNeighbors {
         &mut self,
         ltab: &LoopTable<E>,
         index: usize,
-    ) -> &Moves {
+    ) -> &Neighbors {
         let (init, _) = ltab.get(index);
         let pairs = init.index_pairs();
 
@@ -83,7 +75,7 @@ impl ThreeWayNeighbors {
             joined.insert(i, Joined::of(ltab, (i, j)));
         }
 
-        let mut neighbors: Moves = Vec::new();
+        let mut neighbors: Neighbors = Vec::new();
         for s in init.stretches() {
             let ((p5, p3), unpaired) = (s.ends, s.unpaired);
             self.shift_iter(ltab, (p5, unpaired.start), (p3, unpaired.end), &loopdict, &joined, &mut neighbors);
@@ -100,17 +92,15 @@ impl ThreeWayNeighbors {
         (p3, p3e): (usize, usize),
         loopdict: &IntMap<usize, Pair>,
         joined: &IntMap<usize, Joined>,
-        neighbors: &mut Moves,
+        neighbors: &mut Neighbors,
     ) {
         for k in p5s..p3e {
-            let uk = k;
             for (&p, &(i, j)) in loopdict.iter() {
-                let up = p;
-                if !ltab.can_pair(uk, up) {
+                if !ltab.can_pair(k, p) {
                     continue;
                 }
-                if (p == p5 && up + ltab.min_hairpin_size() >= uk) 
-                    || (p == p3 && uk + ltab.min_hairpin_size() >= up) 
+                if (p == p5 && p + ltab.min_hairpin_size() >= k) 
+                    || (p == p3 && k + ltab.min_hairpin_size() >= p) 
                 {
                     continue;
                 } 

@@ -1,7 +1,10 @@
 use crate::Move;
+use crate::ShiftMoves;
 
-pub const K0: f64 = 273.15;
-pub const KB: f64 = 0.001987204285; // kcal/(mol*K)
+/// 0 degrees Celsius in Kelvin.
+pub const ZERO_CELSIUS: f64 = 273.15;
+/// The gas constant in kcal/(mol K).
+pub const KB: f64 = 0.001987204285;
 
 pub trait RateModel: Clone + Send + Sync {
     /// Given dE (in kcal/mol), return the rate constant.
@@ -10,13 +13,10 @@ pub trait RateModel: Clone + Send + Sync {
 
 /// The Arrhenius rate model.
 ///
-/// We specify kT = k_Boltzmann * temperature [kcal/mol].
-/// There are multiple types of k0 available to parameterize different move
-/// sets. At the moment, we support the typcal add/delete moves: k0, three-way
-/// shit moves: k3ws and four-way shit moves: k4ws. Setting either of those to 0
-/// effictively turns the move set off. (However, for performancy reasons you
-/// may want to switch these moves sets off during neighborhood generation as
-/// well.)
+/// One rate constant per move type: k0 for adding and deleting pairs, k3ws
+/// for three-way and k4ws for four-way shift moves. A rate constant of 0
+/// turns that move type off (see `shift_moves`: the move set then need not
+/// propose them).
 #[derive(Debug, Clone, Copy)]
 pub struct Arrhenius {
     /// kT = k_Boltzmann * temperature [kcal/mol].
@@ -34,7 +34,7 @@ impl Arrhenius {
         if k0 < 0. {
             panic!("k0 must not be negative!");
         }
-        let t_kelvin = celsius + K0;
+        let t_kelvin = celsius + ZERO_CELSIUS;
         Self { 
             kt: KB * t_kelvin,
             k0,
@@ -65,6 +65,11 @@ impl Arrhenius {
         } else {
             None
         }
+    }
+
+    /// The shift moves with a rate: the move set to simulate with.
+    pub fn shift_moves(&self) -> ShiftMoves {
+        ShiftMoves { three_way: self.k3ws > 0.0, four_way: self.k4ws > 0.0 }
     }
 
 }

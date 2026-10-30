@@ -4,9 +4,9 @@ use ff_energy::NestedLoop;
 use ff_energy::EnergyModel;
 
 use crate::Move;
+use crate::Neighbors;
 use crate::movesets::loop_table::LoopTable;
 
-type Moves = Vec<(Move, i32)>;
 
 /// Four-way shift move enumeration.
 ///
@@ -26,23 +26,15 @@ type Moves = Vec<(Move, i32)>;
 ///
 #[derive(Clone, Default)]
 pub struct FourWayNeighbors {
-    map: IntMap<usize, Moves>,
+    map: IntMap<usize, Neighbors>,
 } 
 
 impl FourWayNeighbors {
-    pub fn len(&self) -> usize {
-        self.map.values().map(|v| v.len()).sum::<usize>()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
-
-    pub fn map(&self) -> &IntMap<usize, Moves> {
+    pub fn map(&self) -> &IntMap<usize, Neighbors> {
         &self.map
     }
 
-    pub fn remove(&mut self, index: &usize) -> Option<Moves> {
+    pub fn remove(&mut self, index: &usize) -> Option<Neighbors> {
         self.map.remove(index)
     }
 
@@ -51,28 +43,24 @@ impl FourWayNeighbors {
         &mut self,
         ltab: &LoopTable<E>,
         index: usize,
-    ) -> &Moves {
+    ) -> &Neighbors {
         let (init, _) = ltab.get(index);
         let pairs = init.index_pairs();
 
         let mut neighbors = Vec::new(); 
         for (p1, &(i, j)) in pairs.iter().enumerate() {
-            let ui = i;
-            let uj = j;
             for &(k, l) in pairs[p1 + 1..].iter() {
-                let uk = k;
-                let ul = l;
-                if uj + ltab.min_hairpin_size() < uk 
-                    && ltab.can_pair(ui, ul) 
-                    && ltab.can_pair(uj, uk) 
+                if j + ltab.min_hairpin_size() < k 
+                    && ltab.can_pair(i, l) 
+                    && ltab.can_pair(j, k) 
                 {
                     let mv = Move::ShiftILJK { i, j, k, l };
                     if let Some(delta) = self.get_activation_energy(ltab, &mv) {
                         neighbors.push((mv, delta));
                     }
-                } else if ltab.can_pair(ui, uk) && ltab.can_pair(ul, uj) 
-                    && ui + ltab.min_hairpin_size() < uk 
-                    && ul + ltab.min_hairpin_size() < uj
+                } else if ltab.can_pair(i, k) && ltab.can_pair(l, j) 
+                    && i + ltab.min_hairpin_size() < k 
+                    && l + ltab.min_hairpin_size() < j
                 {
                     let mv = Move::ShiftIKLJ { i, j, k, l };
                     if let Some(delta) = self.get_activation_energy(ltab, &mv) {
@@ -85,7 +73,7 @@ impl FourWayNeighbors {
         &self.map[&index]
     }
 
-    /// Look up / constuct all loops for four-way shift moves.
+    /// Look up / construct all loops for four-way shift moves.
     pub fn get_loops<E: EnergyModel>(
         &self,
         ltab: &LoopTable<E>,

@@ -7,7 +7,12 @@ name = "fuzzyfold"
 dynamic = ["version"]
 description = "fuzzyfold Python bindings"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+plot = ["matplotlib"]
 
 [tool.maturin]
+python-source = "python"
+module-name = "fuzzyfold._fuzzyfold"
 features = ["pyo3/extension-module"]

@@ -51,10 +51,13 @@ print(f"{seq}")
 seq = "UGCCUAGAGAGUCAGGUGAU"
 ssa = ff.Simulator(k0 = 1, k3ws = 1)
 print(f"{seq}")
-ssa.simulate_ensemble(seq, None, t_ext = 40, t_end = 40, output = "test")
+ssa.simulate_ensemble(seq, None, t_ext = 40,
+    times = ff.transcription_times(40, len(seq) - 1, t_end = 40), output = "test")
 print(f"Wrote file test.drf")
 
-ssa.simulate_timecourse(seq, db1, t_end = 40, output = "test")
+tc = ssa.simulate_timecourse(seq, db1,
+    times = ff.lin_log_times(t_sep = 10, t_end = 40), output = "test")
+print(tc, tc.names)
 print(f"Wrote file test.tln")
 print(f"Wrote file test.nxy")
 

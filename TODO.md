@@ -11,13 +11,10 @@ Finish the review of this branch and merge it into `development`, then `main`.
   evaluation about 10% faster; kinetics about 12% (no shifts) and 17%
   (shifts) slower, mostly from loop energies split into separate functions
   (`dangles`) and segments built for multiloops. Measure before changing.
-- Crate docs for `ff_kinetics`, like the guides in `ff_structure` and
-  `ff_energy`; examples for docs.rs.
 - CHANGELOGs of `ff_kinetics` and the Python bindings (Python: `ff.Fuzzyfold`
   and `ff.ViennaRNA`, default parameters `rna_extended`); version bump.
 - Citation: `CITATION.cff`, a citation line in the `--help` of the command
   line tools, `pyproject.toml` metadata (readme, authors, URLs, license).
-- Decide the fate of `crates/ff_findpath` (not in the workspace, outdated).
 
 ## 2. Train the pseudoknot parameters
 
@@ -92,6 +89,30 @@ without pseudoknots (no co-transcriptional folding).
   with experimental data on circular RNAs before the paper.
 - The pseudoknot density (`ClosedRegions`) depends on where the circle is
   cut.
+
+## ff-findpath
+
+A command line tool for the energy barrier between two structures A and B,
+on `MoveSet` and the neighborhood enumeration (`enum_neighbors`), so it
+extends to pseudoknots with a pseudoknot move set. Output: the saddle
+energy and the path. Replaces the old `crates/ff_findpath` (removed; in
+the git history).
+
+- Direct paths (only pairs of A or B, every move one base pair closer to
+  B): a breadth-first search by distance that keeps, for each structure,
+  the lowest saddle of the paths to it.
+  - `--fixed-width w`: keep the w structures with the lowest saddle per
+    distance (findpath, Flamm et al. 2001; w = 1 is greedy). Without it,
+    exhaustive: the exact direct barrier, exponential in the distance.
+  - `--recursive`: take the estimated barrier as an upper bound for a new
+    run, until the barrier does not change.
+- `--indirect`: the full search over all paths of the move set, raising
+  the energy bound until B is reached.
+- `--stochastic`: a simple biased stochastic walk: with probability beta an
+  SSA step, otherwise a step toward B (the biased walk of pathway
+  elaboration, Zolaktaf et al. 2021).
+- Open: shift moves on direct paths; restrict the move set to the allowed
+  pairs instead of filtering the proposed moves; B as a macrostate.
 
 ## Later
 

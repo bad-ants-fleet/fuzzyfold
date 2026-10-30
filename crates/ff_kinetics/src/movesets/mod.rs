@@ -1,14 +1,13 @@
-// Those are only used internally.
-pub mod loop_table;
-pub mod four_way_shifts;
-pub mod three_way_shifts;
-pub mod shift_policy;
-
-// Those are public interfaces.
 mod base_pair_moves;
+mod four_way_shifts;
 mod loop_neighbors;
-mod walker;
+mod loop_table;
+mod move_set;
+mod shift_moves;
+mod three_way_shifts;
 
 pub use base_pair_moves::*;
 pub use loop_neighbors::*;
-pub use walker::*;
+pub use loop_table::LoopTable;
+pub use move_set::*;
+pub use shift_moves::ShiftMoves;

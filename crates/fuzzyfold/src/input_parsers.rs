@@ -136,7 +136,7 @@ pub fn read_eval<R: BufRead>(reader: R, is_rna: bool) -> Result<(Option<String>,
 /// - `base_string(&str)`
 /// - `base_file<P: AsRef<Path>>(P)`
 /// - `base_stdin()`
-/// - `base_input(&str)`  (dispatches "-" → stdin, otherwise → file)
+/// - `base_input(&str)`  ("-" is stdin, anything else a file)
 ///
 /// Example:
 /// ```ignore

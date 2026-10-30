@@ -14,9 +14,6 @@ kinetics. One author reviews every line; read this before changing code.
 | `fuzzyfold`    | command line tools (`src/bin/ff-*.rs`), re-exports the above  | all                      |
 | `ff_python`    | Python bindings (PyO3, built with maturin)                   | all                      |
 
-`crates/ff_findpath` is not a workspace member and does not build against the
-current crates. Ignore it unless asked.
-
 ## How the pieces fit
 
 - Structures: `DotBracketVec` (1 byte per position, for storage and hashing)
@@ -80,10 +77,12 @@ valgrind --tool=callgrind target/release/examples/energy_workload pseudoknots fo
 valgrind --tool=callgrind target/release/examples/kinetics_workload shifts
 ```
 
-The benchmark sets are in `crates/ff_energy/benches/data`: nested
-structures (`structures`) and pseudoknotted ones (`pseudoknots`, made from
-them by `examples/pseudoknot_benchmark_set.rs`), each evaluated as one
-strand, four strands, circular, and four strands with the third circular.
+The workloads are in `benches/workloads` of each crate (built as examples,
+for a fixed path). The benchmark sets are in `crates/ff_energy/benches/data`:
+nested structures (`structures`) and pseudoknotted ones (`pseudoknots`),
+each evaluated as one strand, four strands, circular, and four strands with
+the third circular. The scripts that make them, and the runtime
+comparisons with other programs, are in `benchmarks/`.
 
 Python bindings: `cd crates/ff_python && maturin develop --release`.
 

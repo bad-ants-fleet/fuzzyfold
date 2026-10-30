@@ -653,6 +653,24 @@ mod tests {
     }
 
     #[test]
+    fn long_hairpin_as_viennarna() {
+        // ViennaRNA 2.7.2 (RNAeval -d2): a hairpin longer than the tables
+        // (extrapolated), for each parameter set, and at another
+        // temperature (the model rounds rescaled parameters where ViennaRNA
+        // truncates them; this structure is not affected).
+        let seq = format!("GGGG{}CCCC", "A".repeat(40));
+        let db = format!("(((({}))))", ".".repeat(40));
+        let mpt = MultiPairTable::try_from(db.as_str()).unwrap();
+        let rna = NucleotideVec::try_from_rna(&seq).unwrap();
+        let dna = NucleotideVec::try_from_dna(&seq).unwrap();
+        let energy = |model: ViennaRNA, seq: &NucleotideVec| model.energy_of_structure(seq, &mpt).unwrap();
+        assert_eq!(energy(ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 37.0), &rna), -299);
+        assert_eq!(energy(ViennaRNA::from_thermo_params(&RNA_TURNER_2004, 25.0), &rna), -444);
+        assert_eq!(energy(ViennaRNA::from_andronescu_params(&RNA_ANDRONESCU_2007), &rna), -262);
+        assert_eq!(energy(ViennaRNA::from_thermo_params(&DNA_MATHEWS_2004, 37.0), &dna), 41);
+    }
+
+    #[test]
     fn test_vrna_stacking_evaluation() {
         let model = ViennaRNA::default();
         assert_il!(model, "CG", "CG", -240);

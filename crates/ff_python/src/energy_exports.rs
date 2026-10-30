@@ -144,6 +144,9 @@ fn structure_of(structure: &str) -> PyResult<MultiPairTable> {
     MultiPairTable::try_from(structure).map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
+/// A stem: its pairs, and whether it is strained.
+type Stem = (Vec<(usize, usize)>, bool);
+
 /// The stems of the pseudoknots of a structure, as the energy evaluation 
 /// sees them: `(pairs, strained)` per stem, pairs outer -> inner, sorted by
 /// the 5' index of the outer pair. A stem continues through stacks and
@@ -152,7 +155,7 @@ fn structure_of(structure: &str) -> PyResult<MultiPairTable> {
 /// strand breaks ('+') as positions, like the structure string. Pairs that
 /// cross no pair and lie on no cycle are not listed.
 #[pyfunction]
-pub fn stems(structure: &str) -> PyResult<Vec<(Vec<(usize, usize)>, bool)>> {
+pub fn stems(structure: &str) -> PyResult<Vec<Stem>> {
     let mpt = structure_of(structure)?;
     let mut inner_of = std::collections::HashMap::new();
     let mut strained = std::collections::HashSet::new();

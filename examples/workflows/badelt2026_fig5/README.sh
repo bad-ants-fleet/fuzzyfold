@@ -14,11 +14,11 @@ cat dld1_lm2.na | ff-timecourse --rna turner2004 --macrostates dld1*.ms --k0 1e5
 cat dld1_lm4.na | ff-timecourse --rna turner2004 --macrostates dld1*.ms --k0 1e5 --t-sep 1e-5 --t-end 100 -n 100 --output dld1_lm4_t100
 cat dld1_lm5.na | ff-timecourse --rna turner2004 --macrostates dld1*.ms --k0 1e5 --t-sep 1e-5 --t-end 100 -n 100 --output dld1_lm5_t100
 
-## Publication-style plots 
-python ../../py-utils/plot_anxy.py dld1_lm2_t100.nxy --t-split 1e-5 --split-pos 0.125 --title "100 aggregated, stochastic simulations" \
+## Publication-style plots (fuzzyfold Python package with matplotlib, see crates/ff_python)
+python -m fuzzyfold.plotting dld1_lm2_t100.nxy --t-sep 1e-5 --split-pos 0.125 --title "100 aggregated, stochastic simulations" \
     -o dld1_lm2_t100 -f pdf --fig-w 5 --plim 0 --labels Unassigned LM1 LM2 --labels-strict
-python ../../py-utils/plot_anxy.py dld1_lm4_t100.nxy --t-split 1e-5 --split-pos 0.125 --title "100 aggregated, stochastic simulations" \
+python -m fuzzyfold.plotting dld1_lm4_t100.nxy --t-sep 1e-5 --split-pos 0.125 --title "100 aggregated, stochastic simulations" \
     -o dld1_lm4_t100 -f pdf --fig-w 5 --plim 0 --labels Unassigned LM1 LM2 LM3 LM4 --labels-strict
-python ../../py-utils/plot_anxy.py dld1_lm5_t100.nxy --t-split 1e-5 --split-pos 0.125 --title "100 aggregated, stochastic simulations" \
+python -m fuzzyfold.plotting dld1_lm5_t100.nxy --t-sep 1e-5 --split-pos 0.125 --title "100 aggregated, stochastic simulations" \
     -o dld1_lm5_t100 -f pdf --fig-w 5 --plim 0 --labels Unassigned LM1 LM2 LM5 --labels-strict
 

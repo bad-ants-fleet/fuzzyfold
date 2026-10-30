@@ -93,14 +93,62 @@ ff.density(s)           # 2
   (Gillespie), optionally co-transcriptional (`t_ext`) and with three- and
   four-way branch migration (`k3ws`, `k4ws`).
   - `simulate_trajectory(...)`: an iterator over the trajectory.
-  - `simulate_ensemble(...)`, `simulate_timecourse(...)`: many simulations,
-    written as `.drf`, `.tln` and `.nxy` files; `aggregate_timecourse_results`
-    merges `.tln` files.
+  - `simulate_ensemble(...)`: the structures of many simulations at the
+    output times, also written as a `.drf` file.
+  - `simulate_timecourse(...)`: the macrostate counts of many simulations,
+    as a `Timecourse`; with `output`, also written as `.tln` and `.nxy`
+    files (the files of `ff-timecourse`).
 - `Explorer(...).explore(sequence, structure, ...)`: the neighborhood of a 
   structure within an energy range.
-- `Plotter.plot_timecourse(...)`: plots a time course.
 
 Pseudoknots are not supported in kinetics yet.
+
+`simulate_ensemble` and `simulate_timecourse` report the state at the
+output times `times`, and a simulation ends at the last one. By default,
+they are 50 times evenly up to 1e-4 s and 50 in log space up to 1 s
+(`ff.lin_log_times()`); with `t_ext`, one per extension up to the full
+length and 50 in log space up to 1 s after it
+(`ff.transcription_times(t_ext, num_ext)`). Any increasing list works:
+
+```python
+times = ff.lin_log_times(t_sep=1e-5, t_end=10, t_lin=20, t_log=100)
+```
+
+### Time courses
+
+A `Timecourse` holds the counts of each macrostate (per sequence length
+in co-transcriptional simulations) at the output times, and the number of
+simulations. It needs numpy.
+
+```python
+sim = ff.Simulator(k0=1e5)
+tc = sim.simulate_timecourse(seq, start, num_sims=100,
+                             macrostates=["lm1.ms", "lm2.ms"])
+tc.names, tc.times, tc.occupancy()      # occupancy: (times, names)
+tc.standard_error()
+tc.save("run.tln")                      # or .nxy (occupancies only)
+tc = ff.Timecourse.read("run1.tln").merge(ff.Timecourse.read("run2.tln"))
+```
+
+### Plots
+
+`fuzzyfold.plotting` plots time courses with matplotlib
+(`pip install .[plot]`): linear up to `t_sep` and logarithmic after it,
+with the standard errors as bands, and a sequence length axis for
+co-transcriptional simulations. A `Timecourse` or a `.tln` file gives
+`t_sep` and the errors; for a `.nxy` file, give `t_sep` and `num_sims`.
+
+```python
+from fuzzyfold.plotting import plot_timecourse
+fig = plot_timecourse(tc, "run.pdf", title="100 simulations")
+```
+
+```bash
+python -m fuzzyfold.plotting run1.tln run2.tln -o run -f pdf png
+python -m fuzzyfold.plotting run.nxy --t-sep 1e-5 --labels LM1 LM2 -f show
+```
+
+`python -m fuzzyfold.plotting -h` lists the options.
 
 ## Examples
 

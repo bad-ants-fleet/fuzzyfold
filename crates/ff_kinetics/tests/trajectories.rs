@@ -11,7 +11,7 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use ff_structure::MultiPairTable;
 use ff_energy::{EnergyModel, Fuzzyfold, NucleotideVec};
-use ff_kinetics::{shift_policy, shift_policy::ShiftPolicy, Arrhenius, LoopNeighbors, RateModel, Walker, SSA};
+use ff_kinetics::{Arrhenius, LoopNeighbors, RateModel, MoveSet, SSA};
 
 const RUNS: [(&str, &str); 4] = [
     ("UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC", ".((((....)))).((((........))))..............."),
@@ -30,10 +30,11 @@ fn digest(lines: &[String]) -> u64 {
 
 /// The trajectory of a run, one line per step: time, waiting time, flux,
 /// energy and structure, with floats as their exact shortest form.
-fn trajectory<P: ShiftPolicy + Copy>(seq: &str, db: &str, policy: P, shifts: bool) -> Vec<String> {
+fn trajectory(seq: &str, db: &str, shifts: bool) -> Vec<String> {
     let model = Arc::new(Fuzzyfold::default());
     let shift = shifts.then_some(1.0);
     let rates = Arrhenius::new(model.temperature(), 1.0, shift, shift);
+    let policy = rates.shift_moves();
     let sequence = NucleotideVec::try_from(seq).unwrap();
     let start = MultiPairTable::try_from(db).unwrap();
     let moves = LoopNeighbors::try_from((sequence.clone(), &start, model.clone(), policy)).unwrap();
@@ -57,8 +58,8 @@ fn trajectories_as_recorded() {
     let mut records = Vec::new();
     for (seq, db) in RUNS {
         for (name, lines) in [
-            ("no-shift", trajectory(seq, db, shift_policy::NoShift, false)),
-            ("shift", trajectory(seq, db, shift_policy::ThreeAndFour, true)),
+            ("no-shift", trajectory(seq, db, false)),
+            ("shift", trajectory(seq, db, true)),
         ] {
             records.push(format!("{seq} {name} {} {:016x} {}", lines.len(), digest(&lines), lines.last().unwrap()));
         }

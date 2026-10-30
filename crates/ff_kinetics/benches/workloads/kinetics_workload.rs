@@ -11,11 +11,11 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use ff_structure::MultiPairTable;
 use ff_energy::{EnergyModel, Fuzzyfold, NucleotideVec};
-use ff_kinetics::{shift_policy, shift_policy::ShiftPolicy, Arrhenius, LoopNeighbors, Walker, SSA};
+use ff_kinetics::{Arrhenius, LoopNeighbors, MoveSet, SSA};
 
 const DATA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ff_energy/benches/data");
 
-fn run<P: ShiftPolicy + Copy>(policy: P, shifts: bool, len: usize, count: usize, t_max: f64, steps: i64) -> i64 {
+fn run(shifts: bool, len: usize, count: usize, t_max: f64, steps: i64) -> i64 {
     let model = Arc::new(Fuzzyfold::default());
     let s = shifts.then_some(1.0);
     let rates = Arrhenius::new(model.temperature(), 1.0, s, s);
@@ -26,7 +26,7 @@ fn run<P: ShiftPolicy + Copy>(policy: P, shifts: bool, len: usize, count: usize,
     for c in lines.chunks(3).take(count) {
         let seq = NucleotideVec::try_from(c[1]).unwrap();
         let start = MultiPairTable::try_from(c[2]).unwrap();
-        let moves = LoopNeighbors::try_from((seq, &start, model.clone(), policy)).unwrap();
+        let moves = LoopNeighbors::try_from((seq, &start, model.clone(), rates.shift_moves())).unwrap();
         let mut ssa = SSA::from((moves, rates));
         let mut n = 0i64;
         ssa.simulate(&mut rng, t_max, |_, _, _, w| { n += 1; sum += w.current_energy() as i64; n < steps });
@@ -38,8 +38,8 @@ fn run<P: ShiftPolicy + Copy>(policy: P, shifts: bool, len: usize, count: usize,
 fn main() {
     let what = std::env::args().nth(1).expect("Usage: kinetics_workload <no-shifts|shifts>");
     let sum = match what.as_str() {
-        "no-shifts" => run(shift_policy::NoShift, false, 100, 100, 10.0, i64::MAX),
-        "shifts" => run(shift_policy::ThreeAndFour, true, 250, 20, 1e6, 3000),
+        "no-shifts" => run(false, 100, 100, 10.0, i64::MAX),
+        "shifts" => run(true, 250, 20, 1e6, 3000),
         _ => panic!("Usage: kinetics_workload <no-shifts|shifts>"),
     };
     println!("{what} {sum}");

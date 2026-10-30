@@ -13,8 +13,10 @@ use ff_energy::NestedLoop;
 use ff_energy::Ring;
 use ff_energy::RingDecomposition;
 
+use crate::MoveSetError;
 
-type LoopEntry = (NestedLoop, i32);
+
+pub(crate) type LoopEntry = (NestedLoop, i32);
 
 /// Direct storage of the loop decomposition from a structure.
 ///
@@ -70,16 +72,16 @@ impl<E: EnergyModel> LoopTable<E> {
     /// False for a hairpin with fewer unpaired bases than the model allows.
     /// Index distances rule these out, except for the hairpin through the 
     /// strand wrap of a circular strand.
-    pub fn fits(&self, l: &NestedLoop) -> bool {
+    pub(crate) fn fits(&self, l: &NestedLoop) -> bool {
         l.hairpin_size().is_none_or(|n| n >= self.min_hairpin_size())
     }
 
-    pub fn energy_of_loop(&self, l: &NestedLoop) -> i32 {
+    pub(crate) fn energy_of_loop(&self, l: &NestedLoop) -> i32 {
         self.model.energy_of_nested_loop(&self.sequence, l)
             .expect("Broken energy evaluation!")
     }
 
-    pub fn loops_len(&self) -> usize {
+    pub(crate) fn loops_len(&self) -> usize {
         self.loops.len()
     }
 
@@ -91,11 +93,11 @@ impl<E: EnergyModel> LoopTable<E> {
         self.pair_lookup.iter()
     }
 
-    pub fn delete_pair(&mut self, i: &usize) -> usize {
+    pub(crate) fn delete_pair(&mut self, i: &usize) -> usize {
         self.pair_lookup.remove(i).expect("Missing pair_list entry.")
     }
 
-    pub fn insert_pair(&mut self, i: usize, j: usize) {
+    pub(crate) fn insert_pair(&mut self, i: usize, j: usize) {
         self.pair_lookup.insert(i, j);
     }
 
@@ -103,41 +105,41 @@ impl<E: EnergyModel> LoopTable<E> {
         self.energy
     }
 
-    pub fn extend_lookup(&mut self, idx: usize) {
+    pub(crate) fn extend_lookup(&mut self, idx: usize) {
         self.loop_lookup.push(idx);
     }
 
-    pub fn update_lookup(&mut self, idx: usize) {
+    pub(crate) fn update_lookup(&mut self, idx: usize) {
         let (l, _) = self.loops.get(idx).expect("Invalid LoopCache index");
         for s in l.stretches() {
             self.loop_lookup[s.unpaired.start..=s.ends.1].fill(idx);
         }
     }
 
-    pub fn pair_lookup(&self, idx: &usize) -> usize {
+    pub(crate) fn pair_lookup(&self, idx: &usize) -> usize {
         self.pair_lookup[idx]
     }
 
-    pub fn loop_lookup(&self, idx: usize) -> usize {
+    pub(crate) fn loop_lookup(&self, idx: usize) -> usize {
         self.loop_lookup[idx]
     }
 
-    pub fn geti(&self, i: usize) -> &LoopEntry {
+    pub(crate) fn geti(&self, i: usize) -> &LoopEntry {
         &self.loops[self.loop_lookup[i]]
     }
 
-    pub fn get(&self, idx: usize) -> &LoopEntry {
+    pub(crate) fn get(&self, idx: usize) -> &LoopEntry {
         self.loops
             .get(idx)
             .expect("Invalid LoopCache index")
     }
 
-    pub fn mark_stale(&mut self, idx: usize) {
+    pub(crate) fn mark_stale(&mut self, idx: usize) {
         self.energy -= self.loops[idx].1;
         self.stale.push(idx);
     }
 
-    pub fn insert_loopentry(
+    pub(crate) fn insert_loopentry(
         &mut self, 
         index: Option<usize>, 
         entry: LoopEntry,
@@ -199,7 +201,7 @@ impl<E: EnergyModel> From<&LoopTable<E>> for DotBracketVec {
 }
 
 impl<E: EnergyModel> TryFrom<(NucleotideVec, &MultiPairTable, Arc<E>)> for LoopTable<E> {
-    type Error = String;
+    type Error = MoveSetError;
 
     fn try_from((sequence, pairings, model): (NucleotideVec, &MultiPairTable, Arc<E>)
     ) -> Result<Self, Self::Error> {
@@ -210,13 +212,13 @@ impl<E: EnergyModel> TryFrom<(NucleotideVec, &MultiPairTable, Arc<E>)> for LoopT
 impl<E: EnergyModel> LoopTable<E> {
     /// The table of a structure.
     pub fn new(sequence: NucleotideVec, pairings: &MultiPairTable, model: Arc<E>
-    ) -> Result<Self, String> {
+    ) -> Result<Self, MoveSetError> {
         // One strand, linear or circular: a circular strand ends with the
         // strand wrap, the only strand end of the sequence.
         let circular = sequence.has_circular_strand();
         let strand_ends = sequence.iter().filter(|b| matches!(b, Base::SB | Base::SW)).count();
         if circular && (strand_ends > 1 || sequence.last() != Some(&Base::SW)) {
-            return Err("Kinetics support a single strand without pseudoknots.".into());
+            return Err(MoveSetError::Unsupported);
         }
 
         let mut loops = Vec::new();
@@ -256,7 +258,7 @@ impl<E: EnergyModel> LoopTable<E> {
             let loop_energy = match model.energy_of_nested_loop(&sequence, l) {
                 Ok(en) => en,
                 Err(e) => {
-                    error = Some(e.to_string());
+                    error = Some(e);
                     return;
                 }
             };
@@ -274,10 +276,10 @@ impl<E: EnergyModel> LoopTable<E> {
         });
 
         if let Some(e) = error {
-            return Err(e);
+            return Err(MoveSetError::Energy(e));
         }
         if unsupported || exterior != 1 {
-            return Err("Kinetics support a single strand without pseudoknots, a circular strand at full length.".into());
+            return Err(MoveSetError::Unsupported);
         }
         if circular {
             // The strand wrap belongs to no loop.

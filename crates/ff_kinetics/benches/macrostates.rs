@@ -15,9 +15,9 @@ use ff_energy::Fuzzyfold;
 use ff_kinetics::Arrhenius;
 use ff_kinetics::LoopNeighbors;
 use ff_kinetics::MacrostateRegistry;
-use ff_kinetics::shift_policy;
+use ff_kinetics::ShiftMoves;
 use ff_kinetics::SSA;
-use ff_kinetics::Walker;
+use ff_kinetics::MoveSet;
 
 mod common;
 use common::{data, load_inputs};
@@ -66,11 +66,11 @@ fn bench_classify_dbv(c: &mut Criterion) {
                 let mut rng = StdRng::seed_from_u64(42);
                 let mut classifications = 0usize;
                 for ((seq, pt), registry) in inputs.iter().zip(&registries) {
-                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), shift_policy::NoShift))
+                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), ShiftMoves::NONE))
                         .expect("Failed to build LoopNeighbors");
                     let mut simulator = SSA::from((moves, rmodel));
-                    simulator.simulate(&mut rng, black_box(10.0), |_t, _ti, _fl, walker| {
-                        classifications += registry.classify(&walker.current_structure());
+                    simulator.simulate(&mut rng, black_box(10.0), |_t, _ti, _fl, moves| {
+                        classifications += registry.classify(&moves.current_structure());
                         true
                     });
                 }

@@ -12,7 +12,7 @@ use ff_energy::EnergyModel;
 use ff_energy::Fuzzyfold;
 use ff_kinetics::Arrhenius;
 use ff_kinetics::LoopNeighbors;
-use ff_kinetics::shift_policy;
+use ff_kinetics::ShiftMoves;
 use ff_kinetics::SSA;
 
 mod common;
@@ -36,7 +36,7 @@ fn simulate_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 let mut rng = StdRng::seed_from_u64(42);
                 for (seq, pt) in &inputs {
-                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), shift_policy::NoShift))
+                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), ShiftMoves::NONE))
                         .expect("Failed to build LoopNeighbors");
                     let mut simulator = SSA::from((moves, rmodel));
                     simulator.simulate(&mut rng, black_box(10.0), |_t, _ti, _fl, _w| true);
@@ -61,7 +61,7 @@ fn simulate_three_way_shift_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 let mut rng = StdRng::seed_from_u64(42);
                 for (seq, pt) in &inputs {
-                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), shift_policy::ThreeWayOnly))
+                    let moves = LoopNeighbors::try_from((seq.clone(), pt, emodel.clone(), ShiftMoves { three_way: true, four_way: false }))
                         .expect("Failed to build LoopNeighbors");
                     let mut simulator = SSA::from((moves, rmodel));
                     simulator.simulate(&mut rng, black_box(10.0), |_t, _ti, _fl, _w| true);

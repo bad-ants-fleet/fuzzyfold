@@ -7,10 +7,10 @@ use std::sync::Arc;
 use ff_structure::MultiPairTable;
 use ff_energy::EnergyModel;
 use ff_kinetics::RateModel;
-use ff_kinetics::Walker;
+use ff_kinetics::Elongation;
 use ff_kinetics::LoopNeighbors;
-use ff_kinetics::shift_policy;
 use ff_kinetics::SSA;
+use ff_kinetics::extension_schedule;
 
 use fuzzyfold::input_parsers::read_cotr_input;
 use fuzzyfold::input_parsers::read_eval_input;
@@ -84,50 +84,25 @@ fn main() -> Result<()> {
         "mean-waiting".cyan(),
     );
 
-    let times: Vec<f64> = if let Some(t_ext) = cli.t_ext {
-        let mut v = vec![t_ext; sequence.len() - structure.len()];
-        v.push(cli.t_end);
-        v
-    } else { 
-        vec![cli.t_end] 
-    };
+    let num_ext = sequence.len() - structure.len();
+    let end = cli.t_ext.map_or(0.0, |t| t * num_ext as f64) + cli.t_end;
+    let times = extension_schedule(cli.t_ext, num_ext, end).map_err(anyhow::Error::msg)?;
 
-    match (rmodel.k3ws().is_some(), rmodel.k4ws().is_some()) {
-        (false, false) => {
-            let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::NoShift))
-                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
-        },
-        (true, false) => {
-            let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::ThreeWayOnly))
-                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
-        },
-        (false, true) => {
-            let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::FourWayOnly))
-                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
-        },
-        (true, true) => {
-            let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, shift_policy::ThreeAndFour))
-                .map_err(|e| anyhow::anyhow!("failed to construct AddDelMoves: {:?}", e))?;
-            run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
-        },
-    }
+    let moves = LoopNeighbors::try_from((sequence, &pairings, emodel, rmodel.shift_moves()))
+        .map_err(|e| anyhow::anyhow!("failed to build the move set: {e}"))?;
+    run_simulator(moves, rmodel, &times, cli.silent, cli.num_steps);
 
     Ok(())
 }
 
 
-fn run_simulator<W: Walker + std::fmt::Display, K: RateModel>(
+fn run_simulator<W: Elongation + std::fmt::Display, K: RateModel>(
     moves: W,
     rmodel: K,
     times: &[f64],
     silent: bool,
     num_steps: usize,
 )
-where
-    SSA<W, K>: From<(W, K)>,
 {
     let mut simulator = SSA::from((moves, rmodel));
 

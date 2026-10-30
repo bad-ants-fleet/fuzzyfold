@@ -1,6 +1,4 @@
-use std::fs::File;
 use std::io::BufRead;
-use std::io::BufReader;
 use std::io;
 use std::sync::Arc;
 use std::path::PathBuf;
@@ -13,7 +11,7 @@ use ff_structure::MultiPairTable;
 use ff_energy::NucleotideVec;
 use ff_energy::EnergyModel;
 
-use crate::{K0, KB};
+use crate::{ZERO_CELSIUS, KB};
 
 /// Represents a **macrostate**, i.e. an ensemble of secondary structures
 /// sharing a common label or coarse-grained feature.
@@ -29,14 +27,14 @@ use crate::{K0, KB};
 /// macrostate (-kt ln(Q)) calculated at initialization. 
 ///
 /// # Fields
-/// - `name`: Identifier or label for this macrostate `α` (e.g. `"Local minimum 1"`
+/// - `name`: Identifier or label for this macrostate `A` (e.g. `"Local minimum 1"`
 ///   or `"Hairpin A"`).
 /// - `ensemble`: Mapping from secondary structure representations `s` to `(E(s),
-///   P(s|α))`.
-/// - `ensemble_energy`: The free energy of the macrostate `(P(α))`.
+///   P(s|A))`.
+/// - `ensemble_energy`: The free energy of the macrostate `(P(A))`.
 ///
 /// # Notes
-/// - The `MacrostateRegisty` initializes a "**catch-all** macrostate", which is
+/// - The `MacrostateRegistry` initializes a "**catch-all** macrostate", which is
 ///   called "Unassigned", has no structures and ensemble_energy = None.
 /// - Will panic if a structure is not well-formed.
 ///
@@ -90,7 +88,7 @@ pub fn pad(dbv: &DotBracketVec, len: usize) -> DotBracketVec {
 
 impl Macrostate {
     /// Initialize a catch-all macrostate. 
-    /// (This is the default macrostate when initializing a MacrostateRegisty.)
+    /// (This is the default macrostate when initializing a MacrostateRegistry.)
     pub fn new_catch_all(name: &str) -> Self {
         Macrostate { 
             name: name.to_owned(),
@@ -106,7 +104,7 @@ impl Macrostate {
         energy_model: &E, 
     ) -> Self {
         let mut ensemble = FxHashMap::default();
-        let rt = KB * (K0 + energy_model.temperature());
+        let rt = KB * (ZERO_CELSIUS + energy_model.temperature());
 
         let mut q_sum = 0.0;
         for dbv in structures {
@@ -189,7 +187,7 @@ impl Macrostate {
     }
 }
 
-/// A registy to collect macrostate definitions.
+/// A registry to collect macrostate definitions.
 pub struct MacrostateRegistry<E: EnergyModel> {
     sequence: NucleotideVec,
     energy_model: Arc<E>,
@@ -215,20 +213,16 @@ fn io_err(msg: &str, src: &str) -> io::Error {
 
 impl<E: EnergyModel> MacrostateRegistry<E> {
 
-    /// High-level entry: read one or more macrostate files from disk.
+    /// Read macrostate files. Co-transcriptional: also insert each
+    /// macrostate at every shorter length (its structures cut at the 3'
+    /// end), as long as any structure remains.
     pub fn insert_files(&mut self, files: &[PathBuf], cotrans: bool) -> io::Result<()> {
         for file in files {
-            let mut num_to_remove = 0;
-            loop {
-                let fh = File::open(file)?;
-                let reader = BufReader::new(fh);
-                match self.insert_from_reader(reader, &file.display().to_string(), num_to_remove)? {
-                    true => num_to_remove += 1,
-                    false => break,
-                }
-                if !cotrans {
-                    break
-                }
+            let source = file.display().to_string();
+            let text = std::fs::read_to_string(file).map_err(|e| io_err(&e.to_string(), &source))?;
+            let mut remove = 0;
+            while self.insert_from_reader(text.as_bytes(), &source, remove)? && cotrans {
+                remove += 1;
             }
         }
         Ok(())
@@ -273,22 +267,13 @@ impl<E: EnergyModel> MacrostateRegistry<E> {
         }
 
         let mut structures = Vec::new();
-        let mut warned_trailing = false;
         for (lineno, line_raw) in lines.enumerate() {
             let line = line_raw?.trim().to_string();
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            let structure_str = match line.split_once(char::is_whitespace) {
-                Some((s, _)) => {
-                    if !warned_trailing {
-                        eprintln!("Warning: trailing data after dot-bracket structures is ignored in {}.", source);
-                        warned_trailing = true;
-                    }
-                    s
-                },
-                None => &line,
-            };
+            // Anything after the structure (e.g. its energy) is ignored.
+            let structure_str = line.split_whitespace().next().unwrap_or("");
 
             match DotBracketVec::try_from(structure_str) {
                 Ok(dbv) => { 
@@ -311,37 +296,28 @@ impl<E: EnergyModel> MacrostateRegistry<E> {
             return Ok(false)
         }
 
-        self.macrostates.push((file_seq.len() - remove, 
-                Macrostate::from_list(
-                    &name,
-                    &self.sequence,
-                    &structures,
-                    &*self.energy_model,
-                )));
+        // Macrostates of the same length are disjoint.
+        let len = file_seq.len() - remove;
+        for (l, ms) in &self.macrostates {
+            if let Some(s) = structures.iter().find(|s| *l == len && ms.contains(s)) {
+                return Err(io_err(&format!("Structure {} is also in macrostate {}", s, ms.name()), source));
+            }
+        }
+        self.macrostates.push((len, Macrostate::from_list(
+            &name,
+            &self.sequence,
+            &structures,
+            &*self.energy_model,
+        )));
         Ok(true)
     }
 
-    /// Try to classify a structure:
-    /// - Returns Some(index) if exactly one macrostate contains the structure
-    /// - Returns None if no macrostate matches
-    /// - Panics if more than one macrostate matches (unimplemented)
+    /// The index of the macrostate that contains a structure, 0 (unassigned)
+    /// if none does. Macrostates of the same length are disjoint.
     pub fn classify(&self, structure: &DotBracketVec) -> usize {
-        let mut matches = Vec::new();
-
-        for (i, (len, ms)) in self.macrostates.iter().enumerate() {
-            if structure.len() == *len && ms.contains(structure) {
-                matches.push(i);
-            }
-        }
-
-        match matches.len() {
-            0 => 0,
-            1 => matches[0],
-            _ => {
-                // For now: raise a panic, since overlapping macrostates are ambiguous
-                panic!("Structure {:?} belongs to multiple macrostates - not implemented", structure);
-            }
-        }
+        self.macrostates.iter()
+            .position(|(len, ms)| structure.len() == *len && ms.contains(structure))
+            .unwrap_or(0)
     }
 
     pub fn sequence(&self) -> &NucleotideVec {
@@ -412,17 +388,9 @@ mod tests {
             &[db1.clone(), db2, db3, db4, db5, db6, db7, db8], 
             &energy_model
         );
-        println!("Macrostate '{}':", macrostate.name());
-        println!("  Ensemble size: {}", macrostate.len());
         assert_eq!(macrostate.len(), 8);
-
-        let ensemble = macrostate.ensemble().clone();
-        let mut ensemble: Vec<_> = ensemble.iter().collect();
-        ensemble.sort_by_key(|(_, (energy, _))| *energy);
-        for (dbr, (energy, prob)) in ensemble.iter() {
-            println!("  {} -> E(s) = {energy}, P(s) = {prob:.4}", dbr);
-        }
-
+        let total: f64 = macrostate.ensemble().values().map(|&(_, p)| p).sum();
+        assert!((total - 1.0).abs() < 1e-9);
     }
 
     #[test]
@@ -456,6 +424,15 @@ mod tests {
         // Unknown structure: should return 0 ("Unassigned")
         let s4 = DotBracketVec::try_from("..............").unwrap();
         assert_eq!(registry.classify(&s4), 0);
+
+        // A structure in two macrostates is an error.
+        let overlap = b">other
+        UCAGUCUUCGCUGCGCUGUAUCGAUUCGGUUUCAGUUUUUAUUGC
+        .((((....))))..(((........)))................
+        ";
+        let err = registry.insert_from_reader(Cursor::new(overlap), "manual", 0).unwrap_err();
+        assert!(err.to_string().contains("also in macrostate test"), "{err}");
+        assert_eq!(registry.len(), 2);
 
         // Iteration test
         let all_names: Vec<_> = registry.iter().map(|(_, (_, ms))| ms.name().to_string()).collect();

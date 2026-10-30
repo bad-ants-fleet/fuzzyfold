@@ -13,6 +13,12 @@ All notable changes to this crate will be documented in this file.
   ff-explore (at full length)
 
 ## Changed
+- TimelineParameters is TimeArguments; it gives OutputTimes (ff_kinetics).
+  --t-sep defaults to 1e-4 s at full length, no longer 10/k0 (the same for
+  the default k0); --t-lin 0 (a single output time) is no longer
+  supported
+- ff-timecourse counts the trajectories as they finish, instead of keeping
+  one timeline per simulation in memory
 - andronescu2007 at a temperature other than 37 C is an error, not a panic
 - Pseudoknot energies from the ring decomposition (see ff_energy): a loop
   enclosing a kiss is strained, no longer a regular multiloop; `ff-eval -v`
